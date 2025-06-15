@@ -1,12 +1,42 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+
+import { useState } from 'react';
+import WelcomeScreen from '@/components/WelcomeScreen';
+import RegistrationFlow from '@/components/RegistrationFlow';
+import Dashboard from '@/components/Dashboard';
 
 const Index = () => {
+  const [currentView, setCurrentView] = useState<'welcome' | 'registration' | 'dashboard'>('welcome');
+  const [user, setUser] = useState(null);
+
+  const handleGetStarted = () => {
+    setCurrentView('registration');
+  };
+
+  const handleRegistrationComplete = (userData: any) => {
+    setUser(userData);
+    setCurrentView('dashboard');
+  };
+
+  const handleBackToWelcome = () => {
+    setCurrentView('welcome');
+  };
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold mb-4">Welcome to Your Blank App</h1>
-        <p className="text-xl text-muted-foreground">Start building your amazing project here!</p>
-      </div>
+    <div className="min-h-screen cosmic-bg">
+      {currentView === 'welcome' && (
+        <WelcomeScreen onGetStarted={handleGetStarted} />
+      )}
+      
+      {currentView === 'registration' && (
+        <RegistrationFlow 
+          onComplete={handleRegistrationComplete}
+          onBack={handleBackToWelcome}
+        />
+      )}
+
+      {currentView === 'dashboard' && (
+        <Dashboard user={user} />
+      )}
     </div>
   );
 };
