@@ -170,6 +170,7 @@ export type Database = {
           first_name: string
           gender: string
           id: string
+          is_dummy_profile: boolean | null
           last_name: string
           latitude: number | null
           longitude: number | null
@@ -189,6 +190,7 @@ export type Database = {
           first_name: string
           gender: string
           id?: string
+          is_dummy_profile?: boolean | null
           last_name: string
           latitude?: number | null
           longitude?: number | null
@@ -208,6 +210,7 @@ export type Database = {
           first_name?: string
           gender?: string
           id?: string
+          is_dummy_profile?: boolean | null
           last_name?: string
           latitude?: number | null
           longitude?: number | null
