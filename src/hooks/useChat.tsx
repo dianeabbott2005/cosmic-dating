@@ -16,13 +16,77 @@ export interface Chat {
   user1_id: string;
   user2_id: string;
   created_at: string;
+  other_user?: {
+    first_name: string;
+    last_name: string;
+    user_id: string;
+  };
+  last_message?: Message;
 }
 
 export const useChat = (matchId?: string) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [chat, setChat] = useState<Chat | null>(null);
+  const [chats, setChats] = useState<Chat[]>([]);
   const [loading, setLoading] = useState(false);
   const { user } = useAuth();
+
+  // Load all chats for the current user
+  const loadUserChats = async () => {
+    if (!user) return;
+
+    setLoading(true);
+    try {
+      const { data: userChats, error } = await supabase
+        .from('chats')
+        .select(`
+          *,
+          messages (
+            id,
+            content,
+            sender_id,
+            created_at
+          )
+        `)
+        .or(`user1_id.eq.${user.id},user2_id.eq.${user.id}`)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error loading chats:', error);
+        return;
+      }
+
+      // For each chat, get the other user's profile information
+      const chatsWithProfiles = await Promise.all(
+        (userChats || []).map(async (chat) => {
+          const otherUserId = chat.user1_id === user.id ? chat.user2_id : chat.user1_id;
+          
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('first_name, last_name, user_id')
+            .eq('user_id', otherUserId)
+            .single();
+
+          // Get the last message
+          const lastMessage = chat.messages && chat.messages.length > 0 
+            ? chat.messages.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]
+            : null;
+
+          return {
+            ...chat,
+            other_user: profile,
+            last_message: lastMessage
+          };
+        })
+      );
+
+      setChats(chatsWithProfiles);
+    } catch (error) {
+      console.error('Error loading user chats:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Create or get existing chat
   const initializeChat = async (otherUserId: string) => {
@@ -151,9 +215,11 @@ export const useChat = (matchId?: string) => {
 
   return {
     chat,
+    chats,
     messages,
     loading,
     initializeChat,
-    sendMessage
+    sendMessage,
+    loadUserChats
   };
 };

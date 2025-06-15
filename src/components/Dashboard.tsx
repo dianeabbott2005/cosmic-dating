@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import EnhancedMatchCard from '@/components/EnhancedMatchCard';
 import EnhancedChatView from '@/components/EnhancedChatView';
 import { useMatches } from '@/hooks/useMatches';
+import { useChat } from '@/hooks/useChat';
 
 interface DashboardProps {
   user: any;
@@ -14,11 +15,32 @@ const Dashboard = ({ user }: DashboardProps) => {
   const [activeTab, setActiveTab] = useState<'matches' | 'chats'>('matches');
   const [selectedMatch, setSelectedMatch] = useState(null);
   const { matches, loading, refreshMatches } = useMatches();
+  const { chats, loadUserChats } = useChat();
   const navigate = useNavigate();
+
+  // Load user chats when component mounts or when switching to chats tab
+  useEffect(() => {
+    if (activeTab === 'chats') {
+      loadUserChats();
+    }
+  }, [activeTab]);
 
   const handleMatchClick = (match: any) => {
     setSelectedMatch(match);
     setActiveTab('chats');
+  };
+
+  const handleChatClick = (chat: any) => {
+    // Convert chat to match-like object for EnhancedChatView
+    const matchFromChat = {
+      user_id: chat.other_user?.user_id,
+      first_name: chat.other_user?.first_name,
+      firstName: chat.other_user?.first_name,
+      age: 25, // Default age since we don't have it in chat
+      compatibility_score: 0.8, // Default compatibility
+      compatibility: 80
+    };
+    setSelectedMatch(matchFromChat);
   };
 
   if (selectedMatch && activeTab === 'chats') {
@@ -27,7 +49,7 @@ const Dashboard = ({ user }: DashboardProps) => {
         match={selectedMatch} 
         onBack={() => {
           setSelectedMatch(null);
-          setActiveTab('matches');
+          setActiveTab('chats');
         }} 
       />
     );
@@ -78,7 +100,7 @@ const Dashboard = ({ user }: DashboardProps) => {
               }`}
             >
               <MessageSquare className="w-5 h-5" />
-              Chats
+              Chats ({chats.length})
             </button>
           </div>
         </div>
@@ -143,12 +165,61 @@ const Dashboard = ({ user }: DashboardProps) => {
         )}
 
         {activeTab === 'chats' && !selectedMatch && (
-          <div className="text-center py-16">
-            <MessageSquare className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-            <h3 className="text-xl text-gray-400 mb-2">No active chats yet</h3>
-            <p className="text-gray-500">
-              Start a conversation with one of your matches to begin chatting!
-            </p>
+          <div>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-semibold text-white">Your Conversations</h2>
+              <button
+                onClick={loadUserChats}
+                className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-xl hover:bg-purple-700 transition-all"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Refresh
+              </button>
+            </div>
+
+            {chats.length > 0 ? (
+              <div className="space-y-4">
+                {chats.map((chat) => (
+                  <div
+                    key={chat.id}
+                    onClick={() => handleChatClick(chat)}
+                    className="card-cosmic p-4 cursor-pointer hover:bg-slate-800/30 transition-all"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full flex items-center justify-center">
+                        <span className="text-white font-semibold">
+                          {chat.other_user?.first_name?.[0] || '?'}
+                        </span>
+                      </div>
+                      
+                      <div className="flex-1">
+                        <h3 className="text-lg font-semibold text-white">
+                          {chat.other_user?.first_name} {chat.other_user?.last_name}
+                        </h3>
+                        {chat.last_message && (
+                          <p className="text-gray-400 text-sm truncate">
+                            {chat.last_message.content}
+                          </p>
+                        )}
+                        <p className="text-gray-500 text-xs">
+                          {new Date(chat.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                      
+                      <MessageSquare className="w-5 h-5 text-gray-400" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-16">
+                <MessageSquare className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+                <h3 className="text-xl text-gray-400 mb-2">No active chats yet</h3>
+                <p className="text-gray-500">
+                  Start a conversation with one of your matches to begin chatting!
+                </p>
+              </div>
+            )}
           </div>
         )}
       </div>
