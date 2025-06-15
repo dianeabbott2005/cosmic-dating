@@ -1,8 +1,8 @@
 
-import { useState, useEffect } from 'react';
-import { CheckCircle, Sparkles } from 'lucide-react';
+import { useState } from 'react';
+import { CheckCircle, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/hooks/useAuth';
+import { useToast } from '@/hooks/use-toast';
 
 interface ProfileCompleteProps {
   onNext: (data: any) => void;
@@ -10,182 +10,156 @@ interface ProfileCompleteProps {
 }
 
 const ProfileComplete = ({ onNext, userData }: ProfileCompleteProps) => {
-  const [isCalculating, setIsCalculating] = useState(true);
-  const [matchesFound, setMatchesFound] = useState(0);
-  const [isCreatingProfile, setIsCreatingProfile] = useState(false);
-  const { user } = useAuth();
+  const [isCreating, setIsCreating] = useState(false);
+  const { toast } = useToast();
 
-  useEffect(() => {
-    const createProfile = async () => {
-      if (!user) return;
+  const handleCreateProfile = async () => {
+    setIsCreating(true);
+    
+    try {
+      console.log('Creating profile with userData:', userData);
       
-      setIsCreatingProfile(true);
-      
-      try {
-        // Create or update user profile
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .upsert({
-            user_id: user.id,
+      // Create the auth user
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: userData.email,
+        password: userData.password || 'tempPassword123!', // You should collect this in registration
+        options: {
+          data: {
             first_name: userData.firstName,
             last_name: userData.lastName,
-            email: userData.email,
             date_of_birth: userData.dateOfBirth,
             time_of_birth: userData.timeOfBirth,
             place_of_birth: userData.placeOfBirth,
-            latitude: userData.latitude,
-            longitude: userData.longitude,
             gender: userData.gender,
             looking_for: userData.lookingFor,
             min_age: userData.minAge,
             max_age: userData.maxAge
-          });
-
-        if (profileError) {
-          console.error('Error creating profile:', profileError);
-          return;
+          }
         }
+      });
 
-        // Simulate compatibility calculation process
-        const calculateMatches = () => {
-          const intervals = [500, 1000, 1500, 2000, 2500];
-          const targetMatches = Math.floor(Math.random() * 20) + 5; // 5-25 matches
-          
-          intervals.forEach((delay, index) => {
-            setTimeout(() => {
-              const progress = Math.floor((targetMatches * (index + 1)) / intervals.length);
-              setMatchesFound(progress);
-              
-              if (index === intervals.length - 1) {
-                setTimeout(() => {
-                  setIsCalculating(false);
-                }, 1000);
-              }
-            }, delay);
-          });
-        };
-
-        calculateMatches();
-      } catch (error) {
-        console.error('Error in profile creation:', error);
-      } finally {
-        setIsCreatingProfile(false);
+      if (authError) {
+        console.error('Auth signup error:', authError);
+        throw authError;
       }
-    };
 
-    createProfile();
-  }, [user, userData]);
+      console.log('Auth user created:', authData.user?.id);
 
-  const handleContinue = () => {
-    onNext({ matchesFound });
+      // The profile should be automatically created by the trigger
+      // But let's also geocode the location if needed
+      if (userData.placeOfBirth && (!userData.latitude || !userData.longitude)) {
+        try {
+          const { data: geocodeData, error: geocodeError } = await supabase.functions.invoke('geocode', {
+            body: { address: userData.placeOfBirth }
+          });
+
+          if (!geocodeError && geocodeData?.results?.[0]) {
+            const location = geocodeData.results[0];
+            
+            // Update the profile with coordinates
+            const { error: updateError } = await supabase
+              .from('profiles')
+              .update({
+                latitude: location.latitude,
+                longitude: location.longitude
+              })
+              .eq('user_id', authData.user?.id);
+
+            if (updateError) {
+              console.error('Error updating coordinates:', updateError);
+            }
+          }
+        } catch (geocodeError) {
+          console.error('Geocoding failed:', geocodeError);
+          // Continue anyway, coordinates are not critical
+        }
+      }
+
+      toast({
+        title: "Profile Created Successfully!",
+        description: "Welcome to your cosmic dating journey.",
+      });
+
+      // Complete the registration process
+      onNext({ success: true });
+
+    } catch (error: any) {
+      console.error('Error creating profile:', error);
+      toast({
+        title: "Error Creating Profile",
+        description: error.message || "Something went wrong. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCreating(false);
+    }
   };
 
-  if (isCalculating) {
-    return (
-      <div className="text-center py-8">
-        <div className="w-24 h-24 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full flex items-center justify-center mx-auto mb-6 animate-pulse-glow">
-          <Sparkles className="w-12 h-12 text-white animate-spin" />
-        </div>
-        
-        <h3 className="text-2xl font-bold text-white mb-4">
-          {isCreatingProfile ? 'Creating Your Cosmic Profile...' : 'Calculating Cosmic Compatibility...'}
-        </h3>
-        
-        <p className="text-gray-400 mb-6">
-          {isCreatingProfile 
-            ? 'Setting up your astrological blueprint' 
-            : 'Analyzing planetary alignments and birth chart patterns'
-          }
-        </p>
-
-        {!isCreatingProfile && (
-          <>
-            <div className="bg-slate-800/50 rounded-full h-2 mb-4 overflow-hidden">
-              <div 
-                className="h-full bg-gradient-to-r from-purple-500 to-blue-500 transition-all duration-1000 animate-shimmer"
-                style={{ width: `${Math.min((matchesFound / 20) * 100, 100)}%` }}
-              ></div>
-            </div>
-
-            <div className="text-center">
-              <p className="text-lg text-purple-300 font-semibold">
-                {matchesFound} potential matches found...
-              </p>
-              <p className="text-sm text-gray-500 mt-2">
-                This may take a few moments as we analyze thousands of profiles
-              </p>
-            </div>
-          </>
-        )}
-
-        <div className="grid grid-cols-3 gap-4 mt-8 text-sm">
-          <div className="text-center">
-            <div className="w-8 h-8 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-2">
-              ✨
-            </div>
-            <p className="text-gray-400">Sun Signs</p>
-          </div>
-          <div className="text-center">
-            <div className="w-8 h-8 bg-blue-500/20 rounded-full flex items-center justify-center mx-auto mb-2">
-              🌙
-            </div>
-            <p className="text-gray-400">Moon Phases</p>
-          </div>
-          <div className="text-center">
-            <div className="w-8 h-8 bg-purple-500/20 rounded-full flex items-center justify-center mx-auto mb-2">
-              🪐
-            </div>
-            <p className="text-gray-400">Planetary Alignment</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="text-center py-8">
-      <div className="w-24 h-24 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
-        <CheckCircle className="w-12 h-12 text-green-400" />
-      </div>
-      
-      <h3 className="text-3xl font-bold text-white mb-4">
-        Profile Complete! 🎉
-      </h3>
-      
-      <p className="text-gray-400 mb-6">
-        Your cosmic profile has been created successfully
-      </p>
-
-      <div className="bg-gradient-to-r from-green-900/30 to-blue-900/30 border border-green-500/30 rounded-xl p-6 mb-8">
-        <h4 className="text-green-300 font-semibold text-xl mb-2">
-          🌟 {matchesFound} Cosmic Matches Found!
-        </h4>
-        <p className="text-gray-300">
-          We've found {matchesFound} astrologically compatible profiles that match your preferences. 
-          These connections have a compatibility score above 60% based on your birth charts.
+    <div className="space-y-8">
+      <div className="text-center">
+        <div className="w-20 h-20 bg-green-600/20 rounded-full flex items-center justify-center mx-auto mb-4">
+          <CheckCircle className="w-10 h-10 text-green-400" />
+        </div>
+        <h3 className="text-xl font-semibold text-white mb-2">Complete Your Profile</h3>
+        <p className="text-gray-400">
+          Ready to find your cosmic connection? Let's create your profile!
         </p>
       </div>
 
-      <div className="space-y-3 mb-8 text-left">
-        <div className="flex items-center gap-3 text-gray-300">
-          <div className="w-2 h-2 bg-purple-400 rounded-full"></div>
-          <span>Birth chart compatibility calculated</span>
-        </div>
-        <div className="flex items-center gap-3 text-gray-300">
-          <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
-          <span>Age and gender preferences applied</span>
-        </div>
-        <div className="flex items-center gap-3 text-gray-300">
-          <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-          <span>Cosmic compatibility scores generated</span>
+      {/* Profile Summary */}
+      <div className="bg-slate-800/50 rounded-xl p-6 space-y-4">
+        <h4 className="text-lg font-medium text-white mb-4">Profile Summary</h4>
+        
+        <div className="grid grid-cols-2 gap-4 text-sm">
+          <div>
+            <span className="text-gray-400">Name:</span>
+            <p className="text-white">{userData.firstName} {userData.lastName}</p>
+          </div>
+          <div>
+            <span className="text-gray-400">Email:</span>
+            <p className="text-white">{userData.email}</p>
+          </div>
+          <div>
+            <span className="text-gray-400">Gender:</span>
+            <p className="text-white capitalize">{userData.gender}</p>
+          </div>
+          <div>
+            <span className="text-gray-400">Looking for:</span>
+            <p className="text-white capitalize">{userData.lookingFor}</p>
+          </div>
+          <div>
+            <span className="text-gray-400">Birth Date:</span>
+            <p className="text-white">{userData.dateOfBirth}</p>
+          </div>
+          <div>
+            <span className="text-gray-400">Birth Time:</span>
+            <p className="text-white">{userData.timeOfBirth}</p>
+          </div>
+          <div className="col-span-2">
+            <span className="text-gray-400">Birth Place:</span>
+            <p className="text-white">{userData.placeOfBirth}</p>
+          </div>
+          <div>
+            <span className="text-gray-400">Age Range:</span>
+            <p className="text-white">{userData.minAge} - {userData.maxAge} years</p>
+          </div>
         </div>
       </div>
 
       <button
-        onClick={handleContinue}
-        className="btn-cosmic w-full text-xl py-4"
+        onClick={handleCreateProfile}
+        disabled={isCreating}
+        className="btn-cosmic w-full flex items-center justify-center gap-2"
       >
-        Explore Your Matches ✨
+        {isCreating ? (
+          <>
+            <Loader2 className="w-5 h-5 animate-spin" />
+            Creating Your Profile...
+          </>
+        ) : (
+          'Create My Profile'
+        )}
       </button>
     </div>
   );

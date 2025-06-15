@@ -1,6 +1,6 @@
 
 import { useState } from 'react';
-import { User } from 'lucide-react';
+import { User, Eye, EyeOff } from 'lucide-react';
 
 interface PersonalInfoFormProps {
   onNext: (data: any) => void;
@@ -12,11 +12,13 @@ const PersonalInfoForm = ({ onNext, userData }: PersonalInfoFormProps) => {
     firstName: userData.firstName || '',
     lastName: userData.lastName || '',
     email: userData.email || '',
+    password: userData.password || '',
     gender: userData.gender || '',
     ...userData
   });
 
   const [errors, setErrors] = useState<any>({});
+  const [showPassword, setShowPassword] = useState(false);
 
   const validateForm = () => {
     const newErrors: any = {};
@@ -33,6 +35,12 @@ const PersonalInfoForm = ({ onNext, userData }: PersonalInfoFormProps) => {
       newErrors.email = 'Email is required';
     } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
       newErrors.email = 'Please enter a valid email';
+    }
+
+    if (!formData.password.trim()) {
+      newErrors.password = 'Password is required';
+    } else if (formData.password.length < 6) {
+      newErrors.password = 'Password must be at least 6 characters';
     }
     
     if (!formData.gender) {
@@ -112,6 +120,31 @@ const PersonalInfoForm = ({ onNext, userData }: PersonalInfoFormProps) => {
         />
         {errors.email && (
           <p className="text-red-400 text-sm mt-1">{errors.email}</p>
+        )}
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-300 mb-2">
+          Password *
+        </label>
+        <div className="relative">
+          <input
+            type={showPassword ? 'text' : 'password'}
+            value={formData.password}
+            onChange={(e) => handleInputChange('password', e.target.value)}
+            className={`input-cosmic w-full pr-12 ${errors.password ? 'border-red-500' : ''}`}
+            placeholder="Create a password"
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword(!showPassword)}
+            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white"
+          >
+            {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+          </button>
+        </div>
+        {errors.password && (
+          <p className="text-red-400 text-sm mt-1">{errors.password}</p>
         )}
       </div>
 
