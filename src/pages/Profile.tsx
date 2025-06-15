@@ -83,6 +83,12 @@ const Profile = () => {
     
     setSaving(true);
     try {
+      console.log('Saving profile with coordinates:', {
+        place_of_birth: profile.place_of_birth,
+        latitude: profile.latitude,
+        longitude: profile.longitude
+      });
+
       const { error } = await supabase
         .from('profiles')
         .update({
@@ -102,6 +108,7 @@ const Profile = () => {
 
       if (error) throw error;
       
+      console.log('Profile updated successfully with coordinates');
       alert('Profile updated successfully!');
     } catch (error) {
       console.error('Error saving profile:', error);
@@ -235,6 +242,7 @@ const Profile = () => {
                   onChange={(e) => setProfile({ ...profile, gender: e.target.value })}
                   className="input-cosmic"
                 >
+                  <option value="">Select gender</option>
                   <option value="male">Male</option>
                   <option value="female">Female</option>
                   <option value="non-binary">Non-binary</option>
@@ -249,6 +257,7 @@ const Profile = () => {
                   onChange={(e) => setProfile({ ...profile, looking_for: e.target.value })}
                   className="input-cosmic"
                 >
+                  <option value="">Select preference</option>
                   <option value="male">Male</option>
                   <option value="female">Female</option>
                   <option value="non-binary">Non-binary</option>
