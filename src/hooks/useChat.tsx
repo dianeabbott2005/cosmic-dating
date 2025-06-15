@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -45,7 +44,8 @@ export const useChat = (matchId?: string) => {
             id,
             content,
             sender_id,
-            created_at
+            created_at,
+            chat_id
           )
         `)
         .or(`user1_id.eq.${user.id},user2_id.eq.${user.id}`)
@@ -67,15 +67,24 @@ export const useChat = (matchId?: string) => {
             .eq('user_id', otherUserId)
             .single();
 
-          // Get the last message
+          // Get the last message and ensure it has all required fields
           const lastMessage = chat.messages && chat.messages.length > 0 
             ? chat.messages.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]
             : null;
 
           return {
-            ...chat,
+            id: chat.id,
+            user1_id: chat.user1_id,
+            user2_id: chat.user2_id,
+            created_at: chat.created_at,
             other_user: profile,
-            last_message: lastMessage
+            last_message: lastMessage ? {
+              id: lastMessage.id,
+              content: lastMessage.content,
+              sender_id: lastMessage.sender_id,
+              created_at: lastMessage.created_at,
+              chat_id: lastMessage.chat_id
+            } : undefined
           };
         })
       );
