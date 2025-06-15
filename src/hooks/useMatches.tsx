@@ -97,7 +97,11 @@ export const useMatches = () => {
 
       // Filter out null results and sort by compatibility
       const validMatches = matchesWithCompatibility
-        .filter((match): match is MatchProfile => match !== null && (match.compatibility_score || 0) > 0.6)
+        .filter((match): match is MatchProfile => {
+          return match !== null && 
+                 typeof match.compatibility_score === 'number' && 
+                 match.compatibility_score > 0.6;
+        })
         .sort((a, b) => (b.compatibility_score || 0) - (a.compatibility_score || 0));
 
       setMatches(validMatches);
