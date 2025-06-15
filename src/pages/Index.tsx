@@ -1,15 +1,30 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import WelcomeScreen from '@/components/WelcomeScreen';
 import RegistrationFlow from '@/components/RegistrationFlow';
 import Dashboard from '@/components/Dashboard';
+import { useAuth } from '@/hooks/useAuth';
 
 const Index = () => {
   const [currentView, setCurrentView] = useState<'welcome' | 'registration' | 'dashboard'>('welcome');
   const [user, setUser] = useState(null);
+  const { user: authUser } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (authUser) {
+      // Check if user has completed registration
+      setCurrentView('dashboard');
+    }
+  }, [authUser]);
 
   const handleGetStarted = () => {
-    setCurrentView('registration');
+    if (authUser) {
+      setCurrentView('registration');
+    } else {
+      navigate('/auth');
+    }
   };
 
   const handleRegistrationComplete = (userData: any) => {
@@ -35,7 +50,7 @@ const Index = () => {
       )}
 
       {currentView === 'dashboard' && (
-        <Dashboard user={user} />
+        <Dashboard user={user || authUser} />
       )}
     </div>
   );

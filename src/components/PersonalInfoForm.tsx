@@ -10,6 +10,7 @@ interface PersonalInfoFormProps {
 const PersonalInfoForm = ({ onNext, userData }: PersonalInfoFormProps) => {
   const [formData, setFormData] = useState({
     firstName: userData.firstName || '',
+    lastName: userData.lastName || '',
     email: userData.email || '',
     gender: userData.gender || '',
     ...userData
@@ -22,6 +23,10 @@ const PersonalInfoForm = ({ onNext, userData }: PersonalInfoFormProps) => {
     
     if (!formData.firstName.trim()) {
       newErrors.firstName = 'First name is required';
+    }
+    
+    if (!formData.lastName.trim()) {
+      newErrors.lastName = 'Last name is required';
     }
     
     if (!formData.email.trim()) {
@@ -80,6 +85,22 @@ const PersonalInfoForm = ({ onNext, userData }: PersonalInfoFormProps) => {
 
       <div>
         <label className="block text-sm font-medium text-gray-300 mb-2">
+          Last Name *
+        </label>
+        <input
+          type="text"
+          value={formData.lastName}
+          onChange={(e) => handleInputChange('lastName', e.target.value)}
+          className={`input-cosmic w-full ${errors.lastName ? 'border-red-500' : ''}`}
+          placeholder="Enter your last name"
+        />
+        {errors.lastName && (
+          <p className="text-red-400 text-sm mt-1">{errors.lastName}</p>
+        )}
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-300 mb-2">
           Email Address *
         </label>
         <input
@@ -99,18 +120,22 @@ const PersonalInfoForm = ({ onNext, userData }: PersonalInfoFormProps) => {
           Gender *
         </label>
         <div className="grid grid-cols-3 gap-3">
-          {['Male', 'Female', 'Non-Binary'].map((option) => (
+          {[
+            { value: 'male', label: 'Male' },
+            { value: 'female', label: 'Female' },
+            { value: 'non-binary', label: 'Non-Binary' }
+          ].map((option) => (
             <button
-              key={option}
+              key={option.value}
               type="button"
-              onClick={() => handleInputChange('gender', option)}
+              onClick={() => handleInputChange('gender', option.value)}
               className={`p-3 rounded-xl border transition-all ${
-                formData.gender === option
+                formData.gender === option.value
                   ? 'border-purple-400 bg-purple-500/20 text-purple-300'
                   : 'border-gray-600 bg-slate-800/50 text-gray-300 hover:border-gray-500'
               }`}
             >
-              {option}
+              {option.label}
             </button>
           ))}
         </div>

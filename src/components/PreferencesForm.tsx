@@ -69,18 +69,22 @@ const PreferencesForm = ({ onNext, userData }: PreferencesFormProps) => {
           I'm looking for *
         </label>
         <div className="grid grid-cols-3 gap-3">
-          {['Male', 'Female', 'Non-Binary'].map((option) => (
+          {[
+            { value: 'male', label: 'Male' },
+            { value: 'female', label: 'Female' },
+            { value: 'non-binary', label: 'Non-Binary' }
+          ].map((option) => (
             <button
-              key={option}
+              key={option.value}
               type="button"
-              onClick={() => handleInputChange('lookingFor', option)}
+              onClick={() => handleInputChange('lookingFor', option.value)}
               className={`p-3 rounded-xl border transition-all ${
-                formData.lookingFor === option
+                formData.lookingFor === option.value
                   ? 'border-pink-400 bg-pink-500/20 text-pink-300'
                   : 'border-gray-600 bg-slate-800/50 text-gray-300 hover:border-gray-500'
               }`}
             >
-              {option}
+              {option.label}
             </button>
           ))}
         </div>

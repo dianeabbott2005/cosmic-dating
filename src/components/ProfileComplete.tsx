@@ -1,6 +1,8 @@
 
 import { useState, useEffect } from 'react';
 import { CheckCircle, Sparkles } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 
 interface ProfileCompleteProps {
   onNext: (data: any) => void;
@@ -10,29 +12,69 @@ interface ProfileCompleteProps {
 const ProfileComplete = ({ onNext, userData }: ProfileCompleteProps) => {
   const [isCalculating, setIsCalculating] = useState(true);
   const [matchesFound, setMatchesFound] = useState(0);
+  const [isCreatingProfile, setIsCreatingProfile] = useState(false);
+  const { user } = useAuth();
 
   useEffect(() => {
-    // Simulate compatibility calculation process
-    const calculateMatches = () => {
-      const intervals = [500, 1000, 1500, 2000, 2500];
-      const targetMatches = Math.floor(Math.random() * 20) + 5; // 5-25 matches
+    const createProfile = async () => {
+      if (!user) return;
       
-      intervals.forEach((delay, index) => {
-        setTimeout(() => {
-          const progress = Math.floor((targetMatches * (index + 1)) / intervals.length);
-          setMatchesFound(progress);
+      setIsCreatingProfile(true);
+      
+      try {
+        // Create or update user profile
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .upsert({
+            user_id: user.id,
+            first_name: userData.firstName,
+            last_name: userData.lastName,
+            email: userData.email,
+            date_of_birth: userData.dateOfBirth,
+            time_of_birth: userData.timeOfBirth,
+            place_of_birth: userData.placeOfBirth,
+            latitude: userData.latitude,
+            longitude: userData.longitude,
+            gender: userData.gender,
+            looking_for: userData.lookingFor,
+            min_age: userData.minAge,
+            max_age: userData.maxAge
+          });
+
+        if (profileError) {
+          console.error('Error creating profile:', profileError);
+          return;
+        }
+
+        // Simulate compatibility calculation process
+        const calculateMatches = () => {
+          const intervals = [500, 1000, 1500, 2000, 2500];
+          const targetMatches = Math.floor(Math.random() * 20) + 5; // 5-25 matches
           
-          if (index === intervals.length - 1) {
+          intervals.forEach((delay, index) => {
             setTimeout(() => {
-              setIsCalculating(false);
-            }, 1000);
-          }
-        }, delay);
-      });
+              const progress = Math.floor((targetMatches * (index + 1)) / intervals.length);
+              setMatchesFound(progress);
+              
+              if (index === intervals.length - 1) {
+                setTimeout(() => {
+                  setIsCalculating(false);
+                }, 1000);
+              }
+            }, delay);
+          });
+        };
+
+        calculateMatches();
+      } catch (error) {
+        console.error('Error in profile creation:', error);
+      } finally {
+        setIsCreatingProfile(false);
+      }
     };
 
-    calculateMatches();
-  }, []);
+    createProfile();
+  }, [user, userData]);
 
   const handleContinue = () => {
     onNext({ matchesFound });
@@ -46,28 +88,35 @@ const ProfileComplete = ({ onNext, userData }: ProfileCompleteProps) => {
         </div>
         
         <h3 className="text-2xl font-bold text-white mb-4">
-          Calculating Cosmic Compatibility...
+          {isCreatingProfile ? 'Creating Your Cosmic Profile...' : 'Calculating Cosmic Compatibility...'}
         </h3>
         
         <p className="text-gray-400 mb-6">
-          Analyzing planetary alignments and birth chart patterns
+          {isCreatingProfile 
+            ? 'Setting up your astrological blueprint' 
+            : 'Analyzing planetary alignments and birth chart patterns'
+          }
         </p>
 
-        <div className="bg-slate-800/50 rounded-full h-2 mb-4 overflow-hidden">
-          <div 
-            className="h-full bg-gradient-to-r from-purple-500 to-blue-500 transition-all duration-1000 animate-shimmer"
-            style={{ width: `${Math.min((matchesFound / 20) * 100, 100)}%` }}
-          ></div>
-        </div>
+        {!isCreatingProfile && (
+          <>
+            <div className="bg-slate-800/50 rounded-full h-2 mb-4 overflow-hidden">
+              <div 
+                className="h-full bg-gradient-to-r from-purple-500 to-blue-500 transition-all duration-1000 animate-shimmer"
+                style={{ width: `${Math.min((matchesFound / 20) * 100, 100)}%` }}
+              ></div>
+            </div>
 
-        <div className="text-center">
-          <p className="text-lg text-purple-300 font-semibold">
-            {matchesFound} potential matches found...
-          </p>
-          <p className="text-sm text-gray-500 mt-2">
-            This may take a few moments as we analyze thousands of profiles
-          </p>
-        </div>
+            <div className="text-center">
+              <p className="text-lg text-purple-300 font-semibold">
+                {matchesFound} potential matches found...
+              </p>
+              <p className="text-sm text-gray-500 mt-2">
+                This may take a few moments as we analyze thousands of profiles
+              </p>
+            </div>
+          </>
+        )}
 
         <div className="grid grid-cols-3 gap-4 mt-8 text-sm">
           <div className="text-center">
