@@ -9,12 +9,18 @@ export interface MatchProfile {
   user_id: string;
   first_name: string;
   last_name: string;
+  email: string;
   date_of_birth: string;
   time_of_birth: string;
   place_of_birth: string;
   latitude: number;
   longitude: number;
   gender: string;
+  looking_for: string;
+  min_age: number;
+  max_age: number;
+  created_at: string;
+  updated_at: string;
   compatibility_score?: number;
   age?: number;
 }
