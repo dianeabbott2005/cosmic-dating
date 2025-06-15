@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -227,10 +226,8 @@ export const useChat = (matchId?: string) => {
         const isAI = await isAIUser(otherUserId);
         
         if (isAI) {
-          // Add a small delay to make it feel more natural
-          setTimeout(() => {
-            triggerAIResponse(chat.id, content.trim(), otherUserId);
-          }, 2000 + Math.random() * 3000); // 2-5 seconds delay
+          // No manual delay - the AI function now handles realistic typing delays
+          triggerAIResponse(chat.id, content.trim(), otherUserId);
         }
       }
     } catch (error) {

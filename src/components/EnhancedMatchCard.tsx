@@ -1,6 +1,6 @@
 
 import { Heart, MapPin, Star, MessageCircle } from 'lucide-react';
-import { getSunSign, getMoonSign } from '@/utils/astro/zodiacCalculations';
+import { getSunSign } from '@/utils/astro/zodiacCalculations';
 
 interface EnhancedMatchCardProps {
   match: {
@@ -23,9 +23,8 @@ interface EnhancedMatchCardProps {
 const EnhancedMatchCard = ({ match, onStartChat, onViewProfile }: EnhancedMatchCardProps) => {
   const compatibilityScore = match.compatibility_score ? Math.round(match.compatibility_score * 100) : match.compatibility || 0;
 
-  // Calculate sun and moon signs
+  // Calculate only sun sign
   const sunSign = match.date_of_birth ? getSunSign(match.date_of_birth) : null;
-  const moonSign = match.date_of_birth && match.time_of_birth ? getMoonSign(match.date_of_birth, match.time_of_birth) : null;
 
   const getCompatibilityColor = (score: number) => {
     if (score >= 80) return 'text-green-400';
@@ -76,22 +75,12 @@ const EnhancedMatchCard = ({ match, onStartChat, onViewProfile }: EnhancedMatchC
           </div>
         )}
 
-        {/* Astrological Signs */}
-        {(sunSign || moonSign) && (
-          <div className="flex items-center justify-between py-2 border-t border-gray-700">
-            <div className="flex gap-4 text-sm">
-              {sunSign && (
-                <div className="text-center">
-                  <div className="text-purple-300 font-medium">☀️ {formatSignName(sunSign)}</div>
-                  <div className="text-gray-500 text-xs">Sun</div>
-                </div>
-              )}
-              {moonSign && (
-                <div className="text-center">
-                  <div className="text-blue-300 font-medium">🌙 {formatSignName(moonSign)}</div>
-                  <div className="text-gray-500 text-xs">Moon</div>
-                </div>
-              )}
+        {/* Sun Sign */}
+        {sunSign && (
+          <div className="flex items-center justify-center py-2 border-t border-gray-700">
+            <div className="text-center">
+              <div className="text-purple-300 font-medium">☀️ {formatSignName(sunSign)}</div>
+              <div className="text-gray-500 text-xs">Sun Sign</div>
             </div>
           </div>
         )}

@@ -8,6 +8,19 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Calculate typing delay based on message length (simulating human typing speed)
+const calculateTypingDelay = (messageLength: number): number => {
+  // Average human typing speed: 40-60 WPM (words per minute)
+  // Average word length: 5 characters
+  // So roughly 200-300 characters per minute
+  const baseDelay = 2000; // 2 seconds minimum
+  const typingSpeed = 250; // characters per minute
+  const typingTime = (messageLength / typingSpeed) * 60 * 1000; // convert to milliseconds
+  const randomVariation = Math.random() * 2000; // add 0-2 seconds random variation
+  
+  return Math.min(baseDelay + typingTime + randomVariation, 10000); // cap at 10 seconds
+};
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -72,7 +85,7 @@ serve(async (req) => {
     }
 
     // Build enhanced personality prompt with profile details
-    let enhancedPrompt = `You are ${receiverProfile.first_name} ${receiverProfile.last_name}, a ${age}-year-old ${receiverProfile.gender} from ${receiverProfile.place_of_birth}. `;
+    let enhancedPrompt = `You are ${receiverProfile.first_name}, a ${age}-year-old ${receiverProfile.gender} from ${receiverProfile.place_of_birth}. `;
     
     // Add birth time context for personality
     const birthTime = receiverProfile.time_of_birth;
@@ -114,7 +127,7 @@ serve(async (req) => {
       enhancedPrompt += ` You're chatting with ${senderProfile.first_name}, a ${senderProfile.gender} from ${senderProfile.place_of_birth}. `;
     }
 
-    enhancedPrompt += ` Keep your responses natural, conversational, and true to your personality. Use modern texting style appropriate for your age. `;
+    enhancedPrompt += ` Keep your responses natural, conversational, and true to your personality. Use modern texting style appropriate for your age. Keep messages relatively short like real texting (1-3 sentences usually). `;
     
     if (context?.context_summary) {
       enhancedPrompt += `\n\nPrevious conversation context: ${context.context_summary}`;
@@ -146,7 +159,7 @@ serve(async (req) => {
             temperature: 0.8,
             topK: 40,
             topP: 0.95,
-            maxOutputTokens: 200,
+            maxOutputTokens: 150, // Reduced for shorter, more natural responses
           }
         }),
       }
@@ -159,6 +172,13 @@ serve(async (req) => {
     }
 
     const aiResponse = geminiData.candidates[0].content.parts[0].text.trim();
+
+    // Calculate typing delay based on response length
+    const typingDelay = calculateTypingDelay(aiResponse.length);
+    console.log(`Calculated typing delay: ${typingDelay}ms for message length: ${aiResponse.length}`);
+
+    // Wait for the calculated typing time to simulate human typing
+    await new Promise(resolve => setTimeout(resolve, typingDelay));
 
     // Store the AI response as a message
     const { data: newMessage, error } = await supabaseClient
@@ -194,7 +214,8 @@ serve(async (req) => {
       JSON.stringify({ 
         success: true, 
         message: newMessage,
-        aiResponse 
+        aiResponse,
+        typingDelay 
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
