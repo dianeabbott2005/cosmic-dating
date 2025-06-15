@@ -7,7 +7,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Calculate typing delay based on message length (simulating human typing speed)
+// Calculate typing delay based on message length and other human-like factors
 const calculateTypingDelay = (messageLength: number): number => {
   // Average human typing speed: 40-60 WPM (words per minute)
   // Average word length: 5 characters
@@ -15,9 +15,28 @@ const calculateTypingDelay = (messageLength: number): number => {
   const baseDelay = 2000; // 2 seconds minimum
   const typingSpeed = 250; // characters per minute
   const typingTime = (messageLength / typingSpeed) * 60 * 1000; // convert to milliseconds
-  const randomVariation = Math.random() * 2000; // add 0-2 seconds random variation
   
-  return Math.min(baseDelay + typingTime + randomVariation, 10000); // cap at 10 seconds
+  let randomVariation = Math.random() * 3000; // Add 0-3 seconds random variation for unaccounted delays
+
+  // Factor in time of day. Let's assume server time is UTC.
+  const now = new Date();
+  const hour = now.getUTCHours();
+  
+  // Slower responses late at night or early in the morning (e.g., 11pm to 7am UTC)
+  if (hour >= 23 || hour < 7) {
+    // Add extra random delay for "sleepy" replies
+    randomVariation += Math.random() * 8000; // 0-8 seconds extra
+  }
+
+  // Add a small chance of a bigger delay to simulate distraction
+  if (Math.random() < 0.15) { // 15% chance
+    randomVariation += 5000 + (Math.random() * 10000); // 5-15 seconds extra
+  }
+  
+  // The total delay is a combination of typing time and realistic variations.
+  const totalDelay = baseDelay + typingTime + randomVariation;
+
+  return Math.min(totalDelay, 45000); // cap at 45 seconds to prevent excessive waits
 };
 
 serve(async (req) => {

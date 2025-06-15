@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import WelcomeScreen from '@/components/WelcomeScreen';
@@ -58,23 +57,25 @@ const Index = () => {
 
       if (error) {
         console.error('Error checking profile:', error);
+        setProfile(null);
         setCurrentView('registration');
         return;
       }
       
       setProfile(userProfile);
 
-      if (!userProfile || !userProfile.first_name || !userProfile.last_name) {
-        console.log('No complete profile found, showing registration');
-        // No profile found or incomplete profile, show registration
-        setCurrentView('registration');
-      } else {
+      if (userProfile && userProfile.first_name && userProfile.last_name) {
         console.log('Complete profile found, showing dashboard');
         // Profile exists and is complete, show dashboard
         setCurrentView('dashboard');
+      } else {
+        console.log('No complete profile found, showing registration');
+        // No profile found or incomplete profile, show registration
+        setCurrentView('registration');
       }
     } catch (error) {
-      console.error('Error checking profile:', error);
+      console.error('Error in checkUserProfile catch block:', error);
+      setProfile(null);
       setCurrentView('registration');
     }
   };
