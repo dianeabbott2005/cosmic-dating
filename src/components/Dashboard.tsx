@@ -192,7 +192,7 @@ const Dashboard = ({ user }: DashboardProps) => {
                       
                       <div className="flex-1">
                         <h3 className="text-lg font-semibold text-white">
-                          {chat.other_user?.first_name} {chat.other_user?.last_name}
+                          {chat.other_user?.first_name}
                         </h3>
                         {chat.last_message && (
                           <p className="text-gray-400 text-sm truncate">
