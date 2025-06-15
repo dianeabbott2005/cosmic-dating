@@ -9,39 +9,64 @@ import { supabase } from '@/integrations/supabase/client';
 
 const Index = () => {
   const [currentView, setCurrentView] = useState<'welcome' | 'registration' | 'dashboard'>('welcome');
-  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
   const { user: authUser } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
   useEffect(() => {
-    if (authUser) {
-      // Check if user has completed registration by checking for profile
-      checkUserProfile();
-    } else {
-      // Check if this is a new signup redirect
-      const isRegistering = searchParams.get('register');
-      if (isRegistering) {
-        setCurrentView('registration');
+    const initializeView = async () => {
+      setLoading(true);
+      
+      if (authUser) {
+        console.log('Auth user found:', authUser.id);
+        // Check if user has completed registration by checking for profile
+        await checkUserProfile();
       } else {
-        setCurrentView('welcome');
+        console.log('No auth user');
+        // Check if this is a new signup redirect
+        const isRegistering = searchParams.get('register');
+        if (isRegistering) {
+          console.log('Registration redirect detected');
+          setCurrentView('registration');
+        } else {
+          setCurrentView('welcome');
+        }
       }
-    }
+      
+      setLoading(false);
+    };
+
+    initializeView();
   }, [authUser, searchParams]);
 
   const checkUserProfile = async () => {
+    if (!authUser) return;
+
     try {
+      console.log('Checking profile for user:', authUser.id);
+      
       const { data: profile, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('user_id', authUser.id)
-        .single();
+        .maybeSingle();
 
-      if (error || !profile) {
-        // No profile found, show registration
+      console.log('Profile check result:', { profile, error });
+
+      if (error) {
+        console.error('Error checking profile:', error);
+        setCurrentView('registration');
+        return;
+      }
+
+      if (!profile || !profile.first_name || !profile.last_name) {
+        console.log('No complete profile found, showing registration');
+        // No profile found or incomplete profile, show registration
         setCurrentView('registration');
       } else {
-        // Profile exists, show dashboard
+        console.log('Complete profile found, showing dashboard');
+        // Profile exists and is complete, show dashboard
         setCurrentView('dashboard');
       }
     } catch (error) {
@@ -59,7 +84,7 @@ const Index = () => {
   };
 
   const handleRegistrationComplete = (userData: any) => {
-    setUser(userData);
+    console.log('Registration completed:', userData);
     setCurrentView('dashboard');
   };
 
@@ -71,6 +96,14 @@ const Index = () => {
       setCurrentView('welcome');
     }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen cosmic-bg flex items-center justify-center">
+        <div className="animate-spin w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen cosmic-bg">
@@ -86,7 +119,7 @@ const Index = () => {
       )}
 
       {currentView === 'dashboard' && (
-        <Dashboard user={user || authUser} />
+        <Dashboard user={authUser} />
       )}
     </div>
   );

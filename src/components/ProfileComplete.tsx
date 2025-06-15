@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { CheckCircle, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/useAuth';
 
 interface ProfileCompleteProps {
   onNext: (data: any) => void;
@@ -12,41 +13,51 @@ interface ProfileCompleteProps {
 const ProfileComplete = ({ onNext, userData }: ProfileCompleteProps) => {
   const [isCreating, setIsCreating] = useState(false);
   const { toast } = useToast();
+  const { user: authUser } = useAuth();
 
   const handleCreateProfile = async () => {
+    if (!authUser) {
+      toast({
+        title: "Authentication Error",
+        description: "You must be logged in to create a profile.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsCreating(true);
     
     try {
       console.log('Creating profile with userData:', userData);
+      console.log('Auth user:', authUser.id);
       
-      // Create the auth user
-      const { data: authData, error: authError } = await supabase.auth.signUp({
+      // Create/update the profile in the profiles table
+      const profileData = {
+        user_id: authUser.id,
+        first_name: userData.firstName,
+        last_name: userData.lastName,
         email: userData.email,
-        password: userData.password || 'tempPassword123!', // You should collect this in registration
-        options: {
-          data: {
-            first_name: userData.firstName,
-            last_name: userData.lastName,
-            date_of_birth: userData.dateOfBirth,
-            time_of_birth: userData.timeOfBirth,
-            place_of_birth: userData.placeOfBirth,
-            gender: userData.gender,
-            looking_for: userData.lookingFor,
-            min_age: userData.minAge,
-            max_age: userData.maxAge
-          }
-        }
-      });
+        date_of_birth: userData.dateOfBirth,
+        time_of_birth: userData.timeOfBirth,
+        place_of_birth: userData.placeOfBirth,
+        gender: userData.gender,
+        looking_for: userData.lookingFor,
+        min_age: userData.minAge,
+        max_age: userData.maxAge
+      };
 
-      if (authError) {
-        console.error('Auth signup error:', authError);
-        throw authError;
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .upsert(profileData);
+
+      if (profileError) {
+        console.error('Profile creation error:', profileError);
+        throw profileError;
       }
 
-      console.log('Auth user created:', authData.user?.id);
+      console.log('Profile created successfully');
 
-      // The profile should be automatically created by the trigger
-      // But let's also geocode the location if needed
+      // Try to geocode the location if needed
       if (userData.placeOfBirth && (!userData.latitude || !userData.longitude)) {
         try {
           const { data: geocodeData, error: geocodeError } = await supabase.functions.invoke('geocode', {
@@ -63,10 +74,12 @@ const ProfileComplete = ({ onNext, userData }: ProfileCompleteProps) => {
                 latitude: location.latitude,
                 longitude: location.longitude
               })
-              .eq('user_id', authData.user?.id);
+              .eq('user_id', authUser.id);
 
             if (updateError) {
               console.error('Error updating coordinates:', updateError);
+            } else {
+              console.log('Coordinates updated successfully');
             }
           }
         } catch (geocodeError) {
