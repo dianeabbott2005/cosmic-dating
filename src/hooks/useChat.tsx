@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -29,6 +30,44 @@ export const useChat = (matchId?: string) => {
   const [chats, setChats] = useState<Chat[]>([]);
   const [loading, setLoading] = useState(false);
   const { user } = useAuth();
+
+  // Check if a user is an AI (dummy profile)
+  const isAIUser = async (userId: string): Promise<boolean> => {
+    try {
+      const { data } = await supabase
+        .from('profiles')
+        .select('personality_prompt')
+        .eq('user_id', userId)
+        .single();
+      
+      return !!(data?.personality_prompt);
+    } catch {
+      return false;
+    }
+  };
+
+  // Trigger AI response
+  const triggerAIResponse = async (chatId: string, userMessage: string, receiverId: string) => {
+    try {
+      const { data, error } = await supabase.functions.invoke('ai-chat-response', {
+        body: {
+          chatId,
+          senderId: user?.id,
+          message: userMessage,
+          receiverId
+        }
+      });
+
+      if (error) {
+        console.error('Error triggering AI response:', error);
+        return;
+      }
+
+      console.log('AI response triggered successfully:', data);
+    } catch (error) {
+      console.error('Error calling AI function:', error);
+    }
+  };
 
   // Load all chats for the current user
   const loadUserChats = async () => {
@@ -182,6 +221,17 @@ export const useChat = (matchId?: string) => {
       // Add the message to local state immediately for better UX
       if (data) {
         setMessages(prev => [...prev, data]);
+
+        // Check if the other user is AI and trigger response
+        const otherUserId = chat.user1_id === user.id ? chat.user2_id : chat.user1_id;
+        const isAI = await isAIUser(otherUserId);
+        
+        if (isAI) {
+          // Add a small delay to make it feel more natural
+          setTimeout(() => {
+            triggerAIResponse(chat.id, content.trim(), otherUserId);
+          }, 2000 + Math.random() * 3000); // 2-5 seconds delay
+        }
       }
     } catch (error) {
       console.error('Error sending message:', error);
