@@ -1,4 +1,3 @@
-
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.50.0';
@@ -143,7 +142,7 @@ function buildEnhancedPrompt(receiverProfile: any, senderProfile: any, context: 
  */
 async function callGeminiApi(prompt: string): Promise<string> {
     const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${Deno.env.get('GEMINI_API_KEY')}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${Deno.env.get('GEMINI_API_KEY')}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -249,4 +248,3 @@ serve(async (req) => {
     );
   }
 });
-
