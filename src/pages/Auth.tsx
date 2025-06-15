@@ -27,7 +27,8 @@ const Auth = () => {
         if (error) throw error;
         navigate('/');
       } else {
-        const { error } = await supabase.auth.signUp({
+        // For signup, create the auth user and then redirect to registration
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: {
@@ -35,7 +36,12 @@ const Auth = () => {
           }
         });
         if (error) throw error;
-        navigate('/');
+        
+        // Store signup data temporarily and redirect to registration
+        if (data.user) {
+          sessionStorage.setItem('signupData', JSON.stringify({ email, password }));
+          navigate('/?register=true');
+        }
       }
     } catch (error: any) {
       setError(error.message || 'An error occurred');

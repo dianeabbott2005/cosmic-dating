@@ -1,6 +1,7 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { User, Eye, EyeOff } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
 
 interface PersonalInfoFormProps {
   onNext: (data: any) => void;
@@ -8,6 +9,7 @@ interface PersonalInfoFormProps {
 }
 
 const PersonalInfoForm = ({ onNext, userData }: PersonalInfoFormProps) => {
+  const { user: authUser } = useAuth();
   const [formData, setFormData] = useState({
     firstName: userData.firstName || '',
     lastName: userData.lastName || '',
@@ -19,6 +21,32 @@ const PersonalInfoForm = ({ onNext, userData }: PersonalInfoFormProps) => {
 
   const [errors, setErrors] = useState<any>({});
   const [showPassword, setShowPassword] = useState(false);
+
+  useEffect(() => {
+    // Pre-fill email from auth user or signup data
+    let emailToUse = '';
+    let passwordToUse = '';
+
+    if (authUser?.email) {
+      emailToUse = authUser.email;
+    } else {
+      // Check for signup data in sessionStorage
+      const signupData = sessionStorage.getItem('signupData');
+      if (signupData) {
+        const parsed = JSON.parse(signupData);
+        emailToUse = parsed.email;
+        passwordToUse = parsed.password;
+      }
+    }
+
+    if (emailToUse) {
+      setFormData(prev => ({ 
+        ...prev, 
+        email: emailToUse,
+        password: passwordToUse
+      }));
+    }
+  }, [authUser]);
 
   const validateForm = () => {
     const newErrors: any = {};
@@ -36,12 +64,6 @@ const PersonalInfoForm = ({ onNext, userData }: PersonalInfoFormProps) => {
     } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
       newErrors.email = 'Please enter a valid email';
     }
-
-    if (!formData.password.trim()) {
-      newErrors.password = 'Password is required';
-    } else if (formData.password.length < 6) {
-      newErrors.password = 'Password must be at least 6 characters';
-    }
     
     if (!formData.gender) {
       newErrors.gender = 'Please select your gender';
@@ -54,6 +76,8 @@ const PersonalInfoForm = ({ onNext, userData }: PersonalInfoFormProps) => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (validateForm()) {
+      // Clear signup data from sessionStorage after successful form submission
+      sessionStorage.removeItem('signupData');
       onNext(formData);
     }
   };
@@ -72,7 +96,7 @@ const PersonalInfoForm = ({ onNext, userData }: PersonalInfoFormProps) => {
           <User className="w-10 h-10 text-purple-400" />
         </div>
         <h3 className="text-xl font-semibold text-white mb-2">Tell us about yourself</h3>
-        <p className="text-gray-400">Let's start with the basics</p>
+        <p className="text-gray-400">Let's complete your profile with basic information</p>
       </div>
 
       <div>
@@ -114,38 +138,14 @@ const PersonalInfoForm = ({ onNext, userData }: PersonalInfoFormProps) => {
         <input
           type="email"
           value={formData.email}
-          onChange={(e) => handleInputChange('email', e.target.value)}
-          className={`input-cosmic w-full ${errors.email ? 'border-red-500' : ''}`}
-          placeholder="Enter your email address"
+          className="input-cosmic w-full bg-gray-800/50 cursor-not-allowed"
+          placeholder="Email from signup"
+          readOnly
+          disabled
         />
-        {errors.email && (
-          <p className="text-red-400 text-sm mt-1">{errors.email}</p>
-        )}
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-300 mb-2">
-          Password *
-        </label>
-        <div className="relative">
-          <input
-            type={showPassword ? 'text' : 'password'}
-            value={formData.password}
-            onChange={(e) => handleInputChange('password', e.target.value)}
-            className={`input-cosmic w-full pr-12 ${errors.password ? 'border-red-500' : ''}`}
-            placeholder="Create a password"
-          />
-          <button
-            type="button"
-            onClick={() => setShowPassword(!showPassword)}
-            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white"
-          >
-            {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-          </button>
-        </div>
-        {errors.password && (
-          <p className="text-red-400 text-sm mt-1">{errors.password}</p>
-        )}
+        <p className="text-gray-500 text-xs mt-1">
+          Email from your account signup
+        </p>
       </div>
 
       <div>
