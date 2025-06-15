@@ -147,9 +147,9 @@ const Dashboard = ({ user }: DashboardProps) => {
             ) : (
               <div className="text-center py-16">
                 <Heart className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-                <h3 className="text-xl text-gray-400 mb-2">No matches found yet</h3>
+                <h3 className="text-xl text-gray-400 mb-2">No Cosmic Matches Yet</h3>
                 <p className="text-gray-500 mb-4">
-                  We're still calculating your cosmic compatibility with other users.
+                  The universe is working its magic to find connections based on your unique astral signature. Check back soon!
                 </p>
                 <button
                   onClick={refreshMatches}
@@ -212,9 +212,9 @@ const Dashboard = ({ user }: DashboardProps) => {
             ) : (
               <div className="text-center py-16">
                 <MessageSquare className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-                <h3 className="text-xl text-gray-400 mb-2">No active chats yet</h3>
+                <h3 className="text-xl text-gray-400 mb-2">No Conversations Started</h3>
                 <p className="text-gray-500">
-                  Start a conversation with one of your matches to begin chatting!
+                  Found a compelling cosmic connection? Break the ice and let your personalities align!
                 </p>
               </div>
             )}

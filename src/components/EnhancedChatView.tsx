@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Send, MapPin } from 'lucide-react';
 import { useChat } from '@/hooks/useChat';
@@ -83,10 +82,10 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
           {messages.length === 0 && (
             <div className="text-center py-8">
               <div className="bg-purple-900/20 border border-purple-500/30 rounded-xl p-6 max-w-md mx-auto">
-                <h3 className="text-purple-300 font-medium mb-2">🌟 Cosmic Connection</h3>
+                <h3 className="text-purple-300 font-medium mb-2">🌟 A Cosmic Connection Awaits</h3>
                 <p className="text-gray-400 text-sm">
-                  You and {match.first_name || match.firstName} share amazing astrological compatibility! 
-                  Start the conversation and explore your cosmic connection.
+                  The stars have aligned for you and {match.first_name || match.firstName}.
+                  This is where your journey beyond the superficial begins. What will you discover about your cosmic connection?
                 </p>
               </div>
             </div>
