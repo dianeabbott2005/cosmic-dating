@@ -1,3 +1,4 @@
+
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.50.0';
@@ -8,6 +9,17 @@ const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+const typingStyles = [
+    'Use shorthand and abbreviations like "lol", "brb", "u", "r". Keep messages very short.',
+    'Send multiple short messages back-to-back instead of one long one. Your entire response should be very short, as if it is one of several messages you are sending.',
+    'Write in a well-structured paragraph, like you are writing an email. Use complete sentences.',
+    'Use a lot of emojis to express yourself. Sprinkle them throughout your message.',
+    'Be a bit formal and use proper grammar and punctuation. Avoid slang.',
+    'Be very casual, use lowercase for everything and maybe include a typo.',
+    'Ask a lot of questions to get to know the other person.',
+    'Be a little mysterious and give short, intriguing answers.'
+];
 
 /**
  * Calculates a human-like typing delay.
@@ -128,6 +140,9 @@ function buildEnhancedPrompt(receiverProfile: any, senderProfile: any, context: 
       console.warn(`No personality_prompt found for ${receiverProfile.first_name}. Using fallback.`);
       enhancedPrompt = `You are ${receiverProfile.first_name}, a ${age}-year-old ${receiverProfile.gender} from ${receiverProfile.place_of_birth}. Respond naturally and conversationally. Your texting style should be appropriate for your age. If you are young, use modern slang and emojis. If you are older, be more thoughtful and use emojis sparingly.`;
     }
+    
+    const randomTypingStyle = typingStyles[Math.floor(Math.random() * typingStyles.length)];
+    enhancedPrompt += `\n\nIMPORTANT: Adopt this specific texting style for your response: "${randomTypingStyle}"`;
     
     if (senderProfile) enhancedPrompt += ` You are chatting with ${senderProfile.first_name}.`;
     if (context?.context_summary) enhancedPrompt += `\n\nPrevious conversation context: ${context.context_summary}`;
