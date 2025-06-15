@@ -6,10 +6,12 @@ import RegistrationFlow from '@/components/RegistrationFlow';
 import Dashboard from '@/components/Dashboard';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
+import type { Database } from '@/integrations/supabase/types';
 
 const Index = () => {
   const [currentView, setCurrentView] = useState<'welcome' | 'registration' | 'dashboard'>('welcome');
   const [loading, setLoading] = useState(true);
+  const [profile, setProfile] = useState<Database['public']['Tables']['profiles']['Row'] | null>(null);
   const { user: authUser } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -46,21 +48,23 @@ const Index = () => {
     try {
       console.log('Checking profile for user:', authUser.id);
       
-      const { data: profile, error } = await supabase
+      const { data: userProfile, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('user_id', authUser.id)
         .maybeSingle();
 
-      console.log('Profile check result:', { profile, error });
+      console.log('Profile check result:', { profile: userProfile, error });
 
       if (error) {
         console.error('Error checking profile:', error);
         setCurrentView('registration');
         return;
       }
+      
+      setProfile(userProfile);
 
-      if (!profile || !profile.first_name || !profile.last_name) {
+      if (!userProfile || !userProfile.first_name || !userProfile.last_name) {
         console.log('No complete profile found, showing registration');
         // No profile found or incomplete profile, show registration
         setCurrentView('registration');
@@ -85,6 +89,7 @@ const Index = () => {
 
   const handleRegistrationComplete = (userData: any) => {
     console.log('Registration completed:', userData);
+    setProfile(userData);
     setCurrentView('dashboard');
   };
 
@@ -118,8 +123,8 @@ const Index = () => {
         />
       )}
 
-      {currentView === 'dashboard' && (
-        <Dashboard user={authUser} />
+      {currentView === 'dashboard' && profile && (
+        <Dashboard user={profile} />
       )}
     </div>
   );
