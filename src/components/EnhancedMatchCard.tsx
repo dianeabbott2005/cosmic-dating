@@ -1,5 +1,6 @@
 
 import { Heart, MapPin, Star, MessageCircle } from 'lucide-react';
+import { getSunSign, getMoonSign } from '@/utils/astro/zodiacCalculations';
 
 interface EnhancedMatchCardProps {
   match: {
@@ -9,6 +10,8 @@ interface EnhancedMatchCardProps {
     last_name?: string;
     age: number;
     place_of_birth?: string;
+    date_of_birth?: string;
+    time_of_birth?: string;
     compatibility_score?: number;
     compatibility?: number;
     gender?: string;
@@ -20,6 +23,10 @@ interface EnhancedMatchCardProps {
 const EnhancedMatchCard = ({ match, onStartChat, onViewProfile }: EnhancedMatchCardProps) => {
   const compatibilityScore = match.compatibility_score ? Math.round(match.compatibility_score * 100) : match.compatibility || 0;
 
+  // Calculate sun and moon signs
+  const sunSign = match.date_of_birth ? getSunSign(match.date_of_birth) : null;
+  const moonSign = match.date_of_birth && match.time_of_birth ? getMoonSign(match.date_of_birth, match.time_of_birth) : null;
+
   const getCompatibilityColor = (score: number) => {
     if (score >= 80) return 'text-green-400';
     if (score >= 70) return 'text-yellow-400';
@@ -30,6 +37,11 @@ const EnhancedMatchCard = ({ match, onStartChat, onViewProfile }: EnhancedMatchC
     if (score >= 80) return 'bg-green-500/20 border-green-500/30';
     if (score >= 70) return 'bg-yellow-500/20 border-yellow-500/30';
     return 'bg-orange-500/20 border-orange-500/30';
+  };
+
+  const formatSignName = (sign: string | null) => {
+    if (!sign) return '';
+    return sign.charAt(0).toUpperCase() + sign.slice(1);
   };
 
   return (
@@ -61,6 +73,26 @@ const EnhancedMatchCard = ({ match, onStartChat, onViewProfile }: EnhancedMatchC
           <div className="flex items-center gap-2 text-gray-400">
             <MapPin className="w-4 h-4" />
             <span className="text-sm">{match.place_of_birth}</span>
+          </div>
+        )}
+
+        {/* Astrological Signs */}
+        {(sunSign || moonSign) && (
+          <div className="flex items-center justify-between py-2 border-t border-gray-700">
+            <div className="flex gap-4 text-sm">
+              {sunSign && (
+                <div className="text-center">
+                  <div className="text-purple-300 font-medium">☀️ {formatSignName(sunSign)}</div>
+                  <div className="text-gray-500 text-xs">Sun</div>
+                </div>
+              )}
+              {moonSign && (
+                <div className="text-center">
+                  <div className="text-blue-300 font-medium">🌙 {formatSignName(moonSign)}</div>
+                  <div className="text-gray-500 text-xs">Moon</div>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
