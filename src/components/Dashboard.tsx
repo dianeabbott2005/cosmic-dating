@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { Heart, User, MessageSquare, RefreshCw, Settings } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -5,14 +6,15 @@ import EnhancedMatchCard from '@/components/EnhancedMatchCard';
 import EnhancedChatView from '@/components/EnhancedChatView';
 import { useMatches } from '@/hooks/useMatches';
 import { useChat } from '@/hooks/useChat';
+import type { Database } from '@/integrations/supabase/types';
 
 interface DashboardProps {
-  user: any;
+  user: Database['public']['Tables']['profiles']['Row'];
 }
 
 const Dashboard = ({ user }: DashboardProps) => {
   const [activeTab, setActiveTab] = useState<'matches' | 'chats'>('matches');
-  const [selectedMatch, setSelectedMatch] = useState(null);
+  const [selectedMatch, setSelectedMatch] = useState<any | null>(null);
   const { matches, loading, refreshMatches } = useMatches();
   const { chats, loadUserChats } = useChat();
   const navigate = useNavigate();
@@ -34,7 +36,6 @@ const Dashboard = ({ user }: DashboardProps) => {
     const matchFromChat = {
       user_id: chat.other_user?.user_id,
       first_name: chat.other_user?.first_name,
-      firstName: chat.other_user?.first_name,
       age: 25, // Default age since we don't have it in chat
       place_of_birth: chat.other_user?.place_of_birth,
     };
@@ -60,7 +61,7 @@ const Dashboard = ({ user }: DashboardProps) => {
         <div className="flex items-center justify-between mb-8 pt-8">
           <div className="text-center flex-1">
             <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent mb-2">
-              Welcome back, {user.first_name || user.firstName}! ✨
+              Welcome back, {user.first_name}! ✨
             </h1>
             <p className="text-gray-400">
               {matches.length} cosmic connections found for you
