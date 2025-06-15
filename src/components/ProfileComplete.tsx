@@ -28,12 +28,12 @@ const ProfileComplete = ({ onNext, userData }: ProfileCompleteProps) => {
     setIsCreating(true);
     
     try {
-      console.log('Creating profile with userData:', userData);
+      console.log('Updating profile with userData:', userData);
       console.log('Auth user:', authUser.id);
       
-      // Create/update the profile in the profiles table
+      // A profile is automatically created by a trigger on user signup.
+      // Here we update it with the information from the registration flow.
       const profileData = {
-        user_id: authUser.id,
         first_name: userData.firstName,
         last_name: userData.lastName,
         email: userData.email,
@@ -43,19 +43,21 @@ const ProfileComplete = ({ onNext, userData }: ProfileCompleteProps) => {
         gender: userData.gender,
         looking_for: userData.lookingFor,
         min_age: userData.minAge,
-        max_age: userData.maxAge
+        max_age: userData.maxAge,
+        updated_at: new Date().toISOString(),
       };
 
       const { error: profileError } = await supabase
         .from('profiles')
-        .upsert(profileData);
+        .update(profileData)
+        .eq('user_id', authUser.id);
 
       if (profileError) {
-        console.error('Profile creation error:', profileError);
+        console.error('Profile update error:', profileError);
         throw profileError;
       }
 
-      console.log('Profile created successfully');
+      console.log('Profile updated successfully');
 
       // Try to geocode the location if needed
       if (userData.placeOfBirth && (!userData.latitude || !userData.longitude)) {
@@ -97,9 +99,9 @@ const ProfileComplete = ({ onNext, userData }: ProfileCompleteProps) => {
       onNext({ success: true });
 
     } catch (error: any) {
-      console.error('Error creating profile:', error);
+      console.error('Error updating profile:', error);
       toast({
-        title: "Error Creating Profile",
+        title: "Error Saving Profile",
         description: error.message || "Something went wrong. Please try again.",
         variant: "destructive",
       });
@@ -168,7 +170,7 @@ const ProfileComplete = ({ onNext, userData }: ProfileCompleteProps) => {
         {isCreating ? (
           <>
             <Loader2 className="w-5 h-5 animate-spin" />
-            Creating Your Profile...
+            Saving Your Profile...
           </>
         ) : (
           'Create My Profile'
