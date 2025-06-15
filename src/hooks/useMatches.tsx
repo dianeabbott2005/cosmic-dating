@@ -25,6 +25,20 @@ export interface MatchProfile {
   age?: number;
 }
 
+// Helper function to calculate accurate age
+const calculateAge = (dateOfBirth: string): number => {
+  const today = new Date();
+  const birthDate = new Date(dateOfBirth);
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDiff = today.getMonth() - birthDate.getMonth();
+  
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+  
+  return age;
+};
+
 export const useMatches = () => {
   const [matches, setMatches] = useState<MatchProfile[]>([]);
   const [loading, setLoading] = useState(false);
@@ -35,6 +49,8 @@ export const useMatches = () => {
 
     setLoading(true);
     try {
+      console.log('Starting match calculation for user:', user.id);
+      
       // Get current user's profile
       const { data: userProfile } = await supabase
         .from('profiles')
@@ -42,21 +58,48 @@ export const useMatches = () => {
         .eq('user_id', user.id)
         .single();
 
-      if (!userProfile) return;
+      if (!userProfile) {
+        console.log('No user profile found');
+        return;
+      }
 
-      // Get potential matches based on preferences
+      console.log('User profile:', userProfile);
+      const userAge = calculateAge(userProfile.date_of_birth);
+      console.log('User age:', userAge);
+
+      // Get potential matches based on mutual preferences
       const { data: potentialMatches } = await supabase
         .from('profiles')
         .select('*')
-        .eq('gender', userProfile.looking_for)
+        .eq('gender', userProfile.looking_for) // Match has the gender current user is looking for
+        .eq('looking_for', userProfile.gender) // Match is looking for current user's gender
         .neq('user_id', user.id);
 
-      if (!potentialMatches) return;
+      if (!potentialMatches) {
+        console.log('No potential matches found');
+        return;
+      }
 
-      // Calculate compatibility for each potential match
+      console.log('Found', potentialMatches.length, 'potential matches');
+
+      // Calculate compatibility and filter by mutual age preferences
       const matchesWithCompatibility = await Promise.all(
         potentialMatches.map(async (match) => {
           try {
+            const matchAge = calculateAge(match.date_of_birth);
+            console.log(`Processing match ${match.first_name}, age: ${matchAge}`);
+
+            // Check mutual age preferences
+            const userFitsMatchAgeRange = userAge >= match.min_age && userAge <= match.max_age;
+            const matchFitsUserAgeRange = matchAge >= userProfile.min_age && matchAge <= userProfile.max_age;
+
+            console.log(`Age compatibility - User fits match range: ${userFitsMatchAgeRange}, Match fits user range: ${matchFitsUserAgeRange}`);
+
+            if (!userFitsMatchAgeRange || !matchFitsUserAgeRange) {
+              console.log(`Age mismatch for ${match.first_name}`);
+              return null;
+            }
+
             const compatibility = await calculateCompatibility(
               {
                 dateOfBirth: userProfile.date_of_birth,
@@ -74,19 +117,12 @@ export const useMatches = () => {
               }
             );
 
-            // Calculate age
-            const birthDate = new Date(match.date_of_birth);
-            const age = new Date().getFullYear() - birthDate.getFullYear();
-
-            // Filter by age preferences
-            if (age < userProfile.min_age || age > userProfile.max_age) {
-              return null;
-            }
+            console.log(`Compatibility for ${match.first_name}: ${compatibility}`);
 
             return {
               ...match,
               compatibility_score: compatibility,
-              age
+              age: matchAge
             };
           } catch (error) {
             console.error('Error calculating compatibility for match:', match.id, error);
@@ -104,6 +140,7 @@ export const useMatches = () => {
         })
         .sort((a, b) => (b.compatibility_score || 0) - (a.compatibility_score || 0));
 
+      console.log('Valid matches after filtering:', validMatches.length);
       setMatches(validMatches);
 
       // Store bidirectional matches in database using the new function
@@ -149,8 +186,7 @@ export const useMatches = () => {
           const profile = match.profiles;
           if (!profile) return null;
 
-          const birthDate = new Date(profile.date_of_birth);
-          const age = new Date().getFullYear() - birthDate.getFullYear();
+          const age = calculateAge(profile.date_of_birth);
 
           return {
             ...profile,
@@ -165,6 +201,32 @@ export const useMatches = () => {
       console.error('Error getting existing matches:', error);
     }
   };
+
+  // Listen for profile updates to trigger match recalculation
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel('profile-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'profiles',
+          filter: `user_id=eq.${user.id}`
+        },
+        (payload) => {
+          console.log('Profile updated, recalculating matches:', payload);
+          calculateMatches();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
 
   useEffect(() => {
     if (user) {

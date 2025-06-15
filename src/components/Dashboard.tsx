@@ -140,7 +140,7 @@ const Dashboard = ({ user }: DashboardProps) => {
                     key={match.user_id} 
                     match={{
                       ...match,
-                      age: match.age || new Date().getFullYear() - new Date(match.date_of_birth).getFullYear()
+                      age: match.age // Use the calculated age from useMatches
                     }} 
                     onStartChat={() => handleMatchClick(match)}
                   />
