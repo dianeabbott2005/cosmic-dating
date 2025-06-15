@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { CheckCircle, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -28,11 +27,32 @@ const ProfileComplete = ({ onNext, userData }: ProfileCompleteProps) => {
     setIsCreating(true);
     
     try {
-      console.log('Updating profile with userData:', userData);
-      console.log('Auth user:', authUser.id);
+      let { latitude, longitude } = userData;
+
+      // Try to geocode the location if it's not already present
+      if (userData.placeOfBirth && (!latitude || !longitude)) {
+        try {
+          console.log(`Geocoding place of birth: ${userData.placeOfBirth}`);
+          const { data: geocodeData, error: geocodeError } = await supabase.functions.invoke('geocode', {
+            body: { address: userData.placeOfBirth }
+          });
+
+          if (geocodeError) {
+            console.error('Geocoding function error:', geocodeError);
+          } else if (geocodeData?.results?.[0]) {
+            const location = geocodeData.results[0];
+            latitude = location.latitude;
+            longitude = location.longitude;
+            console.log('Geocoding successful:', { latitude, longitude });
+          } else {
+            console.warn('Geocoding returned no results for:', userData.placeOfBirth);
+          }
+        } catch (geocodeError) {
+          console.error('Geocoding failed:', geocodeError);
+          // Continue anyway, as coordinates are not critical for profile creation.
+        }
+      }
       
-      // A profile is automatically created by a trigger on user signup.
-      // Here we update it with the information from the registration flow.
       const profileData = {
         first_name: userData.firstName,
         last_name: userData.lastName,
@@ -44,8 +64,12 @@ const ProfileComplete = ({ onNext, userData }: ProfileCompleteProps) => {
         looking_for: userData.lookingFor,
         min_age: userData.minAge,
         max_age: userData.maxAge,
+        latitude: latitude,
+        longitude: longitude,
         updated_at: new Date().toISOString(),
       };
+
+      console.log('Updating profile with data:', profileData);
 
       const { error: profileError } = await supabase
         .from('profiles')
@@ -58,38 +82,7 @@ const ProfileComplete = ({ onNext, userData }: ProfileCompleteProps) => {
       }
 
       console.log('Profile updated successfully');
-
-      // Try to geocode the location if needed
-      if (userData.placeOfBirth && (!userData.latitude || !userData.longitude)) {
-        try {
-          const { data: geocodeData, error: geocodeError } = await supabase.functions.invoke('geocode', {
-            body: { address: userData.placeOfBirth }
-          });
-
-          if (!geocodeError && geocodeData?.results?.[0]) {
-            const location = geocodeData.results[0];
-            
-            // Update the profile with coordinates
-            const { error: updateError } = await supabase
-              .from('profiles')
-              .update({
-                latitude: location.latitude,
-                longitude: location.longitude
-              })
-              .eq('user_id', authUser.id);
-
-            if (updateError) {
-              console.error('Error updating coordinates:', updateError);
-            } else {
-              console.log('Coordinates updated successfully');
-            }
-          }
-        } catch (geocodeError) {
-          console.error('Geocoding failed:', geocodeError);
-          // Continue anyway, coordinates are not critical
-        }
-      }
-
+      
       toast({
         title: "Profile Created Successfully!",
         description: "Welcome to your cosmic dating journey.",
