@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Heart, User, MessageSquare, RefreshCw, Settings } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -37,8 +36,7 @@ const Dashboard = ({ user }: DashboardProps) => {
       first_name: chat.other_user?.first_name,
       firstName: chat.other_user?.first_name,
       age: 25, // Default age since we don't have it in chat
-      compatibility_score: 0.8, // Default compatibility
-      compatibility: 80
+      place_of_birth: chat.other_user?.place_of_birth,
     };
     setSelectedMatch(matchFromChat);
   };

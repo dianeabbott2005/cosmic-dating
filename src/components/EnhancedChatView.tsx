@@ -1,6 +1,6 @@
 
 import { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Send } from 'lucide-react';
+import { ArrowLeft, Send, MapPin } from 'lucide-react';
 import { useChat } from '@/hooks/useChat';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -67,12 +67,12 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
             <h2 className="text-lg font-semibold text-white">
               {match.first_name || match.firstName}, {match.age}
             </h2>
-            <p className="text-sm text-gray-400">
-              {match.compatibility_score ? 
-                `${Math.round(match.compatibility_score * 100)}% cosmic compatibility ✨` :
-                `${match.compatibility}% cosmic compatibility ✨`
-              }
-            </p>
+            {match.place_of_birth && (
+              <p className="text-sm text-gray-400 flex items-center gap-1">
+                <MapPin className="w-3 h-3" />
+                {match.place_of_birth}
+              </p>
+            )}
           </div>
         </div>
       </div>
