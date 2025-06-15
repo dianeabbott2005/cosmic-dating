@@ -1,8 +1,9 @@
 
-import { useState } from 'react';
-import { Heart, User, MessageSquare } from 'lucide-react';
-import MatchCard from '@/components/MatchCard';
-import ChatView from '@/components/ChatView';
+import { useState, useEffect } from 'react';
+import { Heart, User, MessageSquare, RefreshCw } from 'lucide-react';
+import EnhancedMatchCard from '@/components/EnhancedMatchCard';
+import EnhancedChatView from '@/components/EnhancedChatView';
+import { useMatches } from '@/hooks/useMatches';
 
 interface DashboardProps {
   user: any;
@@ -11,40 +12,7 @@ interface DashboardProps {
 const Dashboard = ({ user }: DashboardProps) => {
   const [activeTab, setActiveTab] = useState<'matches' | 'chats'>('matches');
   const [selectedMatch, setSelectedMatch] = useState(null);
-
-  // Mock matches data - in a real app, this would come from the backend
-  const mockMatches = [
-    {
-      id: 1,
-      firstName: 'Sarah',
-      age: 28,
-      location: 'Los Angeles, CA',
-      compatibility: 87,
-      sunSign: 'Virgo',
-      moonSign: 'Cancer',
-      avatar: 'https://images.unsplash.com/photo-1494790108755-2616b612b786?w=400&h=400&fit=crop&crop=face'
-    },
-    {
-      id: 2,
-      firstName: 'Emma',
-      age: 26,
-      location: 'San Francisco, CA',
-      compatibility: 82,
-      sunSign: 'Pisces',
-      moonSign: 'Leo',
-      avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=400&h=400&fit=crop&crop=face'
-    },
-    {
-      id: 3,
-      firstName: 'Jessica',
-      age: 30,
-      location: 'Seattle, WA',
-      compatibility: 79,
-      sunSign: 'Scorpio',
-      moonSign: 'Taurus',
-      avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=400&h=400&fit=crop&crop=face'
-    }
-  ];
+  const { matches, loading, refreshMatches } = useMatches();
 
   const handleMatchClick = (match: any) => {
     setSelectedMatch(match);
@@ -53,7 +21,7 @@ const Dashboard = ({ user }: DashboardProps) => {
 
   if (selectedMatch && activeTab === 'chats') {
     return (
-      <ChatView 
+      <EnhancedChatView 
         match={selectedMatch} 
         onBack={() => {
           setSelectedMatch(null);
@@ -69,10 +37,10 @@ const Dashboard = ({ user }: DashboardProps) => {
         {/* Header */}
         <div className="text-center mb-8 pt-8">
           <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent mb-2">
-            Welcome back, {user.firstName}! ✨
+            Welcome back, {user.first_name || user.firstName}! ✨
           </h1>
           <p className="text-gray-400">
-            {user.matchesFound} cosmic connections waiting for you
+            {matches.length} cosmic connections found for you
           </p>
         </div>
 
@@ -88,7 +56,7 @@ const Dashboard = ({ user }: DashboardProps) => {
               }`}
             >
               <Heart className="w-5 h-5" />
-              Matches
+              Matches ({matches.length})
             </button>
             <button
               onClick={() => setActiveTab('chats')}
@@ -106,14 +74,60 @@ const Dashboard = ({ user }: DashboardProps) => {
 
         {/* Content */}
         {activeTab === 'matches' && (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {mockMatches.map((match) => (
-              <MatchCard 
-                key={match.id} 
-                match={match} 
-                onClick={() => handleMatchClick(match)}
-              />
-            ))}
+          <div>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-semibold text-white">Your Cosmic Matches</h2>
+              <button
+                onClick={refreshMatches}
+                disabled={loading}
+                className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-xl hover:bg-purple-700 transition-all disabled:opacity-50"
+              >
+                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                Refresh
+              </button>
+            </div>
+
+            {loading ? (
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {[...Array(6)].map((_, i) => (
+                  <div key={i} className="card-cosmic animate-pulse">
+                    <div className="w-full h-64 bg-gray-700 rounded-xl mb-4"></div>
+                    <div className="space-y-3">
+                      <div className="h-6 bg-gray-700 rounded"></div>
+                      <div className="h-4 bg-gray-700 rounded w-3/4"></div>
+                      <div className="h-10 bg-gray-700 rounded"></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : matches.length > 0 ? (
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {matches.map((match) => (
+                  <EnhancedMatchCard 
+                    key={match.user_id} 
+                    match={{
+                      ...match,
+                      age: match.age || new Date().getFullYear() - new Date(match.date_of_birth).getFullYear()
+                    }} 
+                    onStartChat={() => handleMatchClick(match)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-16">
+                <Heart className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+                <h3 className="text-xl text-gray-400 mb-2">No matches found yet</h3>
+                <p className="text-gray-500 mb-4">
+                  We're still calculating your cosmic compatibility with other users.
+                </p>
+                <button
+                  onClick={refreshMatches}
+                  className="bg-purple-600 text-white px-6 py-3 rounded-xl hover:bg-purple-700 transition-all"
+                >
+                  Check for New Matches
+                </button>
+              </div>
+            )}
           </div>
         )}
 
