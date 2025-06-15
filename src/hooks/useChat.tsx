@@ -30,12 +30,12 @@ export const useChat = (matchId?: string) => {
 
     setLoading(true);
     try {
-      // Check if chat already exists
+      // Check if chat already exists (either direction)
       const { data: existingChat } = await supabase
         .from('chats')
         .select('*')
         .or(`and(user1_id.eq.${user.id},user2_id.eq.${otherUserId}),and(user1_id.eq.${otherUserId},user2_id.eq.${user.id})`)
-        .single();
+        .maybeSingle();
 
       if (existingChat) {
         setChat(existingChat);
@@ -51,7 +51,11 @@ export const useChat = (matchId?: string) => {
           .select()
           .single();
 
-        if (error) throw error;
+        if (error) {
+          console.error('Error creating chat:', error);
+          return;
+        }
+        
         setChat(newChat);
         setMessages([]);
       }
@@ -71,7 +75,11 @@ export const useChat = (matchId?: string) => {
         .eq('chat_id', chatId)
         .order('created_at', { ascending: true });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error loading messages:', error);
+        return;
+      }
+      
       setMessages(data || []);
     } catch (error) {
       console.error('Error loading messages:', error);
@@ -83,15 +91,25 @@ export const useChat = (matchId?: string) => {
     if (!chat || !user || !content.trim()) return;
 
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('messages')
         .insert({
           chat_id: chat.id,
           sender_id: user.id,
           content: content.trim()
-        });
+        })
+        .select()
+        .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error sending message:', error);
+        return;
+      }
+
+      // Add the message to local state immediately for better UX
+      if (data) {
+        setMessages(prev => [...prev, data]);
+      }
     } catch (error) {
       console.error('Error sending message:', error);
     }
@@ -102,7 +120,7 @@ export const useChat = (matchId?: string) => {
     if (!chat) return;
 
     const channel = supabase
-      .channel('schema-db-changes')
+      .channel(`chat-${chat.id}`)
       .on(
         'postgres_changes',
         {
@@ -113,7 +131,15 @@ export const useChat = (matchId?: string) => {
         },
         (payload) => {
           const newMessage = payload.new as Message;
-          setMessages(prev => [...prev, newMessage]);
+          // Only add if it's not from the current user (to avoid duplicates)
+          if (newMessage.sender_id !== user?.id) {
+            setMessages(prev => {
+              // Check if message already exists
+              const exists = prev.some(msg => msg.id === newMessage.id);
+              if (exists) return prev;
+              return [...prev, newMessage];
+            });
+          }
         }
       )
       .subscribe();
@@ -121,7 +147,7 @@ export const useChat = (matchId?: string) => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [chat]);
+  }, [chat, user?.id]);
 
   return {
     chat,

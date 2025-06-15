@@ -1,6 +1,7 @@
 
 import { useState, useEffect } from 'react';
-import { Heart, User, MessageSquare, RefreshCw } from 'lucide-react';
+import { Heart, User, MessageSquare, RefreshCw, Settings } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import EnhancedMatchCard from '@/components/EnhancedMatchCard';
 import EnhancedChatView from '@/components/EnhancedChatView';
 import { useMatches } from '@/hooks/useMatches';
@@ -13,6 +14,7 @@ const Dashboard = ({ user }: DashboardProps) => {
   const [activeTab, setActiveTab] = useState<'matches' | 'chats'>('matches');
   const [selectedMatch, setSelectedMatch] = useState(null);
   const { matches, loading, refreshMatches } = useMatches();
+  const navigate = useNavigate();
 
   const handleMatchClick = (match: any) => {
     setSelectedMatch(match);
@@ -35,13 +37,22 @@ const Dashboard = ({ user }: DashboardProps) => {
     <div className="min-h-screen p-4">
       <div className="max-w-6xl mx-auto">
         {/* Header */}
-        <div className="text-center mb-8 pt-8">
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent mb-2">
-            Welcome back, {user.first_name || user.firstName}! ✨
-          </h1>
-          <p className="text-gray-400">
-            {matches.length} cosmic connections found for you
-          </p>
+        <div className="flex items-center justify-between mb-8 pt-8">
+          <div className="text-center flex-1">
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent mb-2">
+              Welcome back, {user.first_name || user.firstName}! ✨
+            </h1>
+            <p className="text-gray-400">
+              {matches.length} cosmic connections found for you
+            </p>
+          </div>
+          <button
+            onClick={() => navigate('/profile')}
+            className="flex items-center gap-2 bg-slate-800/50 text-gray-300 px-4 py-2 rounded-xl hover:bg-slate-700/50 transition-all"
+          >
+            <Settings className="w-4 h-4" />
+            Profile
+          </button>
         </div>
 
         {/* Navigation */}

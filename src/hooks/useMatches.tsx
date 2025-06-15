@@ -106,17 +106,23 @@ export const useMatches = () => {
 
       setMatches(validMatches);
 
-      // Store matches in database
+      // Store bidirectional matches in database using the new function
       if (validMatches.length > 0) {
-        const matchRecords = validMatches.map(match => ({
-          user_id: user.id,
-          matched_user_id: match.user_id,
-          compatibility_score: match.compatibility_score || 0
-        }));
-
-        await supabase
-          .from('matches')
-          .upsert(matchRecords, { onConflict: 'user_id,matched_user_id' });
+        for (const match of validMatches) {
+          try {
+            const { error } = await supabase.rpc('create_bidirectional_match', {
+              user1_uuid: user.id,
+              user2_uuid: match.user_id,
+              compatibility_score_val: match.compatibility_score || 0
+            });
+            
+            if (error) {
+              console.error('Error creating bidirectional match:', error);
+            }
+          } catch (error) {
+            console.error('Error calling create_bidirectional_match:', error);
+          }
+        }
       }
     } catch (error) {
       console.error('Error calculating matches:', error);
@@ -125,9 +131,50 @@ export const useMatches = () => {
     }
   };
 
+  const getExistingMatches = async () => {
+    if (!user) return;
+
+    try {
+      // Get matches where the current user is either the matcher or the matched
+      const { data: existingMatches } = await supabase
+        .from('matches')
+        .select(`
+          *,
+          profiles!matches_matched_user_id_fkey(*)
+        `)
+        .eq('user_id', user.id);
+
+      if (existingMatches) {
+        const formattedMatches = existingMatches.map(match => {
+          const profile = match.profiles;
+          if (!profile) return null;
+
+          const birthDate = new Date(profile.date_of_birth);
+          const age = new Date().getFullYear() - birthDate.getFullYear();
+
+          return {
+            ...profile,
+            compatibility_score: match.compatibility_score,
+            age
+          };
+        }).filter(Boolean);
+
+        setMatches(formattedMatches);
+      }
+    } catch (error) {
+      console.error('Error getting existing matches:', error);
+    }
+  };
+
   useEffect(() => {
     if (user) {
-      calculateMatches();
+      // First try to get existing matches, then calculate new ones if needed
+      getExistingMatches().then(() => {
+        // Only calculate new matches if we don't have any
+        if (matches.length === 0) {
+          calculateMatches();
+        }
+      });
     }
   }, [user]);
 

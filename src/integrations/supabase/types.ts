@@ -185,7 +185,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      create_bidirectional_match: {
+        Args: {
+          user1_uuid: string
+          user2_uuid: string
+          compatibility_score_val: number
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never

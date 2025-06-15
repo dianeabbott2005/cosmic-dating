@@ -1,0 +1,282 @@
+
+import { useState, useEffect } from 'react';
+import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
+import { ArrowLeft, Save } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+
+const Profile = () => {
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [profile, setProfile] = useState({
+    first_name: '',
+    last_name: '',
+    email: '',
+    date_of_birth: '',
+    time_of_birth: '',
+    place_of_birth: '',
+    gender: '',
+    looking_for: '',
+    min_age: 18,
+    max_age: 35
+  });
+
+  useEffect(() => {
+    if (user) {
+      loadProfile();
+    }
+  }, [user]);
+
+  const loadProfile = async () => {
+    if (!user) return;
+    
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+
+      if (error) throw error;
+      
+      if (data) {
+        setProfile({
+          first_name: data.first_name,
+          last_name: data.last_name,
+          email: data.email,
+          date_of_birth: data.date_of_birth,
+          time_of_birth: data.time_of_birth,
+          place_of_birth: data.place_of_birth,
+          gender: data.gender,
+          looking_for: data.looking_for,
+          min_age: data.min_age,
+          max_age: data.max_age
+        });
+      }
+    } catch (error) {
+      console.error('Error loading profile:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveProfile = async () => {
+    if (!user) return;
+    
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update(profile)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+      
+      alert('Profile updated successfully!');
+    } catch (error) {
+      console.error('Error saving profile:', error);
+      alert('Error saving profile. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!user) {
+    navigate('/auth');
+    return null;
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen p-4">
+      <div className="max-w-2xl mx-auto">
+        {/* Header */}
+        <div className="flex items-center gap-4 mb-8 pt-8">
+          <button
+            onClick={() => navigate('/')}
+            className="text-gray-400 hover:text-white transition-colors"
+          >
+            <ArrowLeft className="w-6 h-6" />
+          </button>
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">
+            Profile Settings
+          </h1>
+        </div>
+
+        {/* Profile Form */}
+        <div className="card-cosmic">
+          <div className="grid gap-6">
+            {/* Personal Info */}
+            <div className="grid md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  First Name
+                </label>
+                <input
+                  type="text"
+                  value={profile.first_name}
+                  onChange={(e) => setProfile({ ...profile, first_name: e.target.value })}
+                  className="input-cosmic"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Last Name
+                </label>
+                <input
+                  type="text"
+                  value={profile.last_name}
+                  onChange={(e) => setProfile({ ...profile, last_name: e.target.value })}
+                  className="input-cosmic"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Email
+              </label>
+              <input
+                type="email"
+                value={profile.email}
+                onChange={(e) => setProfile({ ...profile, email: e.target.value })}
+                className="input-cosmic"
+                disabled
+              />
+              <p className="text-xs text-gray-500 mt-1">Email cannot be changed</p>
+            </div>
+
+            {/* Birth Info */}
+            <div className="grid md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Date of Birth
+                </label>
+                <input
+                  type="date"
+                  value={profile.date_of_birth}
+                  onChange={(e) => setProfile({ ...profile, date_of_birth: e.target.value })}
+                  className="input-cosmic"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Time of Birth
+                </label>
+                <input
+                  type="time"
+                  value={profile.time_of_birth}
+                  onChange={(e) => setProfile({ ...profile, time_of_birth: e.target.value })}
+                  className="input-cosmic"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Place of Birth
+                </label>
+                <input
+                  type="text"
+                  value={profile.place_of_birth}
+                  onChange={(e) => setProfile({ ...profile, place_of_birth: e.target.value })}
+                  className="input-cosmic"
+                />
+              </div>
+            </div>
+
+            {/* Gender & Preferences */}
+            <div className="grid md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Gender
+                </label>
+                <select
+                  value={profile.gender}
+                  onChange={(e) => setProfile({ ...profile, gender: e.target.value })}
+                  className="input-cosmic"
+                >
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                  <option value="non-binary">Non-binary</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Looking For
+                </label>
+                <select
+                  value={profile.looking_for}
+                  onChange={(e) => setProfile({ ...profile, looking_for: e.target.value })}
+                  className="input-cosmic"
+                >
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                  <option value="non-binary">Non-binary</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Age Preferences */}
+            <div className="grid md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Min Age
+                </label>
+                <input
+                  type="number"
+                  min="18"
+                  max="100"
+                  value={profile.min_age}
+                  onChange={(e) => setProfile({ ...profile, min_age: parseInt(e.target.value) })}
+                  className="input-cosmic"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Max Age
+                </label>
+                <input
+                  type="number"
+                  min="18"
+                  max="100"
+                  value={profile.max_age}
+                  onChange={(e) => setProfile({ ...profile, max_age: parseInt(e.target.value) })}
+                  className="input-cosmic"
+                />
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex gap-4 pt-4">
+              <button
+                onClick={saveProfile}
+                disabled={saving}
+                className="flex-1 bg-gradient-to-r from-purple-500 to-blue-500 text-white py-3 rounded-xl font-medium hover:from-purple-600 hover:to-blue-600 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                <Save className="w-4 h-4" />
+                {saving ? 'Saving...' : 'Save Changes'}
+              </button>
+              <button
+                onClick={signOut}
+                className="px-6 py-3 border border-red-500 text-red-400 rounded-xl hover:bg-red-500/10 transition-all"
+              >
+                Sign Out
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default Profile;
