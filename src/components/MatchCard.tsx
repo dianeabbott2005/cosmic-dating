@@ -1,5 +1,5 @@
 
-import { Heart, MapPin, Star } from 'lucide-react';
+import { Heart, MapPin } from 'lucide-react';
 
 interface MatchCardProps {
   match: {
@@ -16,18 +16,6 @@ interface MatchCardProps {
 }
 
 const MatchCard = ({ match, onClick }: MatchCardProps) => {
-  const getCompatibilityColor = (score: number) => {
-    if (score >= 80) return 'text-green-400';
-    if (score >= 70) return 'text-yellow-400';
-    return 'text-orange-400';
-  };
-
-  const getCompatibilityBg = (score: number) => {
-    if (score >= 80) return 'bg-green-500/20 border-green-500/30';
-    if (score >= 70) return 'bg-yellow-500/20 border-yellow-500/30';
-    return 'bg-orange-500/20 border-orange-500/30';
-  };
-
   return (
     <div 
       onClick={onClick}
@@ -40,11 +28,6 @@ const MatchCard = ({ match, onClick }: MatchCardProps) => {
           alt={match.firstName}
           className="w-full h-64 object-cover rounded-xl"
         />
-        <div className={`absolute top-3 right-3 px-3 py-1 rounded-full border ${getCompatibilityBg(match.compatibility)}`}>
-          <span className={`text-sm font-semibold ${getCompatibilityColor(match.compatibility)}`}>
-            {match.compatibility}% ✨
-          </span>
-        </div>
       </div>
 
       {/* Profile Info */}
@@ -75,26 +58,10 @@ const MatchCard = ({ match, onClick }: MatchCardProps) => {
         </div>
 
         <div className="pt-2 border-t border-gray-700">
-          <div className="flex items-center justify-between">
-            <span className="text-gray-400 text-sm">Cosmic Compatibility</span>
-            <div className="flex items-center gap-1">
-              {[...Array(5)].map((_, i) => (
-                <Star
-                  key={i}
-                  className={`w-4 h-4 ${
-                    i < Math.floor(match.compatibility / 20)
-                      ? 'text-yellow-400 fill-current'
-                      : 'text-gray-600'
-                  }`}
-                />
-              ))}
-            </div>
-          </div>
+          <button className="w-full bg-gradient-to-r from-pink-500 to-purple-500 text-white py-3 rounded-xl font-medium hover:from-pink-600 hover:to-purple-600 transition-all">
+            Start Conversation
+          </button>
         </div>
-
-        <button className="w-full bg-gradient-to-r from-pink-500 to-purple-500 text-white py-3 rounded-xl font-medium hover:from-pink-600 hover:to-purple-600 transition-all">
-          Start Conversation
-        </button>
       </div>
     </div>
   );

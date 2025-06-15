@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -131,14 +130,13 @@ export const useMatches = () => {
         })
       );
 
-      // Filter out null results and sort by compatibility
+      // Filter out null results, no longer sorting by compatibility
       const validMatches = matchesWithCompatibility
         .filter((match) => {
           return match !== null && 
                  typeof match.compatibility_score === 'number' && 
                  match.compatibility_score > 0.6;
-        })
-        .sort((a, b) => (b.compatibility_score || 0) - (a.compatibility_score || 0));
+        });
 
       console.log('Valid matches after filtering:', validMatches.length);
       setMatches(validMatches);

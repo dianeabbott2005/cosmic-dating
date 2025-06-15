@@ -1,5 +1,5 @@
 
-import { Heart, MapPin, Star, MessageCircle } from 'lucide-react';
+import { Heart, MapPin, MessageCircle } from 'lucide-react';
 import { getSunSign } from '@/utils/astro/zodiacCalculations';
 
 interface EnhancedMatchCardProps {
@@ -21,22 +21,8 @@ interface EnhancedMatchCardProps {
 }
 
 const EnhancedMatchCard = ({ match, onStartChat, onViewProfile }: EnhancedMatchCardProps) => {
-  const compatibilityScore = match.compatibility_score ? Math.round(match.compatibility_score * 100) : match.compatibility || 0;
-
   // Calculate only sun sign
   const sunSign = match.date_of_birth ? getSunSign(match.date_of_birth) : null;
-
-  const getCompatibilityColor = (score: number) => {
-    if (score >= 80) return 'text-green-400';
-    if (score >= 70) return 'text-yellow-400';
-    return 'text-orange-400';
-  };
-
-  const getCompatibilityBg = (score: number) => {
-    if (score >= 80) return 'bg-green-500/20 border-green-500/30';
-    if (score >= 70) return 'bg-yellow-500/20 border-yellow-500/30';
-    return 'bg-orange-500/20 border-orange-500/30';
-  };
 
   const formatSignName = (sign: string | null) => {
     if (!sign) return '';
@@ -50,11 +36,6 @@ const EnhancedMatchCard = ({ match, onStartChat, onViewProfile }: EnhancedMatchC
         <div className="w-full h-64 bg-gradient-to-br from-purple-500 to-blue-500 rounded-xl flex items-center justify-center">
           <span className="text-white text-6xl font-bold">
             {match.first_name?.[0]?.toUpperCase() || '?'}
-          </span>
-        </div>
-        <div className={`absolute top-3 right-3 px-3 py-1 rounded-full border ${getCompatibilityBg(compatibilityScore)}`}>
-          <span className={`text-sm font-semibold ${getCompatibilityColor(compatibilityScore)}`}>
-            {compatibilityScore}% ✨
           </span>
         </div>
       </div>
@@ -77,7 +58,7 @@ const EnhancedMatchCard = ({ match, onStartChat, onViewProfile }: EnhancedMatchC
 
         {/* Sun Sign */}
         {sunSign && (
-          <div className="flex items-center justify-center py-2 border-t border-gray-700">
+          <div className="flex items-center justify-center py-2">
             <div className="text-center">
               <div className="text-purple-300 font-medium">☀️ {formatSignName(sunSign)}</div>
               <div className="text-gray-500 text-xs">Sun Sign</div>
@@ -85,25 +66,7 @@ const EnhancedMatchCard = ({ match, onStartChat, onViewProfile }: EnhancedMatchC
           </div>
         )}
 
-        <div className="pt-2 border-t border-gray-700">
-          <div className="flex items-center justify-between">
-            <span className="text-gray-400 text-sm">Cosmic Compatibility</span>
-            <div className="flex items-center gap-1">
-              {[...Array(5)].map((_, i) => (
-                <Star
-                  key={i}
-                  className={`w-4 h-4 ${
-                    i < Math.floor(compatibilityScore / 20)
-                      ? 'text-yellow-400 fill-current'
-                      : 'text-gray-600'
-                  }`}
-                />
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="flex gap-2">
+        <div className="flex gap-2 pt-2 border-t border-gray-700">
           <button 
             onClick={onStartChat}
             className="flex-1 bg-gradient-to-r from-pink-500 to-purple-500 text-white py-3 rounded-xl font-medium hover:from-pink-600 hover:to-purple-600 transition-all flex items-center justify-center gap-2"
