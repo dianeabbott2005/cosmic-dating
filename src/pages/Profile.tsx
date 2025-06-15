@@ -4,6 +4,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { ArrowLeft, Save } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import PlaceSearch from '@/components/PlaceSearch';
 
 const Profile = () => {
   const { user, signOut } = useAuth();
@@ -17,6 +18,8 @@ const Profile = () => {
     date_of_birth: '',
     time_of_birth: '',
     place_of_birth: '',
+    latitude: null as number | null,
+    longitude: null as number | null,
     gender: '',
     looking_for: '',
     min_age: 18,
@@ -50,6 +53,8 @@ const Profile = () => {
           date_of_birth: data.date_of_birth,
           time_of_birth: data.time_of_birth,
           place_of_birth: data.place_of_birth,
+          latitude: data.latitude,
+          longitude: data.longitude,
           gender: data.gender,
           looking_for: data.looking_for,
           min_age: data.min_age,
@@ -63,6 +68,16 @@ const Profile = () => {
     }
   };
 
+  const handlePlaceSelect = (place: { name: string; latitude: number; longitude: number }) => {
+    console.log('Place selected:', place);
+    setProfile(prev => ({
+      ...prev,
+      place_of_birth: place.name,
+      latitude: place.latitude,
+      longitude: place.longitude
+    }));
+  };
+
   const saveProfile = async () => {
     if (!user) return;
     
@@ -70,7 +85,19 @@ const Profile = () => {
     try {
       const { error } = await supabase
         .from('profiles')
-        .update(profile)
+        .update({
+          first_name: profile.first_name,
+          last_name: profile.last_name,
+          date_of_birth: profile.date_of_birth,
+          time_of_birth: profile.time_of_birth,
+          place_of_birth: profile.place_of_birth,
+          latitude: profile.latitude,
+          longitude: profile.longitude,
+          gender: profile.gender,
+          looking_for: profile.looking_for,
+          min_age: profile.min_age,
+          max_age: profile.max_age
+        })
         .eq('user_id', user.id);
 
       if (error) throw error;
@@ -180,16 +207,20 @@ const Profile = () => {
                   className="input-cosmic"
                 />
               </div>
-              <div>
+              <div className="md:col-span-1">
                 <label className="block text-sm font-medium text-gray-300 mb-2">
                   Place of Birth
                 </label>
-                <input
-                  type="text"
+                <PlaceSearch
+                  onPlaceSelect={handlePlaceSelect}
                   value={profile.place_of_birth}
-                  onChange={(e) => setProfile({ ...profile, place_of_birth: e.target.value })}
-                  className="input-cosmic"
+                  placeholder="Search for your birth place..."
                 />
+                {profile.latitude && profile.longitude && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Coordinates: {profile.latitude.toFixed(4)}, {profile.longitude.toFixed(4)}
+                  </p>
+                )}
               </div>
             </div>
 
