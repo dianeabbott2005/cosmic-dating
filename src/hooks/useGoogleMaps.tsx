@@ -1,5 +1,6 @@
 
 import { useState } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 
 interface PlaceResult {
   name: string;
@@ -10,40 +11,31 @@ interface PlaceResult {
 
 export const useGoogleMaps = () => {
   const [loading, setLoading] = useState(false);
-  const [apiKey, setApiKey] = useState(localStorage.getItem('google_maps_api_key') || '');
-
-  const saveApiKey = (key: string) => {
-    localStorage.setItem('google_maps_api_key', key);
-    setApiKey(key);
-  };
 
   const searchPlaces = async (query: string): Promise<PlaceResult[]> => {
-    if (!apiKey) {
-      throw new Error('Google Maps API key not provided');
+    if (!query.trim()) {
+      throw new Error('Search query is required');
     }
 
     setLoading(true);
     try {
-      const response = await fetch(
-        `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query)}&key=${apiKey}`
-      );
+      console.log('Searching places with query:', query);
       
-      if (!response.ok) {
+      const { data, error } = await supabase.functions.invoke('geocode', {
+        body: { address: query }
+      });
+
+      if (error) {
+        console.error('Supabase function error:', error);
         throw new Error('Failed to search places');
       }
 
-      const data = await response.json();
-      
-      if (data.status !== 'OK') {
-        throw new Error(data.error_message || 'Geocoding failed');
+      if (data.error) {
+        throw new Error(data.error);
       }
 
-      return data.results.map((result: any) => ({
-        name: result.formatted_address,
-        latitude: result.geometry.location.lat,
-        longitude: result.geometry.location.lng,
-        formatted_address: result.formatted_address
-      }));
+      console.log('Places search results:', data.results);
+      return data.results || [];
     } catch (error) {
       console.error('Error searching places:', error);
       throw error;
@@ -53,10 +45,8 @@ export const useGoogleMaps = () => {
   };
 
   return {
-    apiKey,
     loading,
-    saveApiKey,
     searchPlaces,
-    hasApiKey: !!apiKey
+    hasApiKey: true // Always true since API key is managed server-side
   };
 };

@@ -1,6 +1,6 @@
 
 import { useState, useEffect } from 'react';
-import { MapPin, Search, Key } from 'lucide-react';
+import { MapPin, Search } from 'lucide-react';
 import { useGoogleMaps } from '@/hooks/useGoogleMaps';
 
 interface PlaceSearchProps {
@@ -13,12 +13,10 @@ const PlaceSearch = ({ onPlaceSelect, placeholder = "Search for a place...", val
   const [query, setQuery] = useState(value);
   const [results, setResults] = useState<any[]>([]);
   const [showResults, setShowResults] = useState(false);
-  const [showApiKeyInput, setShowApiKeyInput] = useState(false);
-  const [tempApiKey, setTempApiKey] = useState('');
-  const { apiKey, loading, saveApiKey, searchPlaces, hasApiKey } = useGoogleMaps();
+  const { loading, searchPlaces } = useGoogleMaps();
 
   const handleSearch = async (searchQuery: string) => {
-    if (!searchQuery.trim() || !hasApiKey) return;
+    if (!searchQuery.trim()) return;
 
     try {
       const places = await searchPlaces(searchQuery);
@@ -27,6 +25,7 @@ const PlaceSearch = ({ onPlaceSelect, placeholder = "Search for a place...", val
     } catch (error) {
       console.error('Search failed:', error);
       setResults([]);
+      setShowResults(false);
     }
   };
 
@@ -40,94 +39,18 @@ const PlaceSearch = ({ onPlaceSelect, placeholder = "Search for a place...", val
     });
   };
 
-  const handleApiKeySubmit = () => {
-    if (tempApiKey.trim()) {
-      saveApiKey(tempApiKey.trim());
-      setShowApiKeyInput(false);
-      setTempApiKey('');
-    }
-  };
-
   useEffect(() => {
     const timeoutId = setTimeout(() => {
       if (query.length > 2) {
         handleSearch(query);
+      } else {
+        setResults([]);
+        setShowResults(false);
       }
     }, 500);
 
     return () => clearTimeout(timeoutId);
-  }, [query, hasApiKey]);
-
-  if (!hasApiKey) {
-    return (
-      <div className="space-y-4">
-        <div className="flex items-center gap-2 p-4 bg-blue-900/20 border border-blue-500/30 rounded-xl">
-          <Key className="w-5 h-5 text-blue-400" />
-          <div className="flex-1">
-            <h4 className="text-blue-300 font-medium">Google Maps API Key Required</h4>
-            <p className="text-gray-400 text-sm">
-              To enable place search and geocoding, please provide your Google Maps API key.
-            </p>
-          </div>
-          <button
-            onClick={() => setShowApiKeyInput(true)}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            Add Key
-          </button>
-        </div>
-
-        {showApiKeyInput && (
-          <div className="space-y-3">
-            <input
-              type="password"
-              value={tempApiKey}
-              onChange={(e) => setTempApiKey(e.target.value)}
-              placeholder="Enter your Google Maps API key"
-              className="input-cosmic w-full"
-            />
-            <div className="flex gap-2">
-              <button
-                onClick={handleApiKeySubmit}
-                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
-              >
-                Save Key
-              </button>
-              <button
-                onClick={() => {
-                  setShowApiKeyInput(false);
-                  setTempApiKey('');
-                }}
-                className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-            <p className="text-xs text-gray-500">
-              Get your API key from{' '}
-              <a 
-                href="https://developers.google.com/maps/documentation/geocoding/get-api-key" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-blue-400 hover:underline"
-              >
-                Google Cloud Console
-              </a>
-            </p>
-          </div>
-        )}
-
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Enter place manually (e.g., New York, NY, USA)"
-          className="input-cosmic w-full"
-          disabled
-        />
-      </div>
-    );
-  }
+  }, [query]);
 
   return (
     <div className="relative">
