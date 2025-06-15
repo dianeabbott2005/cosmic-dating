@@ -1,4 +1,3 @@
-
 -- Update all dummy profiles with personalized personality prompts that factor in age, gender, and place of birth
 UPDATE public.profiles 
 SET personality_prompt = (
@@ -95,4 +94,4 @@ SET personality_prompt = (
     place_of_birth
   ) FROM personality_data
 )
-WHERE email LIKE '%@dummyprofile.com';
+WHERE email LIKE '%@example.com';

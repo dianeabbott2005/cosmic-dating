@@ -1,4 +1,3 @@
-
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.50.0';
@@ -41,8 +40,8 @@ serve(async (req) => {
       .eq('user_id', receiverId)
       .single();
 
-    if (!receiverProfile?.personality_prompt) {
-      throw new Error('Receiver profile not found or no personality prompt');
+    if (!receiverProfile) {
+      throw new Error('Receiver profile not found.');
     }
 
     // Get sender's profile for context
@@ -84,50 +83,30 @@ serve(async (req) => {
         .join('\n');
     }
 
-    // Build enhanced personality prompt with profile details
-    let enhancedPrompt = `You are ${receiverProfile.first_name}, a ${age}-year-old ${receiverProfile.gender} from ${receiverProfile.place_of_birth}. `;
-    
-    // Add birth time context for personality
-    const birthTime = receiverProfile.time_of_birth;
-    const birthHour = parseInt(birthTime.split(':')[0]);
-    if (birthHour < 6) {
-      enhancedPrompt += `Born in the early morning hours (${birthTime}), you tend to be an early riser and appreciate quiet, peaceful moments. `;
-    } else if (birthHour < 12) {
-      enhancedPrompt += `Born in the morning (${birthTime}), you're naturally optimistic and energetic during the day. `;
-    } else if (birthHour < 18) {
-      enhancedPrompt += `Born in the afternoon (${birthTime}), you're sociable and enjoy connecting with others. `;
-    } else {
-      enhancedPrompt += `Born in the evening (${birthTime}), you're introspective and appreciate deep conversations. `;
+    // Build the prompt using the detailed personality_prompt from the database
+    let enhancedPrompt = receiverProfile.personality_prompt;
+
+    // If no pre-generated prompt, create a basic one as a fallback
+    if (!enhancedPrompt) {
+      console.warn(`No personality_prompt found for ${receiverProfile.first_name}. Using fallback.`);
+      enhancedPrompt = `You are ${receiverProfile.first_name}, a ${age}-year-old ${receiverProfile.gender} from ${receiverProfile.place_of_birth}. Respond naturally and conversationally.`;
     }
 
-    // Add location-based personality traits
-    const location = receiverProfile.place_of_birth.toLowerCase();
-    if (location.includes('new york') || location.includes('london') || location.includes('tokyo')) {
-      enhancedPrompt += `Growing up in a major metropolitan area has made you adaptable, ambitious, and culturally aware. `;
-    } else if (location.includes('beach') || location.includes('coast') || location.includes('sydney') || location.includes('miami')) {
-      enhancedPrompt += `Your coastal upbringing has given you a laid-back, go-with-the-flow personality. `;
-    } else if (location.includes('mountain') || location.includes('denver') || location.includes('switzerland')) {
-      enhancedPrompt += `Growing up near mountains has instilled in you a love for adventure and outdoor activities. `;
-    }
-
-    // Add age-appropriate communication style
+    // Add specific instructions on texting style and emoji use based on age
+    let textingStyleInstruction = '';
     if (age < 25) {
-      enhancedPrompt += `As someone in your early twenties, you communicate with enthusiasm and aren't afraid to use modern slang and emojis. `;
+      textingStyleInstruction = "Your texting style is casual, enthusiastic, and you use emojis liberally and creatively (e.g., ✨, 💀, 😂, 😭). You might use modern slang.";
     } else if (age < 35) {
-      enhancedPrompt += `In your late twenties/early thirties, you balance playfulness with maturity in your communication. `;
+      textingStyleInstruction = "Your texting style balances fun, witty messages with thoughtful questions. You use emojis to add color and emotion to your conversation (e.g., 😊, 👍, 🎉, 🤔).";
     } else {
-      enhancedPrompt += `With the wisdom that comes with your age, you communicate thoughtfully and value meaningful connections. `;
+      textingStyleInstruction = "Your communication style is a bit more formal, clear, and direct, but still warm and engaging. You use emojis sparingly and purposefully (e.g., 🙂, 🙏, ✅).";
     }
-
-    // Add the original personality trait
-    enhancedPrompt += receiverProfile.personality_prompt;
-
+    enhancedPrompt += `\n\nYour texting style: ${textingStyleInstruction}`;
+    
     // Add context about who they're talking to
     if (senderProfile) {
-      enhancedPrompt += ` You're chatting with ${senderProfile.first_name}, a ${senderProfile.gender} from ${senderProfile.place_of_birth}. `;
+      enhancedPrompt += ` You are chatting with ${senderProfile.first_name}.`;
     }
-
-    enhancedPrompt += ` Keep your responses natural, conversational, and true to your personality. Use modern texting style appropriate for your age. Keep messages relatively short like real texting (1-3 sentences usually). `;
     
     if (context?.context_summary) {
       enhancedPrompt += `\n\nPrevious conversation context: ${context.context_summary}`;
@@ -137,7 +116,7 @@ serve(async (req) => {
       enhancedPrompt += `\n\nRecent conversation:\n${conversationHistory}`;
     }
     
-    enhancedPrompt += `\n\nLatest message: ${message}\n\nRespond as ${receiverProfile.first_name} would:`;
+    enhancedPrompt += `\n\n${senderProfile?.first_name || 'The user'} just sent: ${message}\n\nNow, respond as ${receiverProfile.first_name}:`;
 
     console.log('Enhanced prompt:', enhancedPrompt);
 
@@ -197,7 +176,7 @@ serve(async (req) => {
     }
 
     // Update conversation context with enhanced details
-    const contextUpdate = `${senderProfile?.first_name || 'User'} said: "${message}". ${receiverProfile.first_name} (${age}, from ${receiverProfile.place_of_birth}) responded: "${aiResponse}".`;
+    const contextUpdate = `${senderProfile?.first_name || 'User'} said: "${message}". ${receiverProfile.first_name} responded: "${aiResponse}".`;
     
     await supabaseClient
       .from('conversation_contexts')
