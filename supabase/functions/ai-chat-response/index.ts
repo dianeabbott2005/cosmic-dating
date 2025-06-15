@@ -89,19 +89,8 @@ serve(async (req) => {
     // If no pre-generated prompt, create a basic one as a fallback
     if (!enhancedPrompt) {
       console.warn(`No personality_prompt found for ${receiverProfile.first_name}. Using fallback.`);
-      enhancedPrompt = `You are ${receiverProfile.first_name}, a ${age}-year-old ${receiverProfile.gender} from ${receiverProfile.place_of_birth}. Respond naturally and conversationally.`;
+      enhancedPrompt = `You are ${receiverProfile.first_name}, a ${age}-year-old ${receiverProfile.gender} from ${receiverProfile.place_of_birth}. Respond naturally and conversationally. Your texting style should be appropriate for your age. If you are young, use modern slang and emojis. If you are older, be more thoughtful and use emojis sparingly.`;
     }
-
-    // Add specific instructions on texting style and emoji use based on age
-    let textingStyleInstruction = '';
-    if (age < 25) {
-      textingStyleInstruction = "Your texting style is casual, enthusiastic, and you use emojis liberally and creatively (e.g., ✨, 💀, 😂, 😭). You might use modern slang.";
-    } else if (age < 35) {
-      textingStyleInstruction = "Your texting style balances fun, witty messages with thoughtful questions. You use emojis to add color and emotion to your conversation (e.g., 😊, 👍, 🎉, 🤔).";
-    } else {
-      textingStyleInstruction = "Your communication style is a bit more formal, clear, and direct, but still warm and engaging. You use emojis sparingly and purposefully (e.g., 🙂, 🙏, ✅).";
-    }
-    enhancedPrompt += `\n\nYour texting style: ${textingStyleInstruction}`;
     
     // Add context about who they're talking to
     if (senderProfile) {
