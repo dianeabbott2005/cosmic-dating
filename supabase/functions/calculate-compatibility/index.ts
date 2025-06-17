@@ -11,6 +11,7 @@ interface BirthChartData {
   placeOfBirth: string;
   latitude: number | null;
   longitude: number | null;
+  timezone: string; // Added timezone
 }
 
 interface CompatibilityRequest {

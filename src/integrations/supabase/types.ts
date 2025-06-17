@@ -169,6 +169,7 @@ export type Database = {
           time_of_birth: string
           updated_at: string
           user_id: string
+          timezone: string | null
         }
         Insert: {
           created_at?: string
@@ -189,6 +190,7 @@ export type Database = {
           time_of_birth: string
           updated_at?: string
           user_id: string
+          timezone?: string | null
         }
         Update: {
           created_at?: string
@@ -209,6 +211,7 @@ export type Database = {
           time_of_birth?: string
           updated_at?: string
           user_id?: string
+          timezone?: string | null
         }
         Relationships: []
       }
@@ -245,11 +248,11 @@ export type Tables<
     schema: keyof Database
   }
     ? keyof (Database[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
-        Database[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+        Database[DefaultTableNameOrOptions["schema"]]["Views"])
     : never = never,
 > = DefaultSchemaTableNameOrOptions extends { schema: keyof Database }
-  ? (Database[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
-      Database[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+  ? (Database[DefaultTableNameOrOptions["schema"]]["Tables"] &
+      Database[DefaultTableNameOrOptions["schema"]]["Views"])[TableName] extends {
       Row: infer R
     }
     ? R

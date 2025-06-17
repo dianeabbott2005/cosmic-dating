@@ -66,6 +66,7 @@ const ProfileComplete = ({ onNext, userData }: ProfileCompleteProps) => {
         max_age: userData.maxAge,
         latitude: latitude,
         longitude: longitude,
+        timezone: userData.timezone, // Added timezone
         updated_at: new Date().toISOString(),
       };
 
@@ -147,6 +148,10 @@ const ProfileComplete = ({ onNext, userData }: ProfileCompleteProps) => {
           <div className="col-span-2">
             <span className="text-gray-400">Birth Place:</span>
             <p className="text-white">{userData.placeOfBirth}</p>
+          </div>
+          <div className="col-span-2">
+            <span className="text-gray-400">Timezone:</span>
+            <p className="text-white">{userData.timezone}</p>
           </div>
           <div>
             <span className="text-gray-400">Age Range:</span>

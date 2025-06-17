@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
@@ -20,6 +19,7 @@ const Profile = () => {
     place_of_birth: '',
     latitude: null as number | null,
     longitude: null as number | null,
+    timezone: '', // Added timezone
     gender: '',
     looking_for: '',
     min_age: 18,
@@ -55,6 +55,7 @@ const Profile = () => {
           place_of_birth: data.place_of_birth,
           latitude: data.latitude,
           longitude: data.longitude,
+          timezone: data.timezone || '', // Set timezone from data
           gender: data.gender,
           looking_for: data.looking_for,
           min_age: data.min_age,
@@ -83,10 +84,11 @@ const Profile = () => {
     
     setSaving(true);
     try {
-      console.log('Saving profile with coordinates:', {
+      console.log('Saving profile with coordinates and timezone:', {
         place_of_birth: profile.place_of_birth,
         latitude: profile.latitude,
-        longitude: profile.longitude
+        longitude: profile.longitude,
+        timezone: profile.timezone
       });
 
       const { error } = await supabase
@@ -99,6 +101,7 @@ const Profile = () => {
           place_of_birth: profile.place_of_birth,
           latitude: profile.latitude,
           longitude: profile.longitude,
+          timezone: profile.timezone, // Added timezone to update
           gender: profile.gender,
           looking_for: profile.looking_for,
           min_age: profile.min_age,
@@ -108,7 +111,7 @@ const Profile = () => {
 
       if (error) throw error;
       
-      console.log('Profile updated successfully with coordinates');
+      console.log('Profile updated successfully with coordinates and timezone');
       alert('Profile updated successfully!');
     } catch (error) {
       console.error('Error saving profile:', error);
@@ -229,6 +232,22 @@ const Profile = () => {
                   </p>
                 )}
               </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Timezone (e.g., America/New_York)
+              </label>
+              <input
+                type="text"
+                value={profile.timezone}
+                onChange={(e) => setProfile({ ...profile, timezone: e.target.value })}
+                className="input-cosmic"
+                placeholder="e.g., America/New_York"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Find your timezone at <a href="https://www.timeanddate.com/time/zones/" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">timeanddate.com/time/zones/</a>
+              </p>
             </div>
 
             {/* Gender & Preferences */}

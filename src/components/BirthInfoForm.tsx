@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { Calendar, Clock, MapPin } from 'lucide-react';
 import PlaceSearch from '@/components/PlaceSearch';
@@ -15,6 +14,7 @@ const BirthInfoForm = ({ onNext, userData }: BirthInfoFormProps) => {
     placeOfBirth: userData.placeOfBirth || '',
     latitude: userData.latitude || null,
     longitude: userData.longitude || null,
+    timezone: userData.timezone || '', // Added timezone
     ...userData
   });
 
@@ -39,6 +39,10 @@ const BirthInfoForm = ({ onNext, userData }: BirthInfoFormProps) => {
     
     if (!formData.placeOfBirth) {
       newErrors.placeOfBirth = 'Place of birth is required for astrological calculations';
+    }
+
+    if (!formData.timezone) { // Added timezone validation
+      newErrors.timezone = 'Timezone is required for accurate astrological calculations';
     }
 
     setErrors(newErrors);
@@ -140,10 +144,32 @@ const BirthInfoForm = ({ onNext, userData }: BirthInfoFormProps) => {
         )}
       </div>
 
+      <div>
+        <label className="block text-sm font-medium text-gray-300 mb-2">
+          Timezone (e.g., America/New_York) *
+        </label>
+        <div className="relative">
+          <Clock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+          <input
+            type="text"
+            value={formData.timezone}
+            onChange={(e) => handleInputChange('timezone', e.target.value)}
+            className={`input-cosmic w-full pl-12 ${errors.timezone ? 'border-red-500' : ''}`}
+            placeholder="e.g., America/New_York"
+          />
+        </div>
+        {errors.timezone && (
+          <p className="text-red-400 text-sm mt-1">{errors.timezone}</p>
+        )}
+        <p className="text-gray-500 text-xs mt-1">
+          Find your timezone at <a href="https://www.timeanddate.com/time/zones/" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">timeanddate.com/time/zones/</a>
+        </p>
+      </div>
+
       <div className="bg-gradient-to-r from-blue-900/20 to-purple-900/20 border border-blue-500/30 rounded-xl p-4">
         <h4 className="text-blue-300 font-medium mb-2">🔮 Why We Need This</h4>
         <p className="text-gray-400 text-sm">
-          Your exact birth time and location are crucial for creating an accurate natal chart. 
+          Your exact birth time, location, and timezone are crucial for creating an accurate natal chart. 
           This allows us to calculate precise planetary positions and provide the most accurate 
           compatibility matches based on real astrological principles.
         </p>

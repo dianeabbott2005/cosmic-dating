@@ -14,6 +14,7 @@ export interface MatchProfile {
   place_of_birth: string;
   latitude: number;
   longitude: number;
+  timezone: string; // Added timezone
   gender: string;
   looking_for: string;
   min_age: number;
@@ -99,7 +100,8 @@ export const useMatches = () => {
         timeOfBirth: userProfile.time_of_birth,
         placeOfBirth: userProfile.place_of_birth,
         latitude: userProfile.latitude,
-        longitude: userProfile.longitude
+        longitude: userProfile.longitude,
+        timezone: userProfile.timezone // Added timezone
       };
 
       // Calculate compatibility and filter by mutual age preferences
@@ -126,7 +128,8 @@ export const useMatches = () => {
               timeOfBirth: matchProfile.time_of_birth,
               placeOfBirth: matchProfile.place_of_birth,
               latitude: matchProfile.latitude,
-              longitude: matchProfile.longitude
+              longitude: matchProfile.longitude,
+              timezone: matchProfile.timezone // Added timezone
             };
 
             // Call the Supabase Edge Function for compatibility calculation
