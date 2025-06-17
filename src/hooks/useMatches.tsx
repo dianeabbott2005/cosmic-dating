@@ -160,9 +160,9 @@ export const useMatches = () => {
         .filter((match): match is MatchProfile => { // Type assertion for filter
           const isValid = match !== null && 
                           typeof match.compatibility_score === 'number' && 
-                          match.compatibility_score > 0.6;
+                          match.compatibility_score >= 0.5; // Changed threshold to >= 0.5
           if (!isValid) {
-            console.log(`calculateMatches: Filtering out match (ID: ${match?.user_id}) due to null/invalid score or score <= 0.6. Score: ${match?.compatibility_score}`);
+            console.log(`calculateMatches: Filtering out match (ID: ${match?.user_id}) due to null/invalid score or score < 0.5. Score: ${match?.compatibility_score}`);
           }
           return isValid;
         });

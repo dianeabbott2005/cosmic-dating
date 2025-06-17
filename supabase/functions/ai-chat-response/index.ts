@@ -177,7 +177,7 @@ function buildEnhancedPrompt(receiverProfile: any, senderProfile: any, context: 
     
     // Stronger, overriding instructions for emojis and markdown
     promptInstructions += `\n\nIMPORTANT: Use emojis very sparingly, only when highly relevant to the message's core meaning. Prioritize clear text over emoji expression.`;
-    promptInstructions += `\n\nYour response should consist of 1 to 3 very short messages, each separated by "${MESSAGE_DELIMITER}". Absolutely no markdown formatting (e.g., asterisks, underscores, backticks).`;
+    promptInstructions += `\n\nDO NOT use any markdown characters like *, _, #, or \`. Your response should consist of 1 to 3 very short messages, each separated by "${MESSAGE_DELIMITER}".`;
 
     promptInstructions += `\n\n${senderProfile?.first_name || 'The user'} just sent: ${message}\n\nNow, respond as ${receiverProfile.first_name}:`;
     
