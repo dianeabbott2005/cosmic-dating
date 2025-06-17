@@ -9,16 +9,24 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const typingStyles = [
-    'Use shorthand and abbreviations like "lol", "brb", "u", "r". Keep messages very short.',
-    'Send multiple short messages back-to-back instead of one long one. Your entire response should be very short, as if it is one of several messages you are sending.',
-    'Write in a well-structured paragraph, like you are writing an email. Use complete sentences.',
-    'Use a lot of emojis to express yourself. Sprinkle them throughout your message.',
-    'Be a bit formal and use proper grammar and punctuation. Avoid slang.',
-    'Be very casual, use lowercase for everything and maybe include a typo.',
-    'Ask a lot of questions to get to know the other person.',
-    'Be a little mysterious and give short, intriguing answers.'
-];
+const MESSAGE_DELIMITER = "---DYAD_MESSAGE_BREAK---"; // Unique delimiter for splitting AI responses
+
+const NON_NATIVE_ENGLISH_REGIONS: { [key: string]: { languageIssue: string; dialect: string; } } = {
+  'India': { languageIssue: 'subtle grammatical errors, Indian English phrasing', dialect: 'occasional Hindi/local language phrases (e.g., "acha", "yaar")' },
+  'Japan': { languageIssue: 'slightly formal tone, occasional direct translations', dialect: 'polite particles (e.g., "ne", "desu")' },
+  'South Korea': { languageIssue: 'slightly formal tone, occasional direct translations', dialect: 'common Korean interjections (e.g., "aigoo", "jinjja")' },
+  'Italy': { languageIssue: 'more expressive phrasing, occasional Italian loanwords', dialect: 'common Italian expressions (e.g., "mamma mia", "ciao")' },
+  'France': { languageIssue: 'more formal sentence structure, occasional French loanwords', dialect: 'common French expressions (e.g., "voilà", "zut")' },
+  'Russia': { languageIssue: 'direct phrasing, less use of articles', dialect: 'common Russian interjections (e.g., "davai", "nu")' },
+  'Egypt': { languageIssue: 'more direct, less nuanced phrasing', dialect: 'common Arabic interjections (e.g., "inshallah", "habibi")' },
+  'UAE': { languageIssue: 'formal yet friendly, occasional Arabic loanwords', dialect: 'common Arabic expressions (e.g., "mashallah", "khalas")' },
+};
+
+const EMOJI_STYLES: { [key: string]: { [key: string]: string } } = {
+  'young': { female: 'many, trendy, cute', male: 'moderate, cool, casual', 'non-binary': 'varied, expressive' },
+  'middle': { female: 'moderate, warm, friendly', male: 'few, direct, thoughtful', 'non-binary': 'moderate, balanced' },
+  'older': { female: 'few, classic, gentle', male: 'very few, formal', 'non-binary': 'few, subtle' },
+};
 
 /**
  * Calculates a human-like typing delay.
@@ -26,25 +34,27 @@ const typingStyles = [
  * @returns A delay in milliseconds.
  */
 const calculateTypingDelay = (messageLength: number): number => {
-  const baseDelay = 2000; // 2 seconds minimum
+  const baseDelay = 1000; // 1 second minimum per message
   const typingSpeed = 250; // characters per minute
   const typingTime = (messageLength / typingSpeed) * 60 * 1000;
   
-  let randomVariation = Math.random() * 3000;
+  let randomVariation = Math.random() * 1500; // Up to 1.5 seconds random variation
 
   const now = new Date();
   const hour = now.getUTCHours();
   
+  // Longer delays during typical "sleep" hours
   if (hour >= 23 || hour < 7) {
-    randomVariation += Math.random() * 8000;
+    randomVariation += Math.random() * 5000; // Add up to 5 seconds more
   }
 
-  if (Math.random() < 0.15) {
-    randomVariation += 5000 + (Math.random() * 10000);
+  // Occasional very long delays
+  if (Math.random() < 0.1) { // 10% chance for a longer pause
+    randomVariation += 3000 + (Math.random() * 7000); // Add 3-10 seconds
   }
   
   const totalDelay = baseDelay + typingTime + randomVariation;
-  return Math.min(totalDelay, 45000); // Cap at 45 seconds
+  return Math.min(totalDelay, 30000); // Cap at 30 seconds
 };
 
 /**
@@ -133,22 +143,37 @@ function buildConversationHistory(recentMessages: Message[], receiverId: string,
  */
 function buildEnhancedPrompt(receiverProfile: any, senderProfile: any, context: any, conversationHistory: string, message: string): string {
     const age = calculateAge(receiverProfile.date_of_birth);
-    let enhancedPrompt = receiverProfile.personality_prompt;
+    let ageGroup = 'middle';
+    if (age < 25) ageGroup = 'young';
+    else if (age > 40) ageGroup = 'older';
 
-    if (!enhancedPrompt) {
+    let promptInstructions = receiverProfile.personality_prompt;
+
+    if (!promptInstructions) {
       console.warn(`No personality_prompt found for ${receiverProfile.first_name}. Using fallback.`);
-      enhancedPrompt = `You are ${receiverProfile.first_name}, a ${age}-year-old ${receiverProfile.gender} from ${receiverProfile.place_of_birth}. Respond naturally and conversationally. Your texting style should be appropriate for your age. If you are young, use modern slang and emojis. If you are older, be more thoughtful and use emojis sparingly.`;
+      promptInstructions = `You are ${receiverProfile.first_name}, a ${age}-year-old ${receiverProfile.gender} from ${receiverProfile.place_of_birth}. Respond naturally and conversationally.`;
     }
     
-    const randomTypingStyle = typingStyles[Math.floor(Math.random() * typingStyles.length)];
-    enhancedPrompt += `\n\nIMPORTANT: Adopt this specific texting style for your response: "${randomTypingStyle}"`;
+    // Add emoji style instruction
+    const emojiStyle = EMOJI_STYLES[ageGroup]?.[receiverProfile.gender] || 'moderate, relevant';
+    promptInstructions += `\n\nIMPORTANT: Use emojis ${emojiStyle}. Ensure they are relevant to your gender, age, and ethnicity.`;
+
+    // Add language issues and dialect instruction
+    const region = Object.keys(NON_NATIVE_ENGLISH_REGIONS).find(key => receiverProfile.place_of_birth.includes(key));
+    if (region) {
+      const { languageIssue, dialect } = NON_NATIVE_ENGLISH_REGIONS[region];
+      promptInstructions += `\n\nAlso, subtly induce English language issues typical of a non-native speaker from ${region} (${languageIssue}). Occasionally let local dialect flow into conversations (${dialect}).`;
+    }
+
+    // Instruction for multiple short messages
+    promptInstructions += `\n\nYour response should consist of 1 to 3 very short messages, each separated by "${MESSAGE_DELIMITER}". Do not send one long message.`;
     
-    if (senderProfile) enhancedPrompt += ` You are chatting with ${senderProfile.first_name}.`;
-    if (context?.context_summary) enhancedPrompt += `\n\nPrevious conversation context: ${context.context_summary}`;
-    if (conversationHistory) enhancedPrompt += `\n\nRecent conversation:\n${conversationHistory}`;
-    enhancedPrompt += `\n\n${senderProfile?.first_name || 'The user'} just sent: ${message}\n\nNow, respond as ${receiverProfile.first_name}:`;
+    if (senderProfile) promptInstructions += ` You are chatting with ${senderProfile.first_name}.`;
+    if (context?.context_summary) promptInstructions += `\n\nPrevious conversation context: ${context.context_summary}`;
+    if (conversationHistory) promptInstructions += `\n\nRecent conversation:\n${conversationHistory}`;
+    promptInstructions += `\n\n${senderProfile?.first_name || 'The user'} just sent: ${message}\n\nNow, respond as ${receiverProfile.first_name}:`;
     
-    return enhancedPrompt;
+    return promptInstructions;
 }
 
 /**
@@ -166,13 +191,14 @@ async function callGeminiApi(prompt: string): Promise<string> {
             temperature: 0.8,
             topK: 40,
             topP: 0.95,
-            maxOutputTokens: 150,
+            maxOutputTokens: 300, // Increased token limit for multiple messages
           }
         }),
       }
     );
     const geminiData = await geminiResponse.json();
     if (!geminiData.candidates?.[0]?.content?.parts?.[0]?.text) {
+      console.error('Gemini API response error:', JSON.stringify(geminiData, null, 2));
       throw new Error('Invalid response from Gemini API');
     }
     return geminiData.candidates[0].content.parts[0].text.trim();
@@ -238,19 +264,29 @@ serve(async (req) => {
     const enhancedPrompt = buildEnhancedPrompt(receiverProfile, senderProfile, context, conversationHistory, message);
     console.log('Enhanced prompt construction complete.');
 
-    const aiResponse = await callGeminiApi(enhancedPrompt);
+    const fullAiResponse = await callGeminiApi(enhancedPrompt);
+    console.log('Full AI response received:', fullAiResponse);
 
-    const typingDelay = calculateTypingDelay(aiResponse.length);
-    console.log(`Calculated typing delay: ${typingDelay}ms for message length: ${aiResponse.length}`);
-    await new Promise(resolve => setTimeout(resolve, typingDelay));
+    const individualMessages = fullAiResponse.split(MESSAGE_DELIMITER)
+                                             .map(msg => msg.trim())
+                                             .filter(msg => msg.length > 0);
 
-    const [newMessage] = await Promise.all([
-        storeAiResponse(supabaseClient, chatId, receiverId, aiResponse),
-        updateConversationContext(supabaseClient, chatId, receiverId, receiverProfile.first_name, senderProfile?.first_name, message, aiResponse, context)
-    ]);
+    let lastMessageSent: Message | null = null;
+
+    for (const msgContent of individualMessages) {
+      const typingDelay = calculateTypingDelay(msgContent.length);
+      console.log(`Calculated typing delay: ${typingDelay}ms for message length: ${msgContent.length}`);
+      await new Promise(resolve => setTimeout(resolve, typingDelay));
+
+      lastMessageSent = await storeAiResponse(supabaseClient, chatId, receiverId, msgContent);
+      console.log('Stored AI message:', lastMessageSent);
+    }
+
+    // Update conversation context with the full AI response (concatenated messages)
+    await updateConversationContext(supabaseClient, chatId, receiverId, receiverProfile.first_name, senderProfile?.first_name, message, fullAiResponse, context);
 
     return new Response(
-      JSON.stringify({ success: true, message: newMessage, aiResponse, typingDelay }),
+      JSON.stringify({ success: true, message: lastMessageSent, aiResponse: fullAiResponse, messagesSent: individualMessages.length }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
