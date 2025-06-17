@@ -209,9 +209,13 @@ serve(async (req) => {
 
     console.log('generate-matches (Edge): User profile fetched:', userProfile.first_name);
     console.log(`generate-matches (Edge): User's gender: '${userProfile.gender}', looking_for: '${userProfile.looking_for}'`);
+    console.log(`generate-matches (Edge): User's min_age: ${userProfile.min_age}, max_age: ${userProfile.max_age}`);
     const userAge = calculateAge(userProfile.date_of_birth);
     console.log('generate-matches (Edge): User age:', userAge);
 
+
+    // Log the filters being applied for potential profiles
+    console.log(`generate-matches (Edge): Querying for profiles where gender is '${userProfile.looking_for}' AND looking_for is '${userProfile.gender}' AND user_id is NOT '${user_id}' AND is_dummy_profile is FALSE.`);
 
     // Get potential matches based on mutual preferences
     const { data: potentialProfiles, error: potentialProfilesError } = await supabaseClient
@@ -229,13 +233,38 @@ serve(async (req) => {
 
     if (!potentialProfiles || potentialProfiles.length === 0) {
       console.log('generate-matches (Edge): No potential profiles found matching initial criteria.');
+      console.log(`generate-matches (Edge): User's preferences: gender='${userProfile.gender}', looking_for='${userProfile.looking_for}'`);
+      
+      // --- DEBUGGING: Fetch all non-dummy profiles to see if any exist at all ---
+      const { data: allNonDummyProfiles, error: allProfilesError } = await supabaseClient
+        .from('profiles')
+        .select('user_id, first_name, gender, looking_for, date_of_birth, min_age, max_age')
+        .neq('user_id', user_id)
+        .eq('is_dummy_profile', false);
+
+      if (allProfilesError) {
+        console.error('generate-matches (Edge): Error fetching all non-dummy profiles for debug:', allProfilesError.message);
+      } else {
+        console.log(`generate-matches (Edge): Total non-dummy profiles (excluding self): ${allNonDummyProfiles?.length || 0}`);
+        if (allNonDummyProfiles && allNonDummyProfiles.length > 0) {
+          console.log('generate-matches (Edge): Details of all non-dummy profiles:');
+          allNonDummyProfiles.forEach(p => {
+            const pAge = calculateAge(p.date_of_birth);
+            console.log(`  - ID: ${p.user_id}, Name: ${p.first_name}, Gender: '${p.gender}', Looking For: '${p.looking_for}', Age: ${pAge}, Min Age: ${p.min_age}, Max Age: ${p.max_age}`);
+          });
+        } else {
+          console.log('generate-matches (Edge): No other non-dummy profiles found in the database at all.');
+        }
+      }
+      // --- END DEBUGGING ---
+
       return new Response(JSON.stringify({ success: true, message: 'No potential matches found.' }), {
-        status: 200, // Changed to 200 as it's not an error, just no matches
+        status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    console.log('generate-matches (Edge): Found', potentialProfiles.length, 'potential profiles for detailed check.');
+    console.log('generate-matches (Edge): Found', potentialProfiles.length, 'potential profiles for detailed check after initial gender/looking_for filter.');
 
     // Prepare user's birth data for compatibility calculation
     const userBirthData: BirthChartData = {
