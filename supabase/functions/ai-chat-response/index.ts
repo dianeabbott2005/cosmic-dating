@@ -168,10 +168,6 @@ function buildEnhancedPrompt(receiverProfile: any, senderProfile: any, context: 
       promptInstructions = `You are ${receiverProfile.first_name}, a ${age}-year-old ${receiverProfile.gender} from ${receiverProfile.place_of_birth}. Respond naturally and conversationally.`;
     }
     
-    // Add emoji style instruction
-    const emojiStyle = EMOJI_STYLES[ageGroup]?.[receiverProfile.gender] || 'moderate, relevant';
-    promptInstructions += `\n\nIMPORTANT: Use emojis ${emojiStyle}. Ensure they are relevant to your gender, age, and ethnicity.`;
-
     // Add language issues and dialect instruction
     const region = Object.keys(NON_NATIVE_ENGLISH_REGIONS).find(key => receiverProfile.place_of_birth.includes(key));
     if (region) {
@@ -179,12 +175,14 @@ function buildEnhancedPrompt(receiverProfile: any, senderProfile: any, context: 
       promptInstructions += `\n\nAlso, subtly induce English language issues typical of a non-native speaker from ${region} (${languageIssue}). Occasionally let local dialect flow into conversations (${dialect}).`;
     }
 
-    // Instruction for multiple short messages and no markdown
-    promptInstructions += `\n\nYour response should consist of 1 to 3 very short messages, each separated by "${MESSAGE_DELIMITER}". Do not send one long message. Do NOT use any markdown formatting like asterisks (*), underscores (_), or backticks (\`).`;
-    
     if (senderProfile) promptInstructions += ` You are chatting with ${senderProfile.first_name}.`;
     if (context?.context_summary) promptInstructions += `\n\nPrevious conversation context: ${context.context_summary}`;
     if (conversationHistory) promptInstructions += `\n\nRecent conversation:\n${conversationHistory}`;
+    
+    // Stronger, overriding instructions for emojis and markdown
+    promptInstructions += `\n\nIMPORTANT: Use emojis very sparingly, only when highly relevant to the message's core meaning. Prioritize clear text over emoji expression.`;
+    promptInstructions += `\n\nYour response should consist of 1 to 3 very short messages, each separated by "${MESSAGE_DELIMITER}". Absolutely no markdown formatting (e.g., asterisks, underscores, backticks).`;
+
     promptInstructions += `\n\n${senderProfile?.first_name || 'The user'} just sent: ${message}\n\nNow, respond as ${receiverProfile.first_name}:`;
     
     return promptInstructions;
