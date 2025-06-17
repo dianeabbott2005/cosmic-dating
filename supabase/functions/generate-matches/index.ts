@@ -208,6 +208,7 @@ serve(async (req) => {
     }
 
     console.log('generate-matches (Edge): User profile fetched:', userProfile.first_name);
+    console.log(`generate-matches (Edge): User's gender: '${userProfile.gender}', looking_for: '${userProfile.looking_for}'`);
     const userAge = calculateAge(userProfile.date_of_birth);
     console.log('generate-matches (Edge): User age:', userAge);
 
@@ -229,6 +230,7 @@ serve(async (req) => {
     if (!potentialProfiles || potentialProfiles.length === 0) {
       console.log('generate-matches (Edge): No potential profiles found matching initial criteria.');
       return new Response(JSON.stringify({ success: true, message: 'No potential matches found.' }), {
+        status: 200, // Changed to 200 as it's not an error, just no matches
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -253,6 +255,8 @@ serve(async (req) => {
       try {
         const matchAge = calculateAge(matchProfile.date_of_birth);
         console.log(`generate-matches (Edge): Processing match ${matchProfile.first_name} (ID: ${matchProfile.user_id}), age: ${matchAge}`);
+        console.log(`generate-matches (Edge): Match's gender: '${matchProfile.gender}', looking_for: '${matchProfile.looking_for}'`);
+
 
         // Check mutual age preferences
         const userFitsMatchAgeRange = userAge >= matchProfile.min_age && userAge <= matchProfile.max_age;
