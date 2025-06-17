@@ -1,63 +1,65 @@
-# Welcome to your Zodiac Heart Sync project
+# Cosmic Dating: Find Your Celestial Connection
 
-## Project info
+Welcome to Cosmic Dating, where meaningful connections are forged through the alignment of stars, not just superficial glances. This application offers a unique dating experience focused on astrological compatibility, allowing users to discover deep connections based on their cosmic blueprints.
 
-**URL**: Your project URL
+## ✨ Features
 
-## How can I edit this code?
+*   **Astrological Matching**: Users provide their birth date, time, and place, which our system uses to calculate precise planetary positions and determine astrological compatibility with potential matches.
+*   **Personalized Profiles**: Create a detailed profile that highlights your unique cosmic signature and preferences, moving beyond traditional photo-based dating.
+*   **Meaningful Conversations**: Engage in rich conversations with your matches, fostering connections that are truly written in the stars.
+*   **Secure Authentication**: Seamless and secure user authentication powered by Google OAuth through Supabase.
+*   **Responsive Design**: Enjoy a beautiful and intuitive experience across all devices, from mobile to desktop.
 
-There are several ways of editing your application.
+## 🚀 Tech Stack
 
-**Use your preferred IDE**
+*   **Frontend Framework**: React (with TypeScript)
+*   **Build Tool**: Vite
+*   **Styling**: Tailwind CSS & shadcn/ui
+*   **Routing**: React Router DOM
+*   **Backend & Authentication**: Supabase
+*   **Data Fetching**: TanStack Query (React Query)
+*   **Icons**: Lucide React
+*   **Form Management**: React Hook Form with Zod validation
+*   **Notifications**: Sonner & `@/components/ui/toast`
+*   **Date Handling**: `date-fns` & `react-day-picker`
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will be reflected in your deployed application.
+## 🛠️ Getting Started (Local Development)
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+To set up the project locally, follow these steps:
 
-Follow these steps:
+1.  **Clone the repository**:
+    ```sh
+    git clone <YOUR_GIT_URL>
+    ```
+2.  **Navigate to the project directory**:
+    ```sh
+    cd <YOUR_PROJECT_NAME>
+    ```
+3.  **Install dependencies**:
+    ```sh
+    npm install
+    ```
+4.  **Set up Supabase Environment Variables**:
+    Ensure you have your Supabase project URL and Anon Key configured as environment variables. You'll need to create a `.env` file in the root of your project with the following:
+    ```
+    VITE_SUPABASE_URL="YOUR_SUPABASE_URL"
+    VITE_SUPABASE_ANON_KEY="YOUR_SUPABASE_ANON_KEY"
+    VITE_GOOGLE_MAPS_API_KEY="YOUR_GOOGLE_MAPS_API_KEY"
+    VITE_GEMINI_API_KEY="YOUR_GEMINI_API_KEY"
+    ```
+    *   `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are found in your Supabase project settings (API section).
+    *   `VITE_GOOGLE_MAPS_API_KEY` is required for the place search functionality.
+    *   `VITE_GEMINI_API_KEY` is required for AI chat responses.
+5.  **Start the development server**:
+    ```sh
+    npm run dev
+    ```
+    This will start the application, typically accessible at `http://localhost:8080`.
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
-```
-
-**Edit a file directly in GitHub**
-
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
-
-**Use GitHub Codespaces**
-
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
+## ☁️ Deployment
 
 This project can be deployed using any standard static site hosting service (e.g., Vercel, Netlify, GitHub Pages).
 
-## Can I connect a custom domain to my project?
+## 🌐 Custom Domain
 
 Yes, you can! Refer to your chosen hosting provider's documentation for instructions on connecting a custom domain.
