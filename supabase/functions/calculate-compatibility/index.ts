@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { getCompatibility, BirthChartData } from 'https://esm.sh/astroreha@1.1.5';
+// Removed: import { getCompatibility, BirthChartData } from 'https://esm.sh/astroreha@1.1.5';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -43,39 +43,9 @@ serve(async (req) => {
   try {
     const { person1, person2 }: CompatibilityRequest = await req.json();
 
-    let compatibilityScore: number;
-
-    // Ensure all necessary birth data is present for astroreha
-    if (!person1.dateOfBirth || !person1.timeOfBirth || person1.latitude === null || person1.longitude === null ||
-        !person2.dateOfBirth || !person2.timeOfBirth || person2.latitude === null || person2.longitude === null) {
-      console.warn('calculateCompatibility (Edge): Missing complete birth data for astroreha. Falling back to basic compatibility.');
-      compatibilityScore = calculateFallbackCompatibility(person1, person2);
-    } else {
-      try {
-        const chart1: BirthChartData = {
-          date: new Date(person1.dateOfBirth),
-          time: person1.timeOfBirth,
-          lat: person1.latitude,
-          lon: person1.longitude,
-        };
-
-        const chart2: BirthChartData = {
-          date: new Date(person2.dateOfBirth),
-          time: person2.timeOfBirth,
-          lat: person2.latitude,
-          lon: person2.longitude,
-        };
-
-        const rawScore = getCompatibility(chart1, chart2);
-        compatibilityScore = Math.min(0.99, Math.max(0.1, rawScore)); // Ensure score is within a reasonable range
-        console.log(`calculateCompatibility (Edge): Astroreha compatibility score: ${Math.round(compatibilityScore * 100)}%`);
-
-      } catch (astrorehaError) {
-        console.error('calculateCompatibility (Edge): Error calculating astrological compatibility with astroreha:', astrorehaError);
-        compatibilityScore = calculateFallbackCompatibility(person1, person2);
-        console.log(`calculateCompatibility (Edge): Falling back to score: ${Math.round(compatibilityScore * 100)}% due to astroreha error.`);
-      }
-    }
+    // Always use the fallback compatibility calculation due to astroreha incompatibility
+    const compatibilityScore = calculateFallbackCompatibility(person1, person2);
+    console.log(`calculateCompatibility (Edge): Using fallback compatibility score: ${Math.round(compatibilityScore * 100)}%`);
 
     return new Response(JSON.stringify({ score: compatibilityScore }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
