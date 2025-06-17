@@ -213,6 +213,20 @@ serve(async (req) => {
     const userAge = calculateAge(userProfile.date_of_birth);
     console.log('generate-matches (Edge): User age:', userAge);
 
+    // --- NEW: Delete existing matches for this user to ensure a fresh list ---
+    console.log(`generate-matches (Edge): Deleting existing matches for user ${user_id}...`);
+    const { error: deleteError } = await supabaseClient
+      .from('matches')
+      .delete()
+      .or(`user_id.eq.${user_id},matched_user_id.eq.${user_id}`);
+
+    if (deleteError) {
+      console.error('generate-matches (Edge): Error deleting existing matches:', deleteError.message);
+      // Continue, but log the error. This might mean some old matches persist.
+    } else {
+      console.log(`generate-matches (Edge): Successfully deleted existing matches for user ${user_id}.`);
+    }
+    // --- END NEW ---
 
     // Log the filters being applied for potential profiles
     console.log(`generate-matches (Edge): Querying for profiles where gender is '${userProfile.looking_for}' AND looking_for is '${userProfile.gender}' AND user_id is NOT '${user_id}'.`);
