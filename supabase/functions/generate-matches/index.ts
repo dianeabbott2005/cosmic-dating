@@ -217,13 +217,14 @@ serve(async (req) => {
     // Log the filters being applied for potential profiles
     console.log(`generate-matches (Edge): Querying for profiles where gender is '${userProfile.looking_for}' AND looking_for is '${userProfile.gender}' AND user_id is NOT '${user_id}'.`);
 
-    // Get potential matches based on mutual preferences
+    // Get potential matches based on mutual preferences, excluding current user and dummy profiles
     const { data: potentialProfiles, error: potentialProfilesError } = await supabaseClient
       .from('profiles')
       .select('*')
       .eq('gender', userProfile.looking_for) // Match has the gender current user is looking for
       .eq('looking_for', userProfile.gender) // Match is looking for current user's gender
-      .neq('user_id', user_id); // Exclude dummy profiles from being matched with real users (REMOVED .eq('is_dummy_profile', false))
+      .neq('user_id', user_id) // Exclude the current user's own profile
+      .eq('is_dummy_profile', false); // Exclude dummy profiles
 
     if (potentialProfilesError) {
       console.error('generate-matches (Edge): Error fetching potential profiles:', potentialProfilesError.message);
