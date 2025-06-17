@@ -235,6 +235,13 @@ export const useChat = (matchId?: string) => {
     }
   };
 
+  // --- NEW: Load chats when user is available ---
+  useEffect(() => {
+    if (user) {
+      loadUserChats();
+    }
+  }, [user]); // Dependency on 'user' ensures it runs when user state changes (e.g., on login/refresh)
+
   // Set up real-time subscription
   useEffect(() => {
     if (!chat) return;

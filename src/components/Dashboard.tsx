@@ -15,22 +15,17 @@ const Dashboard = ({ user }: DashboardProps) => {
   const [activeTab, setActiveTab] = useState<'matches' | 'chats'>('matches');
   const [selectedMatch, setSelectedMatch] = useState<any | null>(null);
   const { matches, loading, refreshMatches } = useMatches();
-  const { chats, loadUserChats } = useChat();
+  const { chats, loadUserChats } = useChat(); // useChat now handles its own initial loading
   const navigate = useNavigate();
 
-  // Load user chats when component mounts or when switching to chats tab
+  // No longer need specific useEffects here for initial chat loading,
+  // as useChat handles it when the user object becomes available.
+  // The loadUserChats call on tab switch is still useful for refreshing.
   useEffect(() => {
     if (activeTab === 'chats' && user) {
       loadUserChats();
     }
-  }, [activeTab, user]); // Added user to dependency array
-
-  // Ensure chats are loaded on initial render if the tab is 'chats'
-  useEffect(() => {
-    if (activeTab === 'chats' && user && chats.length === 0) {
-      loadUserChats();
-    }
-  }, [user]); // Only run once on mount if user exists and chats are empty
+  }, [activeTab, user]);
 
   const handleMatchClick = (match: any) => {
     setSelectedMatch(match);
