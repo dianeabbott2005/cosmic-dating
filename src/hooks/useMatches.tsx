@@ -112,7 +112,8 @@ export const useMatches = () => {
         return [];
       }
 
-      console.log('getExistingMatches: Found', existingMatches.length, 'existing match records.');
+      console.log('getExistingMatches: Found', existingMatches.length, 'existing match records from DB.');
+      console.log('getExistingMatches: Current user ID:', user.id);
 
       const uniqueMatchesMap = new Map<string, MatchProfile>(); // Use a Map to ensure uniqueness by other_user_id
 
@@ -120,19 +121,29 @@ export const useMatches = () => {
         const otherUserId = match.user_id === user.id ? match.matched_user_id : match.user_id;
         const otherUserProfile = match.user_id === user.id ? match.user2_profile : match.user1_profile;
 
+        console.log(`Processing match record: user_id=${match.user_id}, matched_user_id=${match.matched_user_id}, otherUserId=${otherUserId}`);
+        console.log(`Is otherUserProfile valid? ${!!otherUserProfile}`);
+        console.log(`Does uniqueMatchesMap already have otherUserId? ${uniqueMatchesMap.has(otherUserId)}`);
+
         // Ensure we have a valid profile and haven't already added this user
-        if (otherUserProfile && !uniqueMatchesMap.has(otherUserId)) {
+        // Also, explicitly ensure we are not adding the current user's own profile
+        if (otherUserProfile && otherUserId !== user.id && !uniqueMatchesMap.has(otherUserId)) {
           const age = calculateAge(otherUserProfile.date_of_birth);
           uniqueMatchesMap.set(otherUserId, {
             ...otherUserProfile,
             compatibility_score: match.compatibility_score,
             age
           });
+          console.log(`Added unique match: ${otherUserProfile.first_name} (ID: ${otherUserId})`);
+        } else if (otherUserId === user.id) {
+          console.log(`Skipping self-match record for user ID: ${otherUserId}`);
+        } else if (uniqueMatchesMap.has(otherUserId)) {
+          console.log(`Skipping duplicate match record for user ID: ${otherUserId}`);
         }
       });
 
       const formattedMatches = Array.from(uniqueMatchesMap.values());
-      console.log('getExistingMatches: Formatted unique matches:', formattedMatches.length, formattedMatches);
+      console.log('getExistingMatches: Final formatted unique matches count:', formattedMatches.length);
       setMatches(formattedMatches);
       return formattedMatches;
     } catch (error: any) {
@@ -184,7 +195,9 @@ export const useMatches = () => {
           event: 'INSERT',
           schema: 'public',
           table: 'matches',
-          filter: `user_id=eq.${user.id}` // Only listen for matches where current user is user_id
+          // Filter for matches where the current user is either user_id or matched_user_id
+          // This ensures we react to both sides of a bidirectional insert
+          filter: `or(user_id.eq.${user.id},matched_user_id.eq.${user.id})` 
         },
         (payload) => {
           console.log('New match inserted, refreshing existing matches:', payload);
