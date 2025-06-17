@@ -6,7 +6,9 @@ const corsHeaders = {
 };
 
 interface GeocodeRequest {
-  address: string;
+  address?: string;
+  latitude?: number;
+  longitude?: number;
 }
 
 interface PlaceResult {
@@ -28,39 +30,65 @@ serve(async (req) => {
       throw new Error('Google Maps API key not configured');
     }
 
-    const { address }: GeocodeRequest = await req.json();
+    const { address, latitude, longitude }: GeocodeRequest = await req.json();
     
-    if (!address || address.trim().length === 0) {
-      throw new Error('Address is required');
+    let results: PlaceResult[] = [];
+    let timezoneId: string | null = null;
+    let timeZoneName: string | null = null;
+
+    // --- Step 1: Handle Geocoding (if address is provided) ---
+    if (address && address.trim().length > 0) {
+      console.log('Geocoding address:', address);
+      const geocodeResponse = await fetch(
+        `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${apiKey}`
+      );
+      
+      if (!geocodeResponse.ok) {
+        throw new Error(`Google Maps Geocoding API error: ${geocodeResponse.status}`);
+      }
+
+      const geocodeData = await geocodeResponse.json();
+      
+      if (geocodeData.status !== 'OK') {
+        console.error('Geocoding error:', geocodeData);
+        throw new Error(geocodeData.error_message || `Geocoding failed: ${geocodeData.status}`);
+      }
+
+      results = geocodeData.results.map((result: any) => ({
+        name: result.formatted_address,
+        latitude: result.geometry.location.lat,
+        longitude: result.geometry.location.lng,
+        formatted_address: result.formatted_address
+      }));
+
+      console.log(`Successfully geocoded ${results.length} results`);
+
+      // Use the first result's coordinates for timezone lookup if available
+      if (results.length > 0) {
+        latitude = results[0].latitude;
+        longitude = results[0].longitude;
+      }
     }
 
-    console.log('Geocoding address:', address);
+    // --- Step 2: Handle Timezone Lookup (if coordinates are available) ---
+    if (latitude !== undefined && longitude !== undefined && latitude !== null && longitude !== null) {
+      console.log(`Fetching timezone for coordinates: ${latitude}, ${longitude}`);
+      const timestamp = Math.floor(Date.now() / 1000); // Current Unix timestamp
+      const timezoneApiUrl = `https://maps.googleapis.com/maps/api/timezone/json?location=${latitude},${longitude}&timestamp=${timestamp}&key=${apiKey}`;
+      
+      const timezoneResponse = await fetch(timezoneApiUrl);
+      const timezoneData = await timezoneResponse.json();
 
-    const response = await fetch(
-      `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${apiKey}`
-    );
-    
-    if (!response.ok) {
-      throw new Error(`Google Maps API error: ${response.status}`);
+      if (timezoneData.status === 'OK' && timezoneData.timeZoneId) {
+        timezoneId = timezoneData.timeZoneId;
+        timeZoneName = timezoneData.timeZoneName;
+        console.log(`Successfully fetched timezone: ${timezoneId}`);
+      } else {
+        console.warn(`Google Time Zone API error for coordinates ${latitude}, ${longitude}:`, timezoneData.status, timezoneData.errorMessage);
+      }
     }
 
-    const data = await response.json();
-    
-    if (data.status !== 'OK') {
-      console.error('Geocoding error:', data);
-      throw new Error(data.error_message || `Geocoding failed: ${data.status}`);
-    }
-
-    const results: PlaceResult[] = data.results.map((result: any) => ({
-      name: result.formatted_address,
-      latitude: result.geometry.location.lat,
-      longitude: result.geometry.location.lng,
-      formatted_address: result.formatted_address
-    }));
-
-    console.log(`Successfully geocoded ${results.length} results`);
-
-    return new Response(JSON.stringify({ results }), {
+    return new Response(JSON.stringify({ results, timezoneId, timeZoneName }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (error) {

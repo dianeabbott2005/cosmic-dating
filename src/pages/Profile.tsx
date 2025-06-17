@@ -4,12 +4,14 @@ import { supabase } from '@/integrations/supabase/client';
 import { ArrowLeft, Save } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import PlaceSearch from '@/components/PlaceSearch';
+import { useGoogleMaps } from '@/hooks/useGoogleMaps'; // Import useGoogleMaps
 
 const Profile = () => {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const { getTimezone } = useGoogleMaps(); // Use getTimezone from useGoogleMaps
   const [profile, setProfile] = useState({
     first_name: '',
     last_name: '',
@@ -19,7 +21,7 @@ const Profile = () => {
     place_of_birth: '',
     latitude: null as number | null,
     longitude: null as number | null,
-    timezone: '', // Added timezone
+    timezone: '', // Keep timezone in state to display it
     gender: '',
     looking_for: '',
     min_age: 18,
@@ -84,11 +86,31 @@ const Profile = () => {
     
     setSaving(true);
     try {
+      let currentLatitude = profile.latitude;
+      let currentLongitude = profile.longitude;
+      let currentPlaceOfBirth = profile.place_of_birth;
+      let currentReadonlyTimezone = profile.timezone; // Store the timezone to be updated
+
+      // If place of birth changed or timezone is missing, re-fetch timezone
+      if (currentPlaceOfBirth && currentLatitude && currentLongitude) {
+        try {
+          const timezoneResult = await getTimezone(currentLatitude, currentLongitude);
+          if (timezoneResult) {
+            currentReadonlyTimezone = timezoneResult.timezoneId;
+            console.log('Timezone re-fetched automatically:', currentReadonlyTimezone);
+          } else {
+            console.warn('Could not automatically determine timezone for coordinates:', { currentLatitude, currentLongitude });
+          }
+        } catch (timezoneError) {
+          console.error('Error re-fetching timezone automatically:', timezoneError);
+        }
+      }
+
       console.log('Saving profile with coordinates and timezone:', {
-        place_of_birth: profile.place_of_birth,
-        latitude: profile.latitude,
-        longitude: profile.longitude,
-        timezone: profile.timezone
+        place_of_birth: currentPlaceOfBirth,
+        latitude: currentLatitude,
+        longitude: currentLongitude,
+        timezone: currentReadonlyTimezone
       });
 
       const { error } = await supabase
@@ -98,10 +120,10 @@ const Profile = () => {
           last_name: profile.last_name,
           date_of_birth: profile.date_of_birth,
           time_of_birth: profile.time_of_birth,
-          place_of_birth: profile.place_of_birth,
-          latitude: profile.latitude,
-          longitude: profile.longitude,
-          timezone: profile.timezone, // Added timezone to update
+          place_of_birth: currentPlaceOfBirth,
+          latitude: currentLatitude,
+          longitude: currentLongitude,
+          timezone: currentReadonlyTimezone, // Use the automatically fetched timezone
           gender: profile.gender,
           looking_for: profile.looking_for,
           min_age: profile.min_age,
@@ -111,6 +133,9 @@ const Profile = () => {
 
       if (error) throw error;
       
+      // Update local state with the new timezone after successful save
+      setProfile(prev => ({ ...prev, timezone: currentReadonlyTimezone }));
+
       console.log('Profile updated successfully with coordinates and timezone');
       alert('Profile updated successfully!');
     } catch (error) {
@@ -236,17 +261,16 @@ const Profile = () => {
 
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Timezone (e.g., America/New_York)
+                Timezone (Automatically determined)
               </label>
               <input
                 type="text"
-                value={profile.timezone}
-                onChange={(e) => setProfile({ ...profile, timezone: e.target.value })}
-                className="input-cosmic"
-                placeholder="e.g., America/New_York"
+                value={profile.timezone || 'Fetching...'}
+                className="input-cosmic bg-gray-800/50 cursor-not-allowed"
+                disabled
               />
               <p className="text-xs text-gray-500 mt-1">
-                Find your timezone at <a href="https://www.timeanddate.com/time/zones/" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">timeanddate.com/time/zones/</a>
+                This is automatically determined from your place of birth.
               </p>
             </div>
 

@@ -14,7 +14,7 @@ const BirthInfoForm = ({ onNext, userData }: BirthInfoFormProps) => {
     placeOfBirth: userData.placeOfBirth || '',
     latitude: userData.latitude || null,
     longitude: userData.longitude || null,
-    timezone: userData.timezone || '', // Added timezone
+    // timezone: userData.timezone || '', // Removed timezone from state
     ...userData
   });
 
@@ -41,9 +41,10 @@ const BirthInfoForm = ({ onNext, userData }: BirthInfoFormProps) => {
       newErrors.placeOfBirth = 'Place of birth is required for astrological calculations';
     }
 
-    if (!formData.timezone) { // Added timezone validation
-      newErrors.timezone = 'Timezone is required for accurate astrological calculations';
-    }
+    // Removed timezone validation
+    // if (!formData.timezone) { 
+    //   newErrors.timezone = 'Timezone is required for accurate astrological calculations';
+    // }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -144,6 +145,8 @@ const BirthInfoForm = ({ onNext, userData }: BirthInfoFormProps) => {
         )}
       </div>
 
+      {/* Removed Timezone Input Field */}
+      {/* 
       <div>
         <label className="block text-sm font-medium text-gray-300 mb-2">
           Timezone (e.g., America/New_York) *
@@ -165,6 +168,7 @@ const BirthInfoForm = ({ onNext, userData }: BirthInfoFormProps) => {
           Find your timezone at <a href="https://www.timeanddate.com/time/zones/" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">timeanddate.com/time/zones/</a>
         </p>
       </div>
+      */}
 
       <div className="bg-gradient-to-r from-blue-900/20 to-purple-900/20 border border-blue-500/30 rounded-xl p-4">
         <h4 className="text-blue-300 font-medium mb-2">🔮 Why We Need This</h4>

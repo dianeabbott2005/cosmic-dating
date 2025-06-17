@@ -3,6 +3,7 @@ import { CheckCircle, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
+import { useGoogleMaps } from '@/hooks/useGoogleMaps'; // Import useGoogleMaps
 
 interface ProfileCompleteProps {
   onNext: (data: any) => void;
@@ -13,6 +14,7 @@ const ProfileComplete = ({ onNext, userData }: ProfileCompleteProps) => {
   const [isCreating, setIsCreating] = useState(false);
   const { toast } = useToast();
   const { user: authUser } = useAuth();
+  const { getTimezone } = useGoogleMaps(); // Use getTimezone from useGoogleMaps
 
   const handleCreateProfile = async () => {
     if (!authUser) {
@@ -27,9 +29,9 @@ const ProfileComplete = ({ onNext, userData }: ProfileCompleteProps) => {
     setIsCreating(true);
     
     try {
-      let { latitude, longitude } = userData;
+      let { latitude, longitude, timezone } = userData; // Get existing lat/lng/timezone from userData
 
-      // Try to geocode the location if it's not already present
+      // If placeOfBirth is provided but lat/lng are missing, try to geocode first
       if (userData.placeOfBirth && (!latitude || !longitude)) {
         try {
           console.log(`Geocoding place of birth: ${userData.placeOfBirth}`);
@@ -49,7 +51,21 @@ const ProfileComplete = ({ onNext, userData }: ProfileCompleteProps) => {
           }
         } catch (geocodeError) {
           console.error('Geocoding failed:', geocodeError);
-          // Continue anyway, as coordinates are not critical for profile creation.
+        }
+      }
+
+      // Now, if we have latitude and longitude, fetch the timezone
+      if (latitude && longitude) {
+        try {
+          const timezoneResult = await getTimezone(latitude, longitude);
+          if (timezoneResult) {
+            timezone = timezoneResult.timezoneId;
+            console.log('Timezone fetched automatically:', timezone);
+          } else {
+            console.warn('Could not automatically determine timezone for coordinates:', { latitude, longitude });
+          }
+        } catch (timezoneError) {
+          console.error('Error fetching timezone automatically:', timezoneError);
         }
       }
       
@@ -66,7 +82,7 @@ const ProfileComplete = ({ onNext, userData }: ProfileCompleteProps) => {
         max_age: userData.maxAge,
         latitude: latitude,
         longitude: longitude,
-        timezone: userData.timezone, // Added timezone
+        timezone: timezone, // Use the automatically fetched timezone
         updated_at: new Date().toISOString(),
       };
 
@@ -151,7 +167,7 @@ const ProfileComplete = ({ onNext, userData }: ProfileCompleteProps) => {
           </div>
           <div className="col-span-2">
             <span className="text-gray-400">Timezone:</span>
-            <p className="text-white">{userData.timezone}</p>
+            <p className="text-white">{userData.timezone || 'Automatically determined'}</p> {/* Display timezone or placeholder */}
           </div>
           <div>
             <span className="text-gray-400">Age Range:</span>
