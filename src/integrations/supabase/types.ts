@@ -49,38 +49,25 @@ export type Database = {
         Row: {
           chat_id: string
           context_summary: string | null
-          id: string
           last_updated: string
-          user_id: string
         }
         Insert: {
           chat_id: string
           context_summary?: string | null
-          id?: string
           last_updated?: string
-          user_id: string
         }
         Update: {
           chat_id?: string
           context_summary?: string | null
-          id?: string
           last_updated?: string
-          user_id?: string
         }
         Relationships: [
           {
             foreignKeyName: "conversation_contexts_chat_id_fkey"
             columns: ["chat_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "chats"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "conversation_contexts_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["user_id"]
           },
         ]
       }
@@ -357,4 +344,4 @@ export const Constants = {
   public: {
     Enums: {},
   },
-} as const
+} as const;

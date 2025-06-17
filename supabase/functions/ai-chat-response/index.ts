@@ -117,12 +117,11 @@ async function getSenderProfile(supabaseClient: SupabaseClient, senderId: string
 /**
  * Fetches the conversation context summary.
  */
-async function getConversationContext(supabaseClient: SupabaseClient, chatId: string, receiverId: string) {
+async function getConversationContext(supabaseClient: SupabaseClient, chatId: string) {
     const { data: context } = await supabaseClient
       .from('conversation_contexts')
       .select('context_summary')
       .eq('chat_id', chatId)
-      .eq('user_id', receiverId)
       .single();
     return context;
 }
@@ -239,18 +238,17 @@ async function storeAiResponse(supabaseClient: SupabaseClient, chatId: string, r
 /**
  * Updates the conversation context summary.
  */
-async function updateConversationContext(supabaseClient: SupabaseClient, chatId: string, receiverId: string, receiverFirstName: string, senderFirstName: string | undefined, userMessage: string, aiResponse: string, existingContext: any) {
+async function updateConversationContext(supabaseClient: SupabaseClient, chatId: string, receiverFirstName: string, senderFirstName: string | undefined, userMessage: string, aiResponse: string, existingContext: any) {
     const contextUpdate = `${senderFirstName || 'User'} said: "${userMessage}". ${receiverFirstName} responded: "${aiResponse}".`;
     await supabaseClient
       .from('conversation_contexts')
       .upsert({
         chat_id: chatId,
-        user_id: receiverId,
         context_summary: existingContext?.context_summary 
           ? `${existingContext.context_summary} ${contextUpdate}` 
           : contextUpdate,
         last_updated: new Date().toISOString()
-      });
+      }, { onConflict: 'chat_id' });
 }
 
 
@@ -275,7 +273,7 @@ serve(async (req) => {
     const [receiverProfile, senderProfile, context, recentMessages] = await Promise.all([
         getReceiverProfile(supabaseClient, receiverId),
         getSenderProfile(supabaseClient, senderId),
-        getConversationContext(supabaseClient, chatId, receiverId),
+        getConversationContext(supabaseClient, chatId),
         getRecentMessages(supabaseClient, chatId),
     ]);
     
@@ -303,7 +301,7 @@ serve(async (req) => {
     }
 
     // Update conversation context with the full AI response (concatenated messages)
-    await updateConversationContext(supabaseClient, chatId, receiverId, receiverProfile.first_name, senderProfile?.first_name, message, fullAiResponse, context);
+    await updateConversationContext(supabaseClient, chatId, receiverProfile.first_name, senderProfile?.first_name, message, fullAiResponse, context);
 
     return new Response(
       JSON.stringify({ success: true, message: lastMessageSent, aiResponse: fullAiResponse, messagesSent: individualMessages.length }),
