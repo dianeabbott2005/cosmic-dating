@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { calculateCompatibility } from '@/utils/astroCompatibility';
+// Removed: import { calculateCompatibility } from '@/utils/astroCompatibility'; // This import is no longer needed
 
 export interface MatchProfile {
   id: string;
@@ -93,6 +93,15 @@ export const useMatches = () => {
 
       console.log('calculateMatches: Found', potentialProfiles.length, 'potential profiles for detailed check.');
 
+      // Prepare user's birth data for the Edge Function
+      const userBirthData = {
+        dateOfBirth: userProfile.date_of_birth,
+        timeOfBirth: userProfile.time_of_birth,
+        placeOfBirth: userProfile.place_of_birth,
+        latitude: userProfile.latitude,
+        longitude: userProfile.longitude
+      };
+
       // Calculate compatibility and filter by mutual age preferences
       const matchesWithCompatibility = await Promise.all(
         potentialProfiles.map(async (matchProfile) => {
@@ -101,7 +110,7 @@ export const useMatches = () => {
             console.log(`calculateMatches: Processing match ${matchProfile.first_name} (ID: ${matchProfile.user_id}), age: ${matchAge}`);
 
             // Check mutual age preferences
-            const userFitsMatchAgeRange = userAge >= matchProfile.min_age && userAge <= matchProfile.max_age;
+            const userFitsMatchAgeRange = userAge >= matchProfile.min_age && userAge <= userProfile.max_age;
             const matchFitsUserAgeRange = matchAge >= userProfile.min_age && matchAge <= userProfile.max_age;
 
             console.log(`calculateMatches: Age compatibility for ${matchProfile.first_name} - User fits match range: ${userFitsMatchAgeRange}, Match fits user range: ${matchFitsUserAgeRange}`);
@@ -111,23 +120,27 @@ export const useMatches = () => {
               return null;
             }
 
-            const compatibility = await calculateCompatibility(
-              {
-                dateOfBirth: userProfile.date_of_birth,
-                timeOfBirth: userProfile.time_of_birth,
-                placeOfBirth: userProfile.place_of_birth,
-                latitude: userProfile.latitude,
-                longitude: userProfile.longitude
-              },
-              {
-                dateOfBirth: matchProfile.date_of_birth,
-                timeOfBirth: matchProfile.time_of_birth,
-                placeOfBirth: matchProfile.place_of_birth,
-                latitude: matchProfile.latitude,
-                longitude: matchProfile.longitude
-              }
-            );
+            // Prepare match's birth data for the Edge Function
+            const matchBirthData = {
+              dateOfBirth: matchProfile.date_of_birth,
+              timeOfBirth: matchProfile.time_of_birth,
+              placeOfBirth: matchProfile.place_of_birth,
+              latitude: matchProfile.latitude,
+              longitude: matchProfile.longitude
+            };
 
+            // Call the Supabase Edge Function for compatibility calculation
+            const { data: compatibilityData, error: compatibilityError } = await supabase.functions.invoke('calculate-compatibility', {
+                body: { person1: userBirthData, person2: matchBirthData }
+            });
+
+            if (compatibilityError) {
+                console.error('calculateMatches: Error invoking compatibility function:', compatibilityError);
+                // Fallback to a default score or handle as an error
+                return { ...matchProfile, compatibility_score: 0.5, age: matchAge };
+            }
+            
+            const compatibility = compatibilityData.score;
             console.log(`calculateMatches: Compatibility score for ${matchProfile.first_name}: ${compatibility}`);
 
             return {
