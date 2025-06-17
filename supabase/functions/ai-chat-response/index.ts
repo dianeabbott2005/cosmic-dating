@@ -29,47 +29,36 @@ const EMOJI_STYLES: { [key: string]: { [key: string]: string } } = {
 };
 
 /**
- * Calculates a human-like typing delay.
+ * Calculates a human-like typing delay, capped to prevent timeouts.
  * @param messageLength The length of the message to be "typed".
  * @returns A delay in milliseconds.
  */
 const calculateTypingDelay = (messageLength: number): number => {
-  const baseDelay = 1000; // 1 second minimum per message
+  const baseDelay = 500; // 0.5 second minimum per message
   const typingSpeed = 250; // characters per minute
   const typingTime = (messageLength / typingSpeed) * 60 * 1000;
   
-  let randomVariation = Math.random() * 1500; // Up to 1.5 seconds random variation
-
-  const now = new Date();
-  const hour = now.getUTCHours();
-  
-  // Longer delays during typical "sleep" hours
-  if (hour >= 23 || hour < 7) {
-    randomVariation += Math.random() * 5000; // Add up to 5 seconds more
-  }
-
-  // Occasional very long delays
-  if (Math.random() < 0.1) { // 10% chance for a longer pause
-    randomVariation += 3000 + (Math.random() * 7000); // Add 3-10 seconds
-  }
+  let randomVariation = Math.random() * 500; // Up to 0.5 seconds random variation
   
   const totalDelay = baseDelay + typingTime + randomVariation;
-  return Math.min(totalDelay, 30000); // Cap at 30 seconds
+  return Math.min(totalDelay, 5000); // Cap at 5 seconds to prevent timeouts
 };
 
 /**
- * Calculates a human-like response delay (before typing starts).
+ * Calculates a human-like response delay (before typing starts), capped to prevent timeouts.
  * @returns A delay in milliseconds.
  */
 const calculateResponseDelay = (): number => {
   const random = Math.random();
-  if (random < 0.7) { // 70% chance for quick response (0-1 minute)
-    return Math.floor(Math.random() * 60 * 1000); // 0 to 60 seconds
-  } else if (random < 0.9) { // 20% chance for moderate delay (5-30 minutes)
-    return 5 * 60 * 1000 + Math.floor(Math.random() * 25 * 60 * 1000); // 5 to 30 minutes
-  } else { // 10% chance for long delay (1-4 hours)
-    return 60 * 60 * 1000 + Math.floor(Math.random() * 3 * 60 * 60 * 1000); // 1 to 4 hours
+  let delay = 0;
+  if (random < 0.7) { // 70% chance for quick response (0-5 seconds)
+    delay = Math.floor(Math.random() * 5 * 1000);
+  } else if (random < 0.9) { // 20% chance for moderate delay (5-10 seconds)
+    delay = 5 * 1000 + Math.floor(Math.random() * 5 * 1000);
+  } else { // 10% chance for slightly longer delay (10-15 seconds)
+    delay = 10 * 1000 + Math.floor(Math.random() * 5 * 1000);
   }
+  return Math.min(delay, 15 * 1000); // Cap at 15 seconds to prevent timeouts
 };
 
 /**
