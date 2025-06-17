@@ -87,8 +87,16 @@ export const useMatches = () => {
       const { data: existingMatches, error } = await supabase
         .from('matches')
         .select(`
-          *,
-          profiles!matches_matched_user_id_fkey(*)
+          id,
+          user_id,
+          matched_user_id,
+          compatibility_score,
+          user1_profile:profiles!matches_user_id_fkey(
+            user_id, first_name, last_name, date_of_birth, time_of_birth, place_of_birth, latitude, longitude, timezone, gender, looking_for, min_age, max_age
+          ),
+          user2_profile:profiles!matches_matched_user_id_fkey(
+            user_id, first_name, last_name, date_of_birth, time_of_birth, place_of_birth, latitude, longitude, timezone, gender, looking_for, min_age, max_age
+          )
         `)
         .or(`user_id.eq.${user.id},matched_user_id.eq.${user.id}`);
 
@@ -106,24 +114,25 @@ export const useMatches = () => {
 
       console.log('getExistingMatches: Found', existingMatches.length, 'existing match records.');
 
-      const formattedMatches = existingMatches.map(match => {
-        const profile = match.profiles;
-        
-        if (!profile) {
-          console.warn('getExistingMatches: Profile data missing for match record:', match.id);
-          return null;
+      const uniqueMatchesMap = new Map<string, MatchProfile>(); // Use a Map to ensure uniqueness by other_user_id
+
+      existingMatches.forEach(match => {
+        const otherUserId = match.user_id === user.id ? match.matched_user_id : match.user_id;
+        const otherUserProfile = match.user_id === user.id ? match.user2_profile : match.user1_profile;
+
+        // Ensure we have a valid profile and haven't already added this user
+        if (otherUserProfile && !uniqueMatchesMap.has(otherUserId)) {
+          const age = calculateAge(otherUserProfile.date_of_birth);
+          uniqueMatchesMap.set(otherUserId, {
+            ...otherUserProfile,
+            compatibility_score: match.compatibility_score,
+            age
+          });
         }
+      });
 
-        const age = calculateAge(profile.date_of_birth);
-
-        return {
-          ...profile,
-          compatibility_score: match.compatibility_score,
-          age
-        };
-      }).filter(Boolean) as MatchProfile[];
-
-      console.log('getExistingMatches: Formatted existing matches:', formattedMatches.length, formattedMatches);
+      const formattedMatches = Array.from(uniqueMatchesMap.values());
+      console.log('getExistingMatches: Formatted unique matches:', formattedMatches.length, formattedMatches);
       setMatches(formattedMatches);
       return formattedMatches;
     } catch (error: any) {
