@@ -1,7 +1,7 @@
+= 0.65 and adding more logging for match calculation and storage.">
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-// Removed: import { calculateCompatibility } from '@/utils/astroCompatibility'; // This import is no longer needed
 
 export interface MatchProfile {
   id: string;
@@ -14,7 +14,7 @@ export interface MatchProfile {
   place_of_birth: string;
   latitude: number;
   longitude: number;
-  timezone: string; // Added timezone
+  timezone: string;
   gender: string;
   looking_for: string;
   min_age: number;
@@ -47,13 +47,14 @@ export const useMatches = () => {
   const calculateMatches = async () => {
     if (!user) {
       console.log('calculateMatches: No user, returning.');
+      setMatches([]); // Ensure matches are cleared if no user
+      setLoading(false);
       return;
     }
 
     setLoading(true);
+    console.log('calculateMatches: Starting match calculation for user:', user.id);
     try {
-      console.log('calculateMatches: Starting match calculation for user:', user.id);
-      
       // Get current user's profile
       const { data: userProfile, error: userProfileError } = await supabase
         .from('profiles')
@@ -62,12 +63,13 @@ export const useMatches = () => {
         .single();
 
       if (userProfileError || !userProfile) {
-        console.error('calculateMatches: Error fetching user profile or profile not found:', userProfileError);
+        console.error('calculateMatches: Error fetching user profile or profile not found:', userProfileError?.message || 'Profile not found');
         setLoading(false);
+        setMatches([]);
         return;
       }
 
-      console.log('calculateMatches: User profile:', userProfile);
+      console.log('calculateMatches: User profile fetched:', userProfile.first_name);
       const userAge = calculateAge(userProfile.date_of_birth);
       console.log('calculateMatches: User age:', userAge);
 
@@ -77,17 +79,19 @@ export const useMatches = () => {
         .select('*')
         .eq('gender', userProfile.looking_for) // Match has the gender current user is looking for
         .eq('looking_for', userProfile.gender) // Match is looking for current user's gender
-        .neq('user_id', user.id);
+        .neq('user_id', user.id)
+        .eq('is_dummy_profile', false); // Exclude dummy profiles from being matched with real users
 
       if (potentialProfilesError) {
-        console.error('calculateMatches: Error fetching potential profiles:', potentialProfilesError);
+        console.error('calculateMatches: Error fetching potential profiles:', potentialProfilesError.message);
         setLoading(false);
+        setMatches([]);
         return;
       }
 
       if (!potentialProfiles || potentialProfiles.length === 0) {
         console.log('calculateMatches: No potential profiles found matching initial criteria.');
-        setMatches([]); // Clear matches if none found
+        setMatches([]);
         setLoading(false);
         return;
       }
@@ -101,7 +105,7 @@ export const useMatches = () => {
         placeOfBirth: userProfile.place_of_birth,
         latitude: userProfile.latitude,
         longitude: userProfile.longitude,
-        timezone: userProfile.timezone // Added timezone
+        timezone: userProfile.timezone
       };
 
       // Calculate compatibility and filter by mutual age preferences
@@ -112,7 +116,7 @@ export const useMatches = () => {
             console.log(`calculateMatches: Processing match ${matchProfile.first_name} (ID: ${matchProfile.user_id}), age: ${matchAge}`);
 
             // Check mutual age preferences
-            const userFitsMatchAgeRange = userAge >= matchProfile.min_age && userAge <= userProfile.max_age;
+            const userFitsMatchAgeRange = userAge >= matchProfile.min_age && userAge <= matchProfile.max_age;
             const matchFitsUserAgeRange = matchAge >= userProfile.min_age && matchAge <= userProfile.max_age;
 
             console.log(`calculateMatches: Age compatibility for ${matchProfile.first_name} - User fits match range: ${userFitsMatchAgeRange}, Match fits user range: ${matchFitsUserAgeRange}`);
@@ -129,7 +133,7 @@ export const useMatches = () => {
               placeOfBirth: matchProfile.place_of_birth,
               latitude: matchProfile.latitude,
               longitude: matchProfile.longitude,
-              timezone: matchProfile.timezone // Added timezone
+              timezone: matchProfile.timezone
             };
 
             // Call the Supabase Edge Function for compatibility calculation
@@ -138,9 +142,8 @@ export const useMatches = () => {
             });
 
             if (compatibilityError) {
-                console.error('calculateMatches: Error invoking compatibility function:', compatibilityError);
-                // Fallback to a default score or handle as an error
-                return { ...matchProfile, compatibility_score: 0.5, age: matchAge };
+                console.error('calculateMatches: Error invoking compatibility function for', matchProfile.first_name, ':', compatibilityError.message);
+                return null; // Skip this match if compatibility calculation fails
             }
             
             const compatibility = compatibilityData.score;
@@ -151,21 +154,22 @@ export const useMatches = () => {
               compatibility_score: compatibility,
               age: matchAge
             };
-          } catch (error) {
-            console.error('calculateMatches: Error calculating compatibility for match:', matchProfile.user_id, error);
+          } catch (error: any) {
+            console.error('calculateMatches: Error calculating compatibility for match:', matchProfile.user_id, error.message);
             return null;
           }
         })
       );
 
       // Filter out null results and apply compatibility score threshold
+      const COMPATIBILITY_THRESHOLD = 0.65; // Set the new threshold here
       const validMatches = matchesWithCompatibility
-        .filter((match): match is MatchProfile => { // Type assertion for filter
+        .filter((match): match is MatchProfile => {
           const isValid = match !== null && 
                           typeof match.compatibility_score === 'number' && 
-                          match.compatibility_score >= 0.5; // Changed threshold to >= 0.5
+                          match.compatibility_score >= COMPATIBILITY_THRESHOLD;
           if (!isValid) {
-            console.log(`calculateMatches: Filtering out match (ID: ${match?.user_id}) due to null/invalid score or score < 0.5. Score: ${match?.compatibility_score}`);
+            console.log(`calculateMatches: Filtering out match (ID: ${match?.user_id}) due to null/invalid score or score < ${COMPATIBILITY_THRESHOLD}. Score: ${match?.compatibility_score}`);
           }
           return isValid;
         });
@@ -185,30 +189,32 @@ export const useMatches = () => {
             });
             
             if (error) {
-              console.error('calculateMatches: Error creating bidirectional match for:', match.user_id, error);
+              console.error('calculateMatches: Error creating bidirectional match for:', match.user_id, error.message);
             } else {
               console.log('calculateMatches: Successfully created bidirectional match for:', match.user_id);
             }
-          } catch (error) {
-            console.error('calculateMatches: Error calling create_bidirectional_match RPC for:', match.user_id, error);
+          } catch (error: any) {
+            console.error('calculateMatches: Error calling create_bidirectional_match RPC for:', match.user_id, error.message);
           }
         }
       } else {
         console.log('calculateMatches: No valid matches to store in database.');
       }
-    } catch (error) {
-      console.error('calculateMatches: Top-level error calculating matches:', error);
+    } catch (error: any) {
+      console.error('calculateMatches: Top-level error calculating matches:', error.message);
     } finally {
       setLoading(false);
+      console.log('calculateMatches: Match calculation finished.');
     }
   };
 
   const getExistingMatches = async () => {
     if (!user) {
-      console.log('getExistingMatches: No user, returning.');
-      return []; // Return empty array if no user
+      console.log('getExistingMatches: No user, returning empty array.');
+      return [];
     }
 
+    setLoading(true); // Set loading when fetching existing matches
     try {
       console.log('getExistingMatches: Fetching existing matches for user:', user.id);
       // Get matches where the current user is either the matcher or the matched
@@ -218,22 +224,21 @@ export const useMatches = () => {
           *,
           profiles!matches_matched_user_id_fkey(*)
         `)
-        .or(`user_id.eq.${user.id},matched_user_id.eq.${user.id}`); // Fetch matches where current user is either user1 or user2
+        .or(`user_id.eq.${user.id},matched_user_id.eq.${user.id}`);
 
       if (error) {
-        console.error('getExistingMatches: Error fetching existing matches:', error);
+        console.error('getExistingMatches: Error fetching existing matches:', error.message);
         return [];
       }
 
       if (!existingMatches || existingMatches.length === 0) {
-        console.log('getExistingMatches: No existing matches found.');
+        console.log('getExistingMatches: No existing matches found in DB.');
         return [];
       }
 
       console.log('getExistingMatches: Found', existingMatches.length, 'existing match records.');
 
       const formattedMatches = existingMatches.map(match => {
-        // Determine which profile is the 'other' user
         const profile = match.profiles;
         
         if (!profile) {
@@ -248,13 +253,15 @@ export const useMatches = () => {
           compatibility_score: match.compatibility_score,
           age
         };
-      }).filter(Boolean) as MatchProfile[]; // Filter out any nulls and assert type
+      }).filter(Boolean) as MatchProfile[];
 
       console.log('getExistingMatches: Formatted existing matches:', formattedMatches.length, formattedMatches);
       return formattedMatches;
-    } catch (error) {
-      console.error('getExistingMatches: Error getting existing matches:', error);
+    } catch (error: any) {
+      console.error('getExistingMatches: Error getting existing matches:', error.message);
       return [];
+    } finally {
+      setLoading(false); // Reset loading after fetching existing matches
     }
   };
 
@@ -272,7 +279,6 @@ export const useMatches = () => {
       if (existing.length > 0) {
         console.log('Main useEffect: Found existing matches, setting state.');
         setMatches(existing);
-        setLoading(false);
       } else {
         console.log('Main useEffect: No existing matches, calculating new ones.');
         await calculateMatches(); // This will set matches and loading state
@@ -298,8 +304,6 @@ export const useMatches = () => {
         },
         (payload) => {
           console.log('Profile updated, recalculating matches:', payload);
-          // When profile updates, we should re-evaluate matches.
-          // Calling calculateMatches directly is more explicit for this event.
           calculateMatches();
         }
       )
@@ -313,6 +317,6 @@ export const useMatches = () => {
   return {
     matches,
     loading,
-    refreshMatches: calculateMatches // Allow manual refresh
+    refreshMatches: calculateMatches
   };
 };
