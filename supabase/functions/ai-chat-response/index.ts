@@ -28,8 +28,12 @@ const EMOJI_STYLES: { [key: string]: { [key: string]: string } } = {
   'older': { female: 'few, classic, gentle', male: 'very few, formal', 'non-binary': 'few, subtle' },
 };
 
+// Define a threshold for immediate vs. delayed sending
+const IMMEDIATE_SEND_THRESHOLD_MS = 15 * 1000; // 15 seconds
+
 /**
  * Calculates a human-like typing delay, capped to prevent timeouts.
+ * This is for *individual messages* within a multi-message response.
  * @param messageLength The length of the message to be "typed".
  * @returns A delay in milliseconds.
  */
@@ -41,11 +45,12 @@ const calculateTypingDelay = (messageLength: number): number => {
   let randomVariation = Math.random() * 500; // Up to 0.5 seconds random variation
   
   const totalDelay = baseDelay + typingTime + randomVariation;
-  return Math.min(totalDelay, 5000); // Cap at 5 seconds to prevent timeouts
+  return Math.min(totalDelay, 5000); // Cap at 5 seconds to prevent timeouts within the function
 };
 
 /**
- * Calculates a human-like response delay (before typing starts), capped to prevent timeouts.
+ * Calculates a human-like response delay (before typing starts).
+ * This is the *initial* delay before the AI starts responding.
  * @returns A delay in milliseconds.
  */
 const calculateResponseDelay = (): number => {
@@ -58,7 +63,9 @@ const calculateResponseDelay = (): number => {
   } else { // 10% chance for slightly longer delay (10-15 seconds)
     delay = 10 * 1000 + Math.floor(Math.random() * 5 * 1000);
   }
-  return Math.min(delay, 15 * 1000); // Cap at 15 seconds to prevent timeouts
+  // For the purpose of this Edge Function, we cap the *internal* delay
+  // If a longer delay is needed, it will be scheduled.
+  return delay; // No cap here, as the scheduling logic handles long delays
 };
 
 /**
@@ -223,6 +230,28 @@ async function storeAiResponse(supabaseClient: SupabaseClient, chatId: string, r
 }
 
 /**
+ * Schedules a message to be sent later.
+ */
+async function scheduleDelayedMessage(supabaseClient: SupabaseClient, chatId: string, senderId: string, content: string, delayMs: number) {
+  const scheduledTime = new Date(Date.now() + delayMs).toISOString();
+  const { error } = await supabaseClient
+    .from('delayed_messages')
+    .insert({
+      chat_id: chatId,
+      sender_id: senderId,
+      content: content,
+      scheduled_send_time: scheduledTime,
+      status: 'pending'
+    });
+
+  if (error) {
+    console.error('Error scheduling delayed message:', error);
+    throw error;
+  }
+  console.log(`Message scheduled for ${scheduledTime}`);
+}
+
+/**
  * Updates the conversation context summary.
  */
 async function updateConversationContext(supabaseClient: SupabaseClient, chatId: string, receiverFirstName: string, senderFirstName: string | undefined, userMessage: string, aiResponse: string, existingContext: any) {
@@ -252,10 +281,9 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Introduce a human-like response delay before processing
+    // Calculate the initial response delay
     const responseDelay = calculateResponseDelay();
-    console.log(`Calculated response delay: ${responseDelay}ms`);
-    await new Promise(resolve => setTimeout(resolve, responseDelay));
+    console.log(`Calculated initial response delay: ${responseDelay}ms`);
 
     const [receiverProfile, senderProfile, context, recentMessages] = await Promise.all([
         getReceiverProfile(supabaseClient, receiverId),
@@ -276,24 +304,49 @@ serve(async (req) => {
                                              .map(msg => msg.trim())
                                              .filter(msg => msg.length > 0);
 
-    let lastMessageSent: Message | null = null;
+    // If the total delay (initial response delay + sum of typing delays) is too long, schedule it
+    const totalTypingDelay = individualMessages.reduce((sum, msg) => sum + calculateTypingDelay(msg.length), 0);
+    const overallDelay = responseDelay + totalTypingDelay;
 
-    for (const msgContent of individualMessages) {
-      const typingDelay = calculateTypingDelay(msgContent.length);
-      console.log(`Calculated typing delay: ${typingDelay}ms for message length: ${msgContent.length}`);
-      await new Promise(resolve => setTimeout(resolve, typingDelay));
+    if (overallDelay > IMMEDIATE_SEND_THRESHOLD_MS) {
+      console.log(`Overall delay (${overallDelay}ms) exceeds threshold. Scheduling message.`);
+      // Schedule each message with its cumulative delay
+      let cumulativeDelay = responseDelay;
+      for (const msgContent of individualMessages) {
+        await scheduleDelayedMessage(supabaseClient, chatId, receiverId, msgContent, cumulativeDelay);
+        cumulativeDelay += calculateTypingDelay(msgContent.length);
+      }
+      // Update context immediately for the user's message + the *intended* AI response
+      await updateConversationContext(supabaseClient, chatId, receiverProfile.first_name, senderProfile?.first_name, message, fullAiResponse, context);
 
-      lastMessageSent = await storeAiResponse(supabaseClient, chatId, receiverId, msgContent);
-      console.log('Stored AI message:', lastMessageSent);
+      return new Response(
+        JSON.stringify({ success: true, status: 'scheduled', aiResponse: fullAiResponse, messagesScheduled: individualMessages.length }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+
+    } else {
+      console.log(`Overall delay (${overallDelay}ms) is within threshold. Sending immediately.`);
+      // Proceed with immediate sending as before
+      await new Promise(resolve => setTimeout(resolve, responseDelay)); // Initial response delay
+
+      let lastMessageSent: Message | null = null;
+      for (const msgContent of individualMessages) {
+        const typingDelay = calculateTypingDelay(msgContent.length);
+        console.log(`Calculated typing delay: ${typingDelay}ms for message length: ${msgContent.length}`);
+        await new Promise(resolve => setTimeout(resolve, typingDelay));
+
+        lastMessageSent = await storeAiResponse(supabaseClient, chatId, receiverId, msgContent);
+        console.log('Stored AI message:', lastMessageSent);
+      }
+
+      // Update conversation context with the full AI response (concatenated messages)
+      await updateConversationContext(supabaseClient, chatId, receiverProfile.first_name, senderProfile?.first_name, message, fullAiResponse, context);
+
+      return new Response(
+        JSON.stringify({ success: true, status: 'sent_immediately', message: lastMessageSent, aiResponse: fullAiResponse, messagesSent: individualMessages.length }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
-
-    // Update conversation context with the full AI response (concatenated messages)
-    await updateConversationContext(supabaseClient, chatId, receiverProfile.first_name, senderProfile?.first_name, message, fullAiResponse, context);
-
-    return new Response(
-      JSON.stringify({ success: true, message: lastMessageSent, aiResponse: fullAiResponse, messagesSent: individualMessages.length }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
 
   } catch (error) {
     console.error('Error in ai-chat-response function:', error);
