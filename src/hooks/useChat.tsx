@@ -35,11 +35,11 @@ export const useChat = (matchId?: string) => {
     try {
       const { data } = await supabase
         .from('profiles')
-        .select('personality_prompt')
+        .select('is_dummy_profile')
         .eq('user_id', userId)
         .single();
       
-      return !!(data?.personality_prompt);
+      return !!(data?.is_dummy_profile);
     } catch {
       return false;
     }
