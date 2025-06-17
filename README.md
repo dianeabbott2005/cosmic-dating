@@ -1,22 +1,16 @@
-# Welcome to your Lovable project
+# Welcome to your Zodiac Heart Sync project
 
 ## Project info
 
-**URL**: https://lovable.dev/projects/4c93b41b-3f32-4343-b6cd-af35cc062e4e
+**URL**: Your project URL
 
 ## How can I edit this code?
 
 There are several ways of editing your application.
 
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/4c93b41b-3f32-4343-b6cd-af35cc062e4e) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
 **Use your preferred IDE**
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will be reflected in your deployed application.
 
 The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
 
@@ -62,12 +56,8 @@ This project is built with:
 
 ## How can I deploy this project?
 
-Simply open [Lovable](https://lovable.dev/projects/4c93b41b-3f32-4343-b6cd-af35cc062e4e) and click on Share -> Publish.
+This project can be deployed using any standard static site hosting service (e.g., Vercel, Netlify, GitHub Pages).
 
-## Can I connect a custom domain to my Lovable project?
+## Can I connect a custom domain to my project?
 
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+Yes, you can! Refer to your chosen hosting provider's documentation for instructions on connecting a custom domain.
