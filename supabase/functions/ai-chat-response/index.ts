@@ -175,6 +175,9 @@ function buildEnhancedPrompt(receiverProfile: any, senderProfile: any, context: 
     if (context?.context_summary) promptInstructions += `\n\nPrevious conversation context: ${context.context_summary}`;
     if (conversationHistory) promptInstructions += `\n\nRecent conversation:\n${conversationHistory}`;
     
+    // NEW: Add dating platform context
+    promptInstructions += `\n\nThis is a new dating platform focused on astrological compatibility. You discovered it through either Reddit or X (formerly Twitter). Your goal is to get to know the user better in a romantic context, as you would on a dating app. Keep the conversation engaging and flirty if appropriate, but always respectful.`;
+
     // Stronger, overriding instructions for emojis and markdown
     promptInstructions += `\n\nIMPORTANT: Use emojis very sparingly, only when highly relevant to the message's core meaning. Prioritize clear text over emoji expression.`;
     promptInstructions += `\n\nDO NOT use any markdown characters like *, _, #, or \`. Your response should consist of 1 to 3 very short messages, each separated by "${MESSAGE_DELIMITER}".`;
