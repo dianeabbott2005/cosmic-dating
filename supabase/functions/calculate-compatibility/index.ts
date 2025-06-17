@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { getNatalChart, getCompatibility } from 'https://esm.sh/astroreha';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -11,49 +12,13 @@ interface BirthChartData {
   placeOfBirth: string;
   latitude: number | null;
   longitude: number | null;
-  timezone: string; // Added timezone
+  timezone: string;
 }
 
 interface CompatibilityRequest {
   person1: BirthChartData;
   person2: BirthChartData;
 }
-
-// Fallback compatibility calculation (age-based)
-const calculateFallbackCompatibility = (person1: BirthChartData, person2: BirthChartData): number => {
-  const getAge = (dob: string) => {
-    const birthDate = new Date(dob);
-    const today = new Date();
-    let age = today.getFullYear() - birthDate.getFullYear();
-    const m = today.getMonth() - birthDate.getMonth();
-    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
-      age--;
-    }
-    return age;
-  };
-
-  const age1 = getAge(person1.dateOfBirth);
-  const age2 = getAge(person2.dateOfBirth);
-
-  // Simple age difference compatibility
-  const ageDiff = Math.abs(age1 - age2);
-  let score = 1.0; // Max compatibility
-
-  if (ageDiff <= 2) {
-    score = 0.9; // Very compatible
-  } else if (ageDiff <= 5) {
-    score = 0.7; // Moderately compatible
-  } else if (ageDiff <= 10) {
-    score = 0.5; // Less compatible
-  } else {
-    score = 0.3; // Low compatibility
-  }
-
-  // Add some randomness for variety
-  score = Math.max(0.3, Math.min(1.0, score + (Math.random() * 0.2 - 0.1))); // +/- 0.1 variation
-
-  return score;
-};
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -63,13 +28,47 @@ serve(async (req) => {
   try {
     const { person1, person2 }: CompatibilityRequest = await req.json();
 
-    console.log('calculateCompatibility (Edge): Using fallback calculation...');
+    console.log('calculateCompatibility (Edge): Calculating compatibility using astroreha...');
     console.log('Person 1 data:', person1);
     console.log('Person 2 data:', person2);
 
-    const compatibilityScore = calculateFallbackCompatibility(person1, person2);
+    // Validate required data for astrological calculations
+    if (person1.latitude === null || person1.longitude === null || !person1.timezone ||
+        person2.latitude === null || person2.longitude === null || !person2.timezone) {
+      throw new Error('Missing latitude, longitude, or timezone for accurate astrological calculations.');
+    }
+
+    // Create Date objects. It's crucial to interpret these in the context of their birth timezone.
+    // astroreha's getNatalChart should handle the timezone string correctly.
+    // We create a Date object from the date and time strings.
+    const birthDateTime1 = new Date(`${person1.dateOfBirth}T${person1.timeOfBirth}:00`);
+    const birthDateTime2 = new Date(`${person2.dateOfBirth}T${person2.timeOfBirth}:00`);
+
+    // Create natal charts using astroreha
+    const chart1 = getNatalChart({
+      date: birthDateTime1,
+      latitude: person1.latitude,
+      longitude: person1.longitude,
+      timezone: person1.timezone,
+      place: person1.placeOfBirth
+    });
+
+    const chart2 = getNatalChart({
+      date: birthDateTime2,
+      latitude: person2.latitude,
+      longitude: person2.longitude,
+      timezone: person2.timezone,
+      place: person2.placeOfBirth
+    });
+
+    // Calculate compatibility score using astroreha
+    const compatibilityResult = getCompatibility(chart1, chart2);
+
+    // astroreha's getCompatibility returns an object with a 'score' property (0-100)
+    // We need to normalize it to 0-1 range for consistency with previous logic.
+    const compatibilityScore = (compatibilityResult.score || 0) / 100;
     
-    console.log(`calculateCompatibility (Edge): Calculated fallback compatibility score: ${Math.round(compatibilityScore * 100)}%`);
+    console.log(`calculateCompatibility (Edge): Calculated astroreha compatibility score: ${Math.round(compatibilityScore * 100)}%`);
 
     return new Response(JSON.stringify({ score: compatibilityScore }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
