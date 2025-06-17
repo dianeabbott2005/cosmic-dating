@@ -233,31 +233,6 @@ serve(async (req) => {
 
     if (!potentialProfiles || potentialProfiles.length === 0) {
       console.log('generate-matches (Edge): No potential profiles found matching initial criteria.');
-      console.log(`generate-matches (Edge): User's preferences: gender='${userProfile.gender}', looking_for='${userProfile.looking_for}'`);
-      
-      // --- DEBUGGING: Fetch all non-dummy profiles to see if any exist at all ---
-      const { data: allNonDummyProfiles, error: allProfilesError } = await supabaseClient
-        .from('profiles')
-        .select('user_id, first_name, gender, looking_for, date_of_birth, min_age, max_age')
-        .neq('user_id', user_id)
-        .eq('is_dummy_profile', false);
-
-      if (allProfilesError) {
-        console.error('generate-matches (Edge): Error fetching all non-dummy profiles for debug:', allProfilesError.message);
-      } else {
-        console.log(`generate-matches (Edge): Total non-dummy profiles (excluding self): ${allNonDummyProfiles?.length || 0}`);
-        if (allNonDummyProfiles && allNonDummyProfiles.length > 0) {
-          console.log('generate-matches (Edge): Details of all non-dummy profiles:');
-          allNonDummyProfiles.forEach(p => {
-            const pAge = calculateAge(p.date_of_birth);
-            console.log(`  - ID: ${p.user_id}, Name: ${p.first_name}, Gender: '${p.gender}', Looking For: '${p.looking_for}', Age: ${pAge}, Min Age: ${p.min_age}, Max Age: ${p.max_age}`);
-          });
-        } else {
-          console.log('generate-matches (Edge): No other non-dummy profiles found in the database at all.');
-        }
-      }
-      // --- END DEBUGGING ---
-
       return new Response(JSON.stringify({ success: true, message: 'No potential matches found.' }), {
         status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -277,6 +252,7 @@ serve(async (req) => {
     };
 
     const COMPATIBILITY_THRESHOLD = 0.65; // This threshold can be adjusted
+    console.log(`generate-matches (Edge): Compatibility Threshold set to: ${COMPATIBILITY_THRESHOLD}`);
     let matchesGeneratedCount = 0;
 
     // Calculate compatibility and filter by mutual age preferences
@@ -309,7 +285,7 @@ serve(async (req) => {
         };
 
         const compatibilityScore = calculateCompositeCompatibility(userBirthData, matchBirthData);
-        console.log(`generate-matches (Edge): Compatibility score for ${matchProfile.first_name}: ${compatibilityScore}`);
+        console.log(`generate-matches (Edge): Calculated compatibility score for ${matchProfile.first_name}: ${compatibilityScore}`);
 
         if (compatibilityScore >= COMPATIBILITY_THRESHOLD) {
           // Store bidirectional matches in database using the RPC function
