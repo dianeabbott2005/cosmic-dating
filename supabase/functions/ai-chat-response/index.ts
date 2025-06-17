@@ -58,6 +58,21 @@ const calculateTypingDelay = (messageLength: number): number => {
 };
 
 /**
+ * Calculates a human-like response delay (before typing starts).
+ * @returns A delay in milliseconds.
+ */
+const calculateResponseDelay = (): number => {
+  const random = Math.random();
+  if (random < 0.7) { // 70% chance for quick response (0-1 minute)
+    return Math.floor(Math.random() * 60 * 1000); // 0 to 60 seconds
+  } else if (random < 0.9) { // 20% chance for moderate delay (5-30 minutes)
+    return 5 * 60 * 1000 + Math.floor(Math.random() * 25 * 60 * 1000); // 5 to 30 minutes
+  } else { // 10% chance for long delay (1-4 hours)
+    return 60 * 60 * 1000 + Math.floor(Math.random() * 3 * 60 * 60 * 1000); // 1 to 4 hours
+  }
+};
+
+/**
  * Calculates age from a date of birth string.
  */
 function calculateAge(dateOfBirth: string): number {
@@ -165,8 +180,8 @@ function buildEnhancedPrompt(receiverProfile: any, senderProfile: any, context: 
       promptInstructions += `\n\nAlso, subtly induce English language issues typical of a non-native speaker from ${region} (${languageIssue}). Occasionally let local dialect flow into conversations (${dialect}).`;
     }
 
-    // Instruction for multiple short messages
-    promptInstructions += `\n\nYour response should consist of 1 to 3 very short messages, each separated by "${MESSAGE_DELIMITER}". Do not send one long message.`;
+    // Instruction for multiple short messages and no markdown
+    promptInstructions += `\n\nYour response should consist of 1 to 3 very short messages, each separated by "${MESSAGE_DELIMITER}". Do not send one long message. Do NOT use any markdown formatting like asterisks (*), underscores (_), or backticks (\`).`;
     
     if (senderProfile) promptInstructions += ` You are chatting with ${senderProfile.first_name}.`;
     if (context?.context_summary) promptInstructions += `\n\nPrevious conversation context: ${context.context_summary}`;
@@ -251,6 +266,11 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
+
+    // Introduce a human-like response delay before processing
+    const responseDelay = calculateResponseDelay();
+    console.log(`Calculated response delay: ${responseDelay}ms`);
+    await new Promise(resolve => setTimeout(resolve, responseDelay));
 
     const [receiverProfile, senderProfile, context, recentMessages] = await Promise.all([
         getReceiverProfile(supabaseClient, receiverId),

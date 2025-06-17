@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Heart, User, MessageSquare, RefreshCw, Settings } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -21,10 +20,17 @@ const Dashboard = ({ user }: DashboardProps) => {
 
   // Load user chats when component mounts or when switching to chats tab
   useEffect(() => {
-    if (activeTab === 'chats') {
+    if (activeTab === 'chats' && user) {
       loadUserChats();
     }
-  }, [activeTab]);
+  }, [activeTab, user]); // Added user to dependency array
+
+  // Ensure chats are loaded on initial render if the tab is 'chats'
+  useEffect(() => {
+    if (activeTab === 'chats' && user && chats.length === 0) {
+      loadUserChats();
+    }
+  }, [user]); // Only run once on mount if user exists and chats are empty
 
   const handleMatchClick = (match: any) => {
     setSelectedMatch(match);
@@ -185,13 +191,13 @@ const Dashboard = ({ user }: DashboardProps) => {
                     className="card-cosmic p-4 cursor-pointer hover:bg-slate-800/30 transition-all"
                   >
                     <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full flex items-center justify-center">
+                      <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
                         <span className="text-white font-semibold">
                           {chat.other_user?.first_name?.[0] || '?'}
                         </span>
                       </div>
                       
-                      <div className="flex-1">
+                      <div className="flex-1 min-w-0"> {/* Added min-w-0 to ensure truncation works */}
                         <h3 className="text-lg font-semibold text-white">
                           {chat.other_user?.first_name}
                         </h3>
@@ -205,7 +211,7 @@ const Dashboard = ({ user }: DashboardProps) => {
                         </p>
                       </div>
                       
-                      <MessageSquare className="w-5 h-5 text-gray-400" />
+                      <MessageSquare className="w-5 h-5 text-gray-400 flex-shrink-0" />
                     </div>
                   </div>
                 ))}
