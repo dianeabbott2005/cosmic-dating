@@ -11,6 +11,7 @@ const Index = () => {
   const [currentView, setCurrentView] = useState<'welcome' | 'registration' | 'dashboard'>('welcome');
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<Database['public']['Tables']['profiles']['Row'] | null>(null);
+  const [error, setError] = useState<string | null>(null); // New state for error
   const { user: authUser } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -18,24 +19,29 @@ const Index = () => {
   useEffect(() => {
     const initializeView = async () => {
       setLoading(true);
+      setError(null); // Clear previous errors
       
-      if (authUser) {
-        console.log('Auth user found:', authUser.id);
-        // Check if user has completed registration by checking for profile
-        await checkUserProfile();
-      } else {
-        console.log('No auth user');
-        // Check if this is a new signup redirect
-        const isRegistering = searchParams.get('register');
-        if (isRegistering) {
-          console.log('Registration redirect detected');
-          setCurrentView('registration');
+      try {
+        if (authUser) {
+          console.log('Auth user found:', authUser.id);
+          await checkUserProfile();
         } else {
-          setCurrentView('welcome');
+          console.log('No auth user');
+          const isRegistering = searchParams.get('register');
+          if (isRegistering) {
+            console.log('Registration redirect detected');
+            setCurrentView('registration');
+          } else {
+            setCurrentView('welcome');
+          }
         }
+      } catch (err: any) {
+        console.error('Error during view initialization:', err);
+        setError(err.message || 'An unexpected error occurred during initialization.');
+        setCurrentView('welcome'); // Fallback to welcome or an error screen
+      } finally {
+        setLoading(false);
       }
-      
-      setLoading(false);
     };
 
     initializeView();
@@ -47,16 +53,16 @@ const Index = () => {
     try {
       console.log('Checking profile for user:', authUser.id);
       
-      const { data: userProfile, error } = await supabase
+      const { data: userProfile, error: dbError } = await supabase
         .from('profiles')
         .select('*')
         .eq('user_id', authUser.id)
         .maybeSingle();
 
-      console.log('Profile check result:', { profile: userProfile, error });
+      console.log('Profile check result:', { profile: userProfile, error: dbError });
 
-      if (error) {
-        console.error('Error checking profile:', error);
+      if (dbError) {
+        console.error('Error checking profile:', dbError);
         setProfile(null);
         setCurrentView('registration');
         return;
@@ -66,17 +72,16 @@ const Index = () => {
 
       if (userProfile && userProfile.first_name && userProfile.last_name) {
         console.log('Complete profile found, showing dashboard');
-        // Profile exists and is complete, show dashboard
         setCurrentView('dashboard');
       } else {
         console.log('No complete profile found, showing registration');
-        // No profile found or incomplete profile, show registration
         setCurrentView('registration');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error in checkUserProfile catch block:', error);
       setProfile(null);
       setCurrentView('registration');
+      throw error; // Re-throw to be caught by the outer initializeView try-catch
     }
   };
 
@@ -96,7 +101,6 @@ const Index = () => {
 
   const handleBackToWelcome = () => {
     if (authUser) {
-      // If user is logged in, they shouldn't go back to welcome
       setCurrentView('registration');
     } else {
       setCurrentView('welcome');
@@ -107,6 +111,23 @@ const Index = () => {
     return (
       <div className="min-h-screen cosmic-bg flex items-center justify-center">
         <div className="animate-spin w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen cosmic-bg flex items-center justify-center p-4">
+        <div className="card-cosmic text-center p-8">
+          <h2 className="text-xl font-bold text-red-400 mb-4">Error Loading Application</h2>
+          <p className="text-gray-300 mb-6">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="btn-cosmic"
+          >
+            Try Again
+          </button>
+        </div>
       </div>
     );
   }
