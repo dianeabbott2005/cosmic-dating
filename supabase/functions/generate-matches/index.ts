@@ -209,6 +209,8 @@ serve(async (req) => {
 
     console.log('generate-matches (Edge): User profile fetched:', userProfile.first_name);
     const userAge = calculateAge(userProfile.date_of_birth);
+    console.log('generate-matches (Edge): User age:', userAge);
+
 
     // Get potential matches based on mutual preferences
     const { data: potentialProfiles, error: potentialProfilesError } = await supabaseClient
@@ -243,7 +245,7 @@ serve(async (req) => {
       timezone: userProfile.timezone
     };
 
-    const COMPATIBILITY_THRESHOLD = 0.65;
+    const COMPATIBILITY_THRESHOLD = 0.65; // This threshold can be adjusted
     let matchesGeneratedCount = 0;
 
     // Calculate compatibility and filter by mutual age preferences
@@ -255,6 +257,8 @@ serve(async (req) => {
         // Check mutual age preferences
         const userFitsMatchAgeRange = userAge >= matchProfile.min_age && userAge <= matchProfile.max_age;
         const matchFitsUserAgeRange = matchAge >= userProfile.min_age && matchAge <= userProfile.max_age;
+
+        console.log(`generate-matches (Edge): Age compatibility for ${matchProfile.first_name} - User fits match range: ${userFitsMatchAgeRange}, Match fits user range: ${matchFitsUserAgeRange}`);
 
         if (!userFitsMatchAgeRange || !matchFitsUserAgeRange) {
           console.log(`generate-matches (Edge): Age mismatch for ${matchProfile.first_name}. Skipping.`);
