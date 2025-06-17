@@ -6,20 +6,22 @@ import Dashboard from '@/components/Dashboard';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import type { Database } from '@/integrations/supabase/types';
+import { useMatches } from '@/hooks/useMatches'; // Import useMatches
 
 const Index = () => {
   const [currentView, setCurrentView] = useState<'welcome' | 'registration' | 'dashboard'>('welcome');
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<Database['public']['Tables']['profiles']['Row'] | null>(null);
-  const [error, setError] = useState<string | null>(null); // New state for error
+  const [error, setError] = useState<string | null>(null);
   const { user: authUser } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { refreshMatches } = useMatches(); // Get refreshMatches from useMatches
 
   useEffect(() => {
     const initializeView = async () => {
       setLoading(true);
-      setError(null); // Clear previous errors
+      setError(null);
       
       try {
         if (authUser) {
@@ -38,7 +40,7 @@ const Index = () => {
       } catch (err: any) {
         console.error('Error during view initialization:', err);
         setError(err.message || 'An unexpected error occurred during initialization.');
-        setCurrentView('welcome'); // Fallback to welcome or an error screen
+        setCurrentView('welcome');
       } finally {
         setLoading(false);
       }
@@ -73,6 +75,8 @@ const Index = () => {
       if (userProfile && userProfile.first_name && userProfile.last_name) {
         console.log('Complete profile found, showing dashboard');
         setCurrentView('dashboard');
+        // Trigger match generation after a complete profile is found
+        refreshMatches(); 
       } else {
         console.log('No complete profile found, showing registration');
         setCurrentView('registration');
@@ -81,7 +85,7 @@ const Index = () => {
       console.error('Error in checkUserProfile catch block:', error);
       setProfile(null);
       setCurrentView('registration');
-      throw error; // Re-throw to be caught by the outer initializeView try-catch
+      throw error;
     }
   };
 
@@ -97,6 +101,8 @@ const Index = () => {
     console.log('Registration completed:', userData);
     setProfile(userData);
     setCurrentView('dashboard');
+    // Trigger match generation after registration is complete
+    refreshMatches();
   };
 
   const handleBackToWelcome = () => {

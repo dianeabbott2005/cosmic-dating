@@ -43,177 +43,44 @@ export const useMatches = () => {
   const [loading, setLoading] = useState(false);
   const { user } = useAuth();
 
-  const calculateMatches = async () => {
+  // Function to trigger the match generation Edge Function
+  const triggerMatchGeneration = async () => {
     if (!user) {
-      console.log('calculateMatches: No user, returning.');
-      setMatches([]); // Ensure matches are cleared if no user
-      setLoading(false);
+      console.log('triggerMatchGeneration: No user, cannot generate matches.');
       return;
     }
-
     setLoading(true);
-    console.log('calculateMatches: Starting match calculation for user:', user.id);
+    console.log('triggerMatchGeneration: Invoking generate-matches Edge Function for user:', user.id);
     try {
-      // Get current user's profile
-      const { data: userProfile, error: userProfileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('user_id', user.id)
-        .single();
+      const { data, error } = await supabase.functions.invoke('generate-matches', {
+        body: { user_id: user.id }
+      });
 
-      if (userProfileError || !userProfile) {
-        console.error('calculateMatches: Error fetching user profile or profile not found:', userProfileError?.message || 'Profile not found');
-        setLoading(false);
-        setMatches([]);
-        return;
-      }
-
-      console.log('calculateMatches: User profile fetched:', userProfile.first_name);
-      const userAge = calculateAge(userProfile.date_of_birth);
-      console.log('calculateMatches: User age:', userAge);
-
-      // Get potential matches based on mutual preferences
-      const { data: potentialProfiles, error: potentialProfilesError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('gender', userProfile.looking_for) // Match has the gender current user is looking for
-        .eq('looking_for', userProfile.gender) // Match is looking for current user's gender
-        .neq('user_id', user.id)
-        .eq('is_dummy_profile', false); // Exclude dummy profiles from being matched with real users
-
-      if (potentialProfilesError) {
-        console.error('calculateMatches: Error fetching potential profiles:', potentialProfilesError.message);
-        setLoading(false);
-        setMatches([]);
-        return;
-      }
-
-      if (!potentialProfiles || potentialProfiles.length === 0) {
-        console.log('calculateMatches: No potential profiles found matching initial criteria.');
-        setMatches([]);
-        setLoading(false);
-        return;
-      }
-
-      console.log('calculateMatches: Found', potentialProfiles.length, 'potential profiles for detailed check.');
-
-      // Prepare user's birth data for the Edge Function
-      const userBirthData = {
-        dateOfBirth: userProfile.date_of_birth,
-        timeOfBirth: userProfile.time_of_birth,
-        placeOfBirth: userProfile.place_of_birth,
-        latitude: userProfile.latitude,
-        longitude: userProfile.longitude,
-        timezone: userProfile.timezone
-      };
-
-      // Calculate compatibility and filter by mutual age preferences
-      const matchesWithCompatibility = await Promise.all(
-        potentialProfiles.map(async (matchProfile) => {
-          try {
-            const matchAge = calculateAge(matchProfile.date_of_birth);
-            console.log(`calculateMatches: Processing match ${matchProfile.first_name} (ID: ${matchProfile.user_id}), age: ${matchAge}`);
-
-            // Check mutual age preferences
-            const userFitsMatchAgeRange = userAge >= matchProfile.min_age && userAge <= matchProfile.max_age;
-            const matchFitsUserAgeRange = matchAge >= userProfile.min_age && matchAge <= userProfile.max_age;
-
-            console.log(`calculateMatches: Age compatibility for ${matchProfile.first_name} - User fits match range: ${userFitsMatchAgeRange}, Match fits user range: ${matchFitsUserAgeRange}`);
-
-            if (!userFitsMatchAgeRange || !matchFitsUserAgeRange) {
-              console.log(`calculateMatches: Age mismatch for ${matchProfile.first_name}. Skipping.`);
-              return null;
-            }
-
-            // Prepare match's birth data for the Edge Function
-            const matchBirthData = {
-              dateOfBirth: matchProfile.date_of_birth,
-              timeOfBirth: matchProfile.time_of_birth,
-              placeOfBirth: matchProfile.place_of_birth,
-              latitude: matchProfile.latitude,
-              longitude: matchProfile.longitude,
-              timezone: matchProfile.timezone
-            };
-
-            // Call the Supabase Edge Function for compatibility calculation
-            const { data: compatibilityData, error: compatibilityError } = await supabase.functions.invoke('calculate-compatibility', {
-                body: { person1: userBirthData, person2: matchBirthData }
-            });
-
-            if (compatibilityError) {
-                console.error('calculateMatches: Error invoking compatibility function for', matchProfile.first_name, ':', compatibilityError.message);
-                return null; // Skip this match if compatibility calculation fails
-            }
-            
-            const compatibility = compatibilityData.score;
-            console.log(`calculateMatches: Compatibility score for ${matchProfile.first_name}: ${compatibility}`);
-
-            return {
-              ...matchProfile,
-              compatibility_score: compatibility,
-              age: matchAge
-            };
-          } catch (error: any) {
-            console.error('calculateMatches: Error calculating compatibility for match:', matchProfile.user_id, error.message);
-            return null;
-          }
-        })
-      );
-
-      // Filter out null results and apply compatibility score threshold
-      const COMPATIBILITY_THRESHOLD = 0.65; // Set the new threshold here
-      const validMatches = matchesWithCompatibility
-        .filter((match): match is MatchProfile => {
-          const isValid = match !== null && 
-                          typeof match.compatibility_score === 'number' && 
-                          match.compatibility_score >= COMPATIBILITY_THRESHOLD;
-          if (!isValid) {
-            console.log(`calculateMatches: Filtering out match (ID: ${match?.user_id}) due to null/invalid score or score < ${COMPATIBILITY_THRESHOLD}. Score: ${match?.compatibility_score}`);
-          }
-          return isValid;
-        });
-
-      console.log('calculateMatches: Valid matches after all filtering:', validMatches.length, validMatches);
-      setMatches(validMatches);
-
-      // Store bidirectional matches in database using the new function
-      if (validMatches.length > 0) {
-        console.log('calculateMatches: Storing valid matches in database...');
-        for (const match of validMatches) {
-          try {
-            const { error } = await supabase.rpc('create_bidirectional_match', {
-              user1_uuid: user.id,
-              user2_uuid: match.user_id,
-              compatibility_score_val: match.compatibility_score || 0
-            });
-            
-            if (error) {
-              console.error('calculateMatches: Error creating bidirectional match for:', match.user_id, error.message);
-            } else {
-              console.log('calculateMatches: Successfully created bidirectional match for:', match.user_id);
-            }
-          } catch (error: any) {
-            console.error('calculateMatches: Error calling create_bidirectional_match RPC for:', match.user_id, error.message);
-          }
-        }
+      if (error) {
+        console.error('triggerMatchGeneration: Error invoking generate-matches function:', error.message);
+        // Optionally, show a toast notification for the user
       } else {
-        console.log('calculateMatches: No valid matches to store in database.');
+        console.log('triggerMatchGeneration: generate-matches function invoked successfully:', data);
+        // After triggering, refresh the local matches state from the DB
+        await getExistingMatches();
       }
     } catch (error: any) {
-      console.error('calculateMatches: Top-level error calculating matches:', error.message);
+      console.error('triggerMatchGeneration: Unexpected error:', error.message);
     } finally {
       setLoading(false);
-      console.log('calculateMatches: Match calculation finished.');
     }
   };
 
+  // Function to fetch existing matches from the database
   const getExistingMatches = async () => {
     if (!user) {
       console.log('getExistingMatches: No user, returning empty array.');
+      setMatches([]);
+      setLoading(false);
       return [];
     }
 
-    setLoading(true); // Set loading when fetching existing matches
+    setLoading(true);
     try {
       console.log('getExistingMatches: Fetching existing matches for user:', user.id);
       // Get matches where the current user is either the matcher or the matched
@@ -227,11 +94,13 @@ export const useMatches = () => {
 
       if (error) {
         console.error('getExistingMatches: Error fetching existing matches:', error.message);
+        setMatches([]);
         return [];
       }
 
       if (!existingMatches || existingMatches.length === 0) {
         console.log('getExistingMatches: No existing matches found in DB.');
+        setMatches([]);
         return [];
       }
 
@@ -255,44 +124,33 @@ export const useMatches = () => {
       }).filter(Boolean) as MatchProfile[];
 
       console.log('getExistingMatches: Formatted existing matches:', formattedMatches.length, formattedMatches);
+      setMatches(formattedMatches);
       return formattedMatches;
     } catch (error: any) {
       console.error('getExistingMatches: Error getting existing matches:', error.message);
+      setMatches([]);
       return [];
     } finally {
-      setLoading(false); // Reset loading after fetching existing matches
+      setLoading(false);
     }
   };
 
-  // Main effect for loading matches
+  // Initial load of matches when user is available
   useEffect(() => {
-    const loadMatches = async () => {
-      if (!user) {
-        setMatches([]);
-        setLoading(false);
-        return;
-      }
-
-      setLoading(true);
-      const existing = await getExistingMatches();
-      if (existing.length > 0) {
-        console.log('Main useEffect: Found existing matches, setting state.');
-        setMatches(existing);
-      } else {
-        console.log('Main useEffect: No existing matches, calculating new ones.');
-        await calculateMatches(); // This will set matches and loading state
-      }
-    };
-
-    loadMatches();
-  }, [user]); // Rerun when user changes
+    if (user) {
+      getExistingMatches();
+    } else {
+      setMatches([]);
+      setLoading(false);
+    }
+  }, [user]);
 
   // Listen for profile updates to trigger match recalculation
   useEffect(() => {
     if (!user) return;
 
-    const channel = supabase
-      .channel('profile-updates')
+    const profileChannel = supabase
+      .channel('profile-updates-for-matches')
       .on(
         'postgres_changes',
         {
@@ -302,20 +160,39 @@ export const useMatches = () => {
           filter: `user_id=eq.${user.id}`
         },
         (payload) => {
-          console.log('Profile updated, recalculating matches:', payload);
-          calculateMatches();
+          console.log('Profile updated, triggering match generation:', payload);
+          triggerMatchGeneration();
+        }
+      )
+      .subscribe();
+
+    // Listen for new matches being inserted into the 'matches' table
+    const matchesChannel = supabase
+      .channel('new-matches-listener')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'matches',
+          filter: `user_id=eq.${user.id}` // Only listen for matches where current user is user_id
+        },
+        (payload) => {
+          console.log('New match inserted, refreshing existing matches:', payload);
+          getExistingMatches(); // Refresh all matches to include the new one
         }
       )
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(profileChannel);
+      supabase.removeChannel(matchesChannel);
     };
   }, [user]);
 
   return {
     matches,
     loading,
-    refreshMatches: calculateMatches
+    refreshMatches: triggerMatchGeneration // Now calls the Edge Function
   };
 };

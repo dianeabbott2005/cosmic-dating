@@ -3,7 +3,8 @@ import { CheckCircle, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
-import { useGoogleMaps } from '@/hooks/useGoogleMaps'; // Import useGoogleMaps
+import { useGoogleMaps } from '@/hooks/useGoogleMaps';
+import { useMatches } from '@/hooks/useMatches'; // Import useMatches
 
 interface ProfileCompleteProps {
   onNext: (data: any) => void;
@@ -14,7 +15,8 @@ const ProfileComplete = ({ onNext, userData }: ProfileCompleteProps) => {
   const [isCreating, setIsCreating] = useState(false);
   const { toast } = useToast();
   const { user: authUser } = useAuth();
-  const { getTimezone } = useGoogleMaps(); // Use getTimezone from useGoogleMaps
+  const { getTimezone } = useGoogleMaps();
+  const { refreshMatches } = useMatches(); // Get refreshMatches from useMatches
 
   const handleCreateProfile = async () => {
     if (!authUser) {
@@ -29,9 +31,8 @@ const ProfileComplete = ({ onNext, userData }: ProfileCompleteProps) => {
     setIsCreating(true);
     
     try {
-      let { latitude, longitude, timezone } = userData; // Get existing lat/lng/timezone from userData
+      let { latitude, longitude, timezone } = userData;
 
-      // If placeOfBirth is provided but lat/lng are missing, try to geocode first
       if (userData.placeOfBirth && (!latitude || !longitude)) {
         try {
           console.log(`Geocoding place of birth: ${userData.placeOfBirth}`);
@@ -54,7 +55,6 @@ const ProfileComplete = ({ onNext, userData }: ProfileCompleteProps) => {
         }
       }
 
-      // Now, if we have latitude and longitude, fetch the timezone
       if (latitude && longitude) {
         try {
           const timezoneResult = await getTimezone(latitude, longitude);
@@ -82,7 +82,7 @@ const ProfileComplete = ({ onNext, userData }: ProfileCompleteProps) => {
         max_age: userData.maxAge,
         latitude: latitude,
         longitude: longitude,
-        timezone: timezone, // Use the automatically fetched timezone
+        timezone: timezone,
         updated_at: new Date().toISOString(),
       };
 
@@ -104,6 +104,9 @@ const ProfileComplete = ({ onNext, userData }: ProfileCompleteProps) => {
         title: "Profile Created Successfully!",
         description: "Welcome to your cosmic dating journey.",
       });
+
+      // Trigger match generation after profile is successfully created/updated
+      refreshMatches();
 
       // Complete the registration process
       onNext({ success: true });
@@ -167,7 +170,7 @@ const ProfileComplete = ({ onNext, userData }: ProfileCompleteProps) => {
           </div>
           <div className="col-span-2">
             <span className="text-gray-400">Timezone:</span>
-            <p className="text-white">{userData.timezone || 'Automatically determined'}</p> {/* Display timezone or placeholder */}
+            <p className="text-white">{userData.timezone || 'Automatically determined'}</p>
           </div>
           <div>
             <span className="text-gray-400">Age Range:</span>

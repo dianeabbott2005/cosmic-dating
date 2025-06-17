@@ -4,14 +4,16 @@ import { supabase } from '@/integrations/supabase/client';
 import { ArrowLeft, Save } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import PlaceSearch from '@/components/PlaceSearch';
-import { useGoogleMaps } from '@/hooks/useGoogleMaps'; // Import useGoogleMaps
+import { useGoogleMaps } from '@/hooks/useGoogleMaps';
+import { useMatches } from '@/hooks/useMatches'; // Import useMatches
 
 const Profile = () => {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const { getTimezone } = useGoogleMaps(); // Use getTimezone from useGoogleMaps
+  const { getTimezone } = useGoogleMaps();
+  const { refreshMatches } = useMatches(); // Get refreshMatches from useMatches
   const [profile, setProfile] = useState({
     first_name: '',
     last_name: '',
@@ -21,7 +23,7 @@ const Profile = () => {
     place_of_birth: '',
     latitude: null as number | null,
     longitude: null as number | null,
-    timezone: '', // Keep timezone in state to display it
+    timezone: '',
     gender: '',
     looking_for: '',
     min_age: 18,
@@ -57,7 +59,7 @@ const Profile = () => {
           place_of_birth: data.place_of_birth,
           latitude: data.latitude,
           longitude: data.longitude,
-          timezone: data.timezone || '', // Set timezone from data
+          timezone: data.timezone || '',
           gender: data.gender,
           looking_for: data.looking_for,
           min_age: data.min_age,
@@ -89,9 +91,8 @@ const Profile = () => {
       let currentLatitude = profile.latitude;
       let currentLongitude = profile.longitude;
       let currentPlaceOfBirth = profile.place_of_birth;
-      let currentReadonlyTimezone = profile.timezone; // Store the timezone to be updated
+      let currentReadonlyTimezone = profile.timezone;
 
-      // If place of birth changed or timezone is missing, re-fetch timezone
       if (currentPlaceOfBirth && currentLatitude && currentLongitude) {
         try {
           const timezoneResult = await getTimezone(currentLatitude, currentLongitude);
@@ -123,7 +124,7 @@ const Profile = () => {
           place_of_birth: currentPlaceOfBirth,
           latitude: currentLatitude,
           longitude: currentLongitude,
-          timezone: currentReadonlyTimezone, // Use the automatically fetched timezone
+          timezone: currentReadonlyTimezone,
           gender: profile.gender,
           looking_for: profile.looking_for,
           min_age: profile.min_age,
@@ -133,11 +134,11 @@ const Profile = () => {
 
       if (error) throw error;
       
-      // Update local state with the new timezone after successful save
       setProfile(prev => ({ ...prev, timezone: currentReadonlyTimezone }));
 
       console.log('Profile updated successfully with coordinates and timezone');
       alert('Profile updated successfully!');
+      refreshMatches(); // Trigger match generation after profile update
     } catch (error) {
       console.error('Error saving profile:', error);
       alert('Error saving profile. Please try again.');
