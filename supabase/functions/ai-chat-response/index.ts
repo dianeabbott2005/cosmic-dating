@@ -175,8 +175,8 @@ function buildEnhancedPrompt(receiverProfile: any, senderProfile: any, context: 
     // Stronger, overriding instructions for emojis and markdown
     promptInstructions += `\n\nABSOLUTELY CRITICAL: DO NOT use any markdown characters whatsoever, including asterisks (*), underscores (_), hash symbols (#), or backticks (\`). Your response MUST be plain text. This is paramount.`;
     promptInstructions += `\n\nIMPORTANT: Use emojis very sparingly, only when highly relevant to the message's core meaning. Prioritize clear text over emoji expression.`;
-    // Updated instruction for message segmentation
-    promptInstructions += `\n\nYour response should be concise and natural. It can be a single message, or if it makes sense, break it into 1 to 4 shorter, related messages. Vary the length of your messages. If you send multiple messages, separate each with the delimiter: "${MESSAGE_DELIMITER}".`;
+    // Updated instruction for message segmentation and length
+    promptInstructions += `\n\nYour response should be very concise and natural, like a human texting. It can be a single short message, or if it makes sense, break it into 1 to 4 very short, related messages. Vary the length of your messages, but keep them generally brief. If you send multiple messages, separate each with the delimiter: "${MESSAGE_DELIMITER}".`;
 
     // Conversational Strategy
     promptInstructions += `\n\nConsider these conversational "moves" in your response, prioritizing them in order, but adapting to the flow of the conversation:
@@ -224,7 +224,7 @@ async function callGeminiApi(prompt: string): Promise<string> {
             temperature: 0.8,
             topK: 40,
             topP: 0.95,
-            maxOutputTokens: 200, // Reduced token limit for shorter replies
+            maxOutputTokens: 75, // Further reduced token limit for shorter replies
           }
         }),
       }
