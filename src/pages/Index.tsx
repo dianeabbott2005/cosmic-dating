@@ -57,7 +57,11 @@ const Index = () => {
       
       const { data: userProfile, error: dbError } = await supabase
         .from('profiles')
-        .select('*')
+        .select(`
+          created_at, date_of_birth, email, first_name, gender, id, last_name,
+          latitude, longitude, looking_for, max_age, min_age, personality_prompt,
+          place_of_birth, time_of_birth, updated_at, user_id, timezone
+        `) // Explicitly select fields, excluding is_dummy_profile
         .eq('user_id', authUser.id)
         .maybeSingle();
 
