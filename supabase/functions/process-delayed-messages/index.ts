@@ -12,7 +12,7 @@ const corsHeaders = {
  * @returns A delay in milliseconds.
  */
 const calculateTypingDelay = (messageLength: number): number => {
-  const baseDelay = 500; // 0.5 second minimum per message
+  const baseDelay = 1000; // 1 second minimum per message
   const typingSpeed = 250; // characters per minute
   const typingTime = (messageLength / typingSpeed) * 60 * 1000;
   
