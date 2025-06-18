@@ -68,7 +68,7 @@ const CITIES_AND_TIMEZONES = [
   { city: 'Mexico City', country: 'Mexico', lat: 19.4326, lng: -99.1332, timezone: 'America/Mexico_City' },
   { city: 'Guadalajara', country: 'Mexico', lat: 20.6597, lng: -103.3496, timezone: 'America/Mexico_City' },
   { city: 'Cairo', country: 'Egypt', lat: 30.0444, lng: 31.2357, timezone: 'Africa/Cairo' },
-  { city: 'Alexandria', country: 'Egypt', lat: 31.2001, lng: 29.9187, timezone: 'Africa/Cairo' },
+  { city: 'Alexandria', country: 31.2001, lng: 29.9187, timezone: 'Africa/Cairo' },
 ];
 
 const GENDERS = ['male', 'female', 'non-binary'];
@@ -155,6 +155,19 @@ function getSunSign(dateOfBirth: string): string {
   return 'aries'; // Default or error case
 }
 
+function calculateAge(dateOfBirth: string): number {
+  const today = new Date();
+  const birthDate = new Date(dateOfBirth);
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDiff = today.getMonth() - birthDate.getMonth();
+  
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+  
+  return age;
+}
+
 function generatePersonalityPrompt(profile: any): string {
   const disposition = getRandomElement(PERSONALITY_TRAITS.find(t => t.type === 'disposition')!.values);
   const patience = getRandomElement(PERSONALITY_TRAITS.find(t => t.type === 'patience')!.values);
@@ -163,8 +176,9 @@ function generatePersonalityPrompt(profile: any): string {
   const datingApproach = getRandomElement(PERSONALITY_TRAITS.find(t => t.type === 'dating_approach')!.values);
   const appDiscovery = getRandomElement(APP_DISCOVERY_METHODS);
   const sunSign = getSunSign(profile.date_of_birth);
+  const age = calculateAge(profile.date_of_birth); // Calculate age here
 
-  let prompt = `You are ${profile.first_name}, a ${profile.gender} from ${profile.place_of_birth} who works as a ${profile.profession}. Your sun sign is ${sunSign}.`;
+  let prompt = `You are ${profile.first_name}, a ${age}-year-old ${profile.gender} from ${profile.place_of_birth} who works as a ${profile.profession}. Your sun sign is ${sunSign}.`;
   
   prompt += ` You are generally ${disposition} and ${patience}. You can sometimes be ${flaw}. In your free time, you ${interest}. On dating apps, you ${datingApproach}.`;
   prompt += ` You found this dating platform on ${appDiscovery} and are excited about its promise to find matches based on birth chart compatibility.`;
