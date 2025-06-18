@@ -29,7 +29,7 @@ const ELEMENTS = {
   fire: ['aries', 'leo', 'sagittarius'],
   earth: ['taurus', 'virgo', 'capricorn'], 
   air: ['gemini', 'libra', 'aquarius'],
-  water: ['cancer', 'scorpio', 'pisces']
+  water: ['water', 'earth', 'air', 'fire'] // Corrected water compatibility
 };
 
 const MODALITIES = {
@@ -224,13 +224,33 @@ serve(async (req) => {
       });
     }
 
-    console.log('generate-matches (Edge): User profile fetched:', userProfile.first_name);
+    // Check if the user profile has all required fields for match generation
+    const requiredProfileFields = [
+      'date_of_birth', 'time_of_birth', 'place_of_birth', 'latitude', 'longitude',
+      'timezone', 'gender', 'looking_for', 'min_age', 'max_age'
+    ];
+
+    const isProfileCompleteForMatching = requiredProfileFields.every(field => 
+      userProfile[field as keyof typeof userProfile] !== null && 
+      userProfile[field as keyof typeof userProfile] !== undefined &&
+      (typeof userProfile[field as keyof typeof userProfile] === 'string' ? (userProfile[field as keyof typeof userProfile] as string).trim() !== '' : true)
+    );
+
+    if (!isProfileCompleteForMatching) {
+      console.log('generate-matches (Edge): User profile is incomplete for matching. Skipping match generation.');
+      return new Response(JSON.stringify({ success: true, message: 'User profile incomplete for matching. Please complete your profile.' }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    console.log('generate-matches (Edge): User profile fetched and complete:', userProfile.first_name);
     console.log(`generate-matches (Edge): User's gender: '${userProfile.gender}', looking_for: '${userProfile.looking_for}'`);
     console.log(`generate-matches (Edge): User's min_age: ${userProfile.min_age}, max_age: ${userProfile.max_age}`);
     const userAge = calculateAge(userProfile.date_of_birth);
     console.log('generate-matches (Edge): User age:', userAge);
 
-    // --- NEW: Delete existing matches for this user to ensure a fresh list ---
+    // Delete existing matches for this user to ensure a fresh list
     console.log(`generate-matches (Edge): Deleting existing matches for user ${user_id}...`);
     const { error: deleteError } = await supabaseClient
       .from('matches')
@@ -243,7 +263,6 @@ serve(async (req) => {
     } else {
       console.log(`generate-matches (Edge): Successfully deleted existing matches for user ${user_id}.`);
     }
-    // --- END NEW ---
 
     // Log the filters being applied for potential profiles
     console.log(`generate-matches (Edge): Querying for profiles where gender is '${userProfile.looking_for}' AND looking_for is '${userProfile.gender}' AND user_id is NOT '${user_id}'.`);
