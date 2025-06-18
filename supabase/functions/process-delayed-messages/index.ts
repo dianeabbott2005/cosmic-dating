@@ -6,7 +6,22 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Removed calculateTypingDelay as delays are now fully managed by ai-chat-response
+/**
+ * Calculates a human-like typing delay for a message.
+ * @param messageLength The length of the message to be "typed".
+ * @returns A delay in milliseconds.
+ */
+const calculateTypingDelay = (messageLength: number): number => {
+  const baseDelay = 1000; // 1 second minimum per message
+  const typingSpeed = Math.floor(Math.random() * (180 - 60 + 1)) + 60; // characters per minute (random between 60-180)
+  
+  const typingTime = (messageLength / typingSpeed) * 60 * 1000;
+  
+  let randomVariation = Math.random() * 500; // Up to 0.5 seconds random variation
+  
+  const totalDelay = baseDelay + typingTime + randomVariation;
+  return Math.min(totalDelay, 5000); // Cap at 5 seconds to prevent excessive delays within the cron job
+};
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -48,7 +63,11 @@ serve(async (req) => {
     // 2. Send each message and update its status
     for (const msg of delayedMessages) {
       try {
-        // No additional delay here; the scheduled_send_time already accounts for all delays
+        // Introduce a typing delay before sending each message
+        const delay = calculateTypingDelay(msg.content.length);
+        console.log(`Delaying message ${msg.id} by ${delay}ms for typing simulation.`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+
         const { error: insertError } = await supabaseClient
           .from('messages')
           .insert({
@@ -66,10 +85,22 @@ serve(async (req) => {
             .eq('id', msg.id);
         } else {
           console.log(`Successfully sent delayed message ${msg.id}`);
-          await supabaseClient
+          // Update status to 'sent' and then delete the record
+          const { error: updateAndDeleteError } = await supabaseClient
             .from('delayed_messages')
-            .update({ status: 'sent', sent_at: new Date().toISOString() })
+            .delete()
             .eq('id', msg.id);
+
+          if (updateAndDeleteError) {
+            console.error(`Failed to delete sent delayed message ${msg.id}:`, updateAndDeleteError);
+            // If deletion fails, at least mark as sent to avoid re-processing
+            await supabaseClient
+              .from('delayed_messages')
+              .update({ status: 'sent', sent_at: new Date().toISOString() })
+              .eq('id', msg.id);
+          } else {
+            console.log(`Successfully deleted sent delayed message ${msg.id}`);
+          }
         }
       } catch (processError) {
         console.error(`Unexpected error processing message ${msg.id}:`, processError);
