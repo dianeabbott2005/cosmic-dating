@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -23,12 +23,18 @@ export interface Chat {
   last_message?: Message;
 }
 
+const AI_RESPONSE_DEBOUNCE_TIME = 8000; // 8 seconds
+
 export const useChat = (matchId?: string) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [chat, setChat] = useState<Chat | null>(null);
   const [chats, setChats] = useState<Chat[]>([]);
   const [loading, setLoading] = useState(false);
   const { user } = useAuth();
+
+  // Refs for debounce logic
+  const aiResponseTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastUserMessageContentRef = useRef<string | null>(null);
 
   // Check if a user is an AI (dummy profile)
   const isAIUser = async (userId: string): Promise<boolean> => {
@@ -45,26 +51,27 @@ export const useChat = (matchId?: string) => {
     }
   };
 
-  // Trigger AI response
+  // Trigger AI response (now called after debounce)
   const triggerAIResponse = async (chatId: string, userMessage: string, receiverId: string) => {
     try {
+      console.log(`useChat: Triggering AI response for chat ${chatId} with last user message: "${userMessage}"`);
       const { data, error } = await supabase.functions.invoke('ai-chat-response', {
         body: {
           chatId,
           senderId: user?.id,
-          message: userMessage,
+          message: userMessage, // This is the last message from the user's burst
           receiverId
         }
       });
 
       if (error) {
-        console.error('Error triggering AI response:', error);
+        console.error('useChat: Error triggering AI response:', error);
         return;
       }
 
-      console.log('AI response triggered successfully:', data);
+      console.log('useChat: AI response triggered successfully:', data);
     } catch (error) {
-      console.error('Error calling AI function:', error);
+      console.error('useChat: Error calling AI function:', error);
     }
   };
 
@@ -221,13 +228,27 @@ export const useChat = (matchId?: string) => {
       if (data) {
         setMessages(prev => [...prev, data]);
 
-        // Check if the other user is AI and trigger response
+        // Check if the other user is AI and debounce the AI response
         const otherUserId = chat.user1_id === user.id ? chat.user2_id : chat.user1_id;
         const isAI = await isAIUser(otherUserId);
         
         if (isAI) {
-          // No manual delay - the AI function now handles realistic typing delays
-          triggerAIResponse(chat.id, content.trim(), otherUserId);
+          // Store the content of the last message sent by the user
+          lastUserMessageContentRef.current = content.trim();
+
+          // Clear any existing timer
+          if (aiResponseTimerRef.current) {
+            clearTimeout(aiResponseTimerRef.current);
+          }
+
+          // Set a new timer
+          aiResponseTimerRef.current = setTimeout(() => {
+            if (lastUserMessageContentRef.current) {
+              console.log(`useChat: Debounce timer finished. Triggering AI response for last message: "${lastUserMessageContentRef.current}"`);
+              triggerAIResponse(chat.id, lastUserMessageContentRef.current, otherUserId);
+              lastUserMessageContentRef.current = null; // Clear the ref after triggering
+            }
+          }, AI_RESPONSE_DEBOUNCE_TIME);
         }
       }
     } catch (error) {
@@ -235,12 +256,12 @@ export const useChat = (matchId?: string) => {
     }
   };
 
-  // --- NEW: Load chats when user is available ---
+  // Load chats when user is available
   useEffect(() => {
     if (user) {
       loadUserChats();
     }
-  }, [user]); // Dependency on 'user' ensures it runs when user state changes (e.g., on login/refresh)
+  }, [user]);
 
   // Set up real-time subscription
   useEffect(() => {
@@ -291,6 +312,12 @@ export const useChat = (matchId?: string) => {
     return () => {
       console.log(`useChat: Cleaning up subscription for chat-${chat.id}. Removing channel.`);
       supabase.removeChannel(channel);
+      // Clear any pending AI response timer when unmounting or changing chat
+      if (aiResponseTimerRef.current) {
+        clearTimeout(aiResponseTimerRef.current);
+        aiResponseTimerRef.current = null;
+      }
+      lastUserMessageContentRef.current = null;
     };
   }, [chat, user?.id]); // Dependencies: chat and user.id
 
