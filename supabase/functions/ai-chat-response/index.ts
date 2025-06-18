@@ -331,6 +331,8 @@ serve(async (req) => {
     let fullAiResponse = await callGeminiApi(enhancedPrompt);
     // Post-process: Remove any asterisks from the response
     fullAiResponse = fullAiResponse.replace(/\*/g, '');
+    // NEW: Remove the MESSAGE_DELIMITER from the full response before splitting
+    fullAiResponse = fullAiResponse.replace(new RegExp(MESSAGE_DELIMITER, 'g'), '');
     console.log('Full AI response received (post-processed):', fullAiResponse);
 
     const individualMessages = fullAiResponse.split(MESSAGE_DELIMITER)
