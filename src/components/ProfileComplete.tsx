@@ -111,8 +111,8 @@ const ProfileComplete = ({ onNext, userData }: ProfileCompleteProps) => {
       // Trigger match generation after profile is successfully created/updated
       refreshMatches();
 
-      // Complete the registration process
-      onNext({ success: true });
+      // Complete the registration process by passing the full profile data
+      onNext(profileData);
 
     } catch (error: any) {
       console.error('Error updating profile:', error);
