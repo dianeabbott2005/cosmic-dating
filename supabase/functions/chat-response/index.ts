@@ -230,7 +230,7 @@ async function callAiApi(prompt: string): Promise<string> {
             temperature: 0.8,
             topK: 40,
             topP: 0.95,
-            maxOutputTokens: 50, // Further reduced token limit for shorter replies
+            maxOutputTokens: 150, // Increased token limit for more complete messages
           }
         }),
       }
@@ -247,7 +247,7 @@ async function callAiApi(prompt: string): Promise<string> {
  * Helper function to introduce random typos into a string.
  * Applies typos with a certain probability per word.
  */
-function introduceTypos(text: string, typoProbabilityPerWord: number = 0.15): string {
+function introduceTypos(text: string, typoProbabilityPerWord: number = 0.03): string { // Reduced typo probability
   const words = text.split(' ');
   const typedWords = words.map(word => {
     // Skip very short words or if random chance doesn't hit
@@ -370,20 +370,23 @@ serve(async (req) => {
     // --- START Enhanced Post-processing ---
     // 1. Remove all common markdown characters
     fullAiResponse = fullAiResponse.replace(/[\*_`#]/g, ''); 
-    // 2. Introduce typos
+    
+    // 2. Introduce typos (with reduced probability)
     fullAiResponse = introduceTypos(fullAiResponse);
 
-    // 3. Split by delimiter and clean each part
+    // 3. Remove the exact delimiter from the full response before splitting,
+    //    in case the AI accidentally included it in a non-splitting context.
+    const exactDelimiterRegex = new RegExp(MESSAGE_DELIMITER.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'g');
+    fullAiResponse = fullAiResponse.replace(exactDelimiterRegex, '').trim();
+
+    // 4. Split by delimiter
     const individualMessages = fullAiResponse.split(MESSAGE_DELIMITER)
                                              .map(msg => msg.trim())
                                              .filter(msg => msg.length > 0)
                                              .map(msg => {
-                                                // Remove any occurrence of the delimiter string itself from the message content
-                                                // This regex escapes special characters in MESSAGE_DELIMITER
-                                                const delimiterRegex = new RegExp(MESSAGE_DELIMITER.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'g');
-                                                let cleanedMsg = msg.replace(delimiterRegex, '').trim();
-                                                // Also remove any partials like "---DYAD" or "MESSAGE_BREAK" if they appear
-                                                cleanedMsg = cleanedMsg.replace(/---DYAD/g, '').replace(/_MESSAGE_BREAK---/g, '').trim();
+                                                // 5. Apply a more general cleanup for any remaining delimiter-like partials
+                                                //    This regex targets common variations like "MESSAGEBREAK", "DYAD", "BREAK"
+                                                let cleanedMsg = msg.replace(/DYAD_?MESSAGE_?BREAK|MESSAGEBREAK|---?DYAD|MESSAGE_?BREAK---?/gi, '').trim();
                                                 return cleanedMsg;
                                              });
     // --- END Enhanced Post-processing ---
