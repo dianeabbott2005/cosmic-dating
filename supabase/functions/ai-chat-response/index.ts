@@ -33,7 +33,7 @@ const IMMEDIATE_SEND_THRESHOLD_MS = 50 * 1000; // 50 seconds
  */
 const calculateTypingDelay = (messageLength: number): number => {
   const baseDelay = 500; // 0.5 second minimum per message
-  const typingSpeed = 250; // characters per minute
+  const typingSpeed = Math.floor(Math.random() * (180 - 60 + 1)) + 60; // characters per minute (random between 60-180)
   const typingTime = (messageLength / typingSpeed) * 60 * 1000;
   
   let randomVariation = Math.random() * 500; // Up to 0.5 seconds random variation
