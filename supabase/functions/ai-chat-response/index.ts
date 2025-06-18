@@ -22,12 +22,6 @@ const NON_NATIVE_ENGLISH_REGIONS: { [key: string]: { languageIssue: string; dial
   'UAE': { languageIssue: 'formal yet friendly, occasional Arabic loanwords', dialect: 'common Arabic expressions (e.g., "mashallah", "khalas")' },
 };
 
-const EMOJI_STYLES: { [key: string]: { [key: string]: string } } = {
-  'young': { female: 'many, trendy, cute', male: 'moderate, cool, casual', 'non-binary': 'varied, expressive' },
-  'middle': { female: 'moderate, warm, friendly', male: 'few, direct, thoughtful', 'non-binary': 'moderate, balanced' },
-  'older': { female: 'few, classic, gentle', male: 'very few, formal', 'non-binary': 'few, subtle' },
-};
-
 // Define a threshold for immediate vs. delayed sending
 const IMMEDIATE_SEND_THRESHOLD_MS = 15 * 1000; // 15 seconds
 
@@ -179,12 +173,31 @@ function buildEnhancedPrompt(receiverProfile: any, senderProfile: any, context: 
     promptInstructions += `\n\nThis is a new dating platform focused on astrological compatibility. You discovered it through either Reddit or X (formerly Twitter). Your goal is to get to know the user better in a romantic context, as you would on a dating app. Keep the conversation engaging and flirty if appropriate, but always respectful.`;
 
     // Stronger, overriding instructions for emojis and markdown
-    promptInstructions += `\n\nABSOLUTELY CRITICAL: DO NOT use any markdown characters whatsoever, including asterisks (*), underscores (_), hash symbols (#), or backticks (\`). Your response MUST be plain text.`;
+    promptInstructions += `\n\nABSOLUTELY CRITICAL: DO NOT use any markdown characters whatsoever, including asterisks (*), underscores (_), hash symbols (#), or backticks (\`). Your response MUST be plain text. This is paramount.`;
     promptInstructions += `\n\nIMPORTANT: Use emojis very sparingly, only when highly relevant to the message's core meaning. Prioritize clear text over emoji expression.`;
     // Updated instruction for message segmentation
-    promptInstructions += `\n\nYour response should be natural and conversational. It can be a single message, or if it makes sense to break it up, it can be 2 to 4 shorter, related messages. If you break it into multiple messages, separate each message with the delimiter: "${MESSAGE_DELIMITER}".`;
+    promptInstructions += `\n\nYour response should be concise and natural. It can be a single message, or if it makes sense, break it into 1 to 4 shorter, related messages. Vary the length of your messages. If you send multiple messages, separate each with the delimiter: "${MESSAGE_DELIMITER}".`;
 
-    promptInstructions += `\n\n${senderProfile?.first_name || 'The user'} just sent: ${message}\n\nNow, respond as ${receiverProfile.first_name}:`;
+    // Conversational Strategy
+    promptInstructions += `\n\nConsider these conversational "moves" in your response, prioritizing them in order, but adapting to the flow of the conversation:
+-   **Discourse Initiation (DI):** Open with a friendly greeting ("Hi!", "Hey there!").
+-   **Question-Answer (QAR):** Exchange information with wh-questions or yes/no questions ("Where are you from?", "I live in Ibadan.").
+-   **Declaration of Dating Intention (DDI):** Gently check relationship goals or suggest meeting ("Are you single?", "Would you like to meet up?").
+-   **Topic Formation (TF):** Sustain small talk to keep the conversation flowing ("How was your day?", "Any favorite movies?").
+
+Optionally, you can also insert these between moves if natural:
+-   **Introduction (INTR):** Briefly self-present ("I’m Joshua, a graphic designer.").
+-   **Admiration (AD):** Offer a quick, genuine compliment ("You look great!").
+
+Adjust your style based on your gender:
+-   If you are male: Lean towards more self-introductions and subtle dating-intention checks.
+-   If you are female: Lean towards more small talk and compliments.
+
+Maintain a casual and friendly formality level. Pace the conversation naturally, sometimes repeating QAR or TF to deepen rapport.
+
+${senderProfile?.first_name || 'The user'} just sent: ${message}
+
+Now, respond as ${receiverProfile.first_name}:`;
     
     return promptInstructions;
 }
@@ -204,7 +217,7 @@ async function callGeminiApi(prompt: string): Promise<string> {
             temperature: 0.8,
             topK: 40,
             topP: 0.95,
-            maxOutputTokens: 300, // Increased token limit for multiple messages
+            maxOutputTokens: 200, // Reduced token limit for shorter replies
           }
         }),
       }
