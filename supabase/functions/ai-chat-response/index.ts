@@ -23,8 +23,6 @@ const NON_NATIVE_ENGLISH_REGIONS: { [key: string]: { languageIssue: string; dial
 };
 
 // Define a threshold for immediate vs. delayed sending
-// Increased to allow more multi-part responses to be sent directly with setTimeout
-// This ensures staggering for most common AI replies within the Edge Function's timeout limit (60s)
 const IMMEDIATE_SEND_THRESHOLD_MS = 50 * 1000; // 50 seconds
 
 /**
@@ -196,6 +194,13 @@ Adjust your style based on your gender:
 -   If you are female: Lean towards more small talk and compliments.
 
 Maintain a casual and friendly formality level. Pace the conversation naturally, sometimes repeating QAR or TF to deepen rapport.
+
+Now, for the most crucial part: **Sentiment and Engagement.**
+Analyze the sentiment of the user's last message and the overall tone of the recent conversation.
+
+-   **If the sentiment is positive or neutral:** Continue the conversation as described above, maintaining an engaging and friendly tone.
+-   **If the sentiment is slightly negative, critical, or challenging:** Respond cautiously. You might ask for clarification, acknowledge their feeling without necessarily agreeing, or gently try to steer the conversation to a more neutral topic. Do NOT be overly accommodating or apologetic if it's not warranted. Your goal is to maintain a realistic human interaction, which includes not always being "nice" if the other person is being difficult.
+-   **If the sentiment is strongly negative, hostile, or abusive:** Respond briefly and firmly. State that you are not comfortable with the tone and will not engage further if it continues. Do NOT engage in arguments or reciprocate negativity. Prioritize your well-being and the platform's safety guidelines. Your response should aim to de-escalate or politely end the interaction if the negative tone persists.
 
 ${senderProfile?.first_name || 'The user'} just sent: ${message}
 
