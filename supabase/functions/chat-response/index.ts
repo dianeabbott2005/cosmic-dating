@@ -370,12 +370,18 @@ serve(async (req) => {
     fullAiResponse = fullAiResponse.replace(/\*/g, '');
     // Introduce typos
     fullAiResponse = introduceTypos(fullAiResponse);
-    // Removed the incorrect line that was removing the delimiter before splitting
 
+    // Ensure the delimiter itself and the problematic fragment are not part of the message content after splitting
     const individualMessages = fullAiResponse.split(MESSAGE_DELIMITER)
                                              .map(msg => msg.trim())
                                              .filter(msg => msg.length > 0)
-                                             .map(msg => msg.replace(/---DYAD/g, '').trim()); // New cleanup step for partial delimiter
+                                             .map(msg => {
+                                                // Remove the full delimiter if it somehow ended up in a message part
+                                                let cleanedMsg = msg.replace(new RegExp(MESSAGE_DELIMITER.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'g'), '').trim();
+                                                // Also remove the specific problematic fragment reported by the user
+                                                cleanedMsg = cleanedMsg.replace(/_MESSGE_BREAK---/g, '').trim();
+                                                return cleanedMsg;
+                                             });
 
     // If the total delay (initial response delay + sum of typing delays + sum of inter-message gaps) is too long, schedule it
     const totalTypingDelay = individualMessages.reduce((sum, msg) => sum + calculateTypingDelay(msg.length), 0);
