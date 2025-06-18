@@ -34,7 +34,7 @@ export const useChat = (matchId?: string) => {
   const { user } = useAuth();
 
   // Refs for debounce logic and Realtime Channel instance
-  const automatedResponseTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const responseTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastUserMessageContentRef = useRef<string | null>(null);
   const realtimeChannelRef = useRef<RealtimeChannel | null>(null); // Ref to store the channel instance
 
@@ -55,7 +55,7 @@ export const useChat = (matchId?: string) => {
   };
 
   // Trigger automated response
-  const triggerAutomatedResponse = async (chatId: string, userMessage: string, receiverId: string) => {
+  const triggerResponse = async (chatId: string, userMessage: string, receiverId: string) => {
     try {
       const { data, error } = await supabase.functions.invoke('chat-response', {
         body: {
@@ -67,7 +67,7 @@ export const useChat = (matchId?: string) => {
       });
 
       if (error) {
-        console.error('Error triggering automated response:', error);
+        console.error('Error triggering response:', error);
         return;
       }
 
@@ -241,14 +241,14 @@ export const useChat = (matchId?: string) => {
           lastUserMessageContentRef.current = content.trim();
 
           // Clear any existing timer
-          if (automatedResponseTimerRef.current) {
-            clearTimeout(automatedResponseTimerRef.current);
+          if (responseTimerRef.current) {
+            clearTimeout(responseTimerRef.current);
           }
 
           // Set a new timer
-          automatedResponseTimerRef.current = setTimeout(() => {
+          responseTimerRef.current = setTimeout(() => {
             if (lastUserMessageContentRef.current) {
-              triggerAutomatedResponse(chat.id, lastUserMessageContentRef.current, otherUserId);
+              triggerResponse(chat.id, lastUserMessageContentRef.current, otherUserId);
               lastUserMessageContentRef.current = null; // Clear the ref after triggering
             }
           }, AUTOMATED_RESPONSE_DEBOUNCE_TIME);
@@ -278,9 +278,9 @@ export const useChat = (matchId?: string) => {
         supabase.removeChannel(realtimeChannelRef.current);
         realtimeChannelRef.current = null;
       }
-      if (automatedResponseTimerRef.current) {
-        clearTimeout(automatedResponseTimerRef.current);
-        automatedResponseTimerRef.current = null;
+      if (responseTimerRef.current) {
+        clearTimeout(responseTimerRef.current);
+        responseTimerRef.current = null;
       }
       lastUserMessageContentRef.current = null;
     };
