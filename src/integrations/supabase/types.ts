@@ -157,7 +157,7 @@ export type Database = {
           first_name: string
           gender: string
           id: string
-          is_dummy_profile: boolean | null
+          is_active: boolean | null // Changed from is_dummy_profile
           last_name: string
           latitude: number | null
           longitude: number | null
@@ -178,7 +178,7 @@ export type Database = {
           first_name: string
           gender: string
           id?: string
-          is_dummy_profile?: boolean | null
+          is_active?: boolean | null // Changed from is_dummy_profile
           last_name: string
           latitude?: number | null
           longitude?: number | null
@@ -199,7 +199,7 @@ export type Database = {
           first_name?: string
           gender?: string
           id?: string
-          is_dummy_profile?: boolean | null
+          is_active?: boolean | null // Changed from is_dummy_profile
           last_name?: string
           latitude?: number | null
           longitude?: number | null
@@ -251,8 +251,8 @@ export type Tables<
         Database[DefaultTableNameOrOptions["schema"]]["Views"])
     : never = never,
 > = DefaultSchemaTableNameOrOptions extends { schema: keyof Database }
-  ? (Database[DefaultTableNameOrOptions["schema"]]["Tables"] &
-      Database[DefaultTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+  ? (Database[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      Database[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
       Row: infer R
     }
     ? R

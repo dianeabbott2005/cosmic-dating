@@ -59,8 +59,8 @@ const Index = () => {
         .select(`
           created_at, date_of_birth, email, first_name, gender, id, last_name,
           latitude, longitude, looking_for, max_age, min_age, personality_prompt,
-          place_of_birth, time_of_birth, updated_at, user_id, timezone
-        `) // Explicitly select fields, excluding is_dummy_profile
+          place_of_birth, time_of_birth, updated_at, user_id, timezone, is_active
+        `) // Explicitly select fields, including is_active
         .eq('user_id', authUser.id)
         .maybeSingle();
 
@@ -80,7 +80,8 @@ const Index = () => {
         'first_name', 'last_name', 'email', 'date_of_birth', 'time_of_birth',
         'place_of_birth', 'latitude', 'longitude', 'gender',
         'looking_for', 'min_age', 'max_age'
-        // Removed 'timezone' from requiredFields as it can be null in DB
+        // 'is_active' is not a required field for *completeness* of a human profile,
+        // but rather a flag for automated profiles.
       ];
 
       // Check if all required fields are present and not null/empty

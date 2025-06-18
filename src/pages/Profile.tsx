@@ -23,11 +23,12 @@ const Profile = () => {
     place_of_birth: '',
     latitude: null as number | null,
     longitude: null as number | null,
-    timezone: null as string | null, // Changed to null
+    timezone: null as string | null,
     gender: '',
     looking_for: '',
     min_age: 18,
-    max_age: 35
+    max_age: 35,
+    is_active: true, // Default to true for human profiles
   });
 
   useEffect(() => {
@@ -46,8 +47,8 @@ const Profile = () => {
         .select(`
           created_at, date_of_birth, email, first_name, gender, id, last_name,
           latitude, longitude, looking_for, max_age, min_age, personality_prompt,
-          place_of_birth, time_of_birth, updated_at, user_id, timezone
-        `) // Explicitly select fields, excluding is_dummy_profile
+          place_of_birth, time_of_birth, updated_at, user_id, timezone, is_active
+        `) // Explicitly select fields, including is_active
         .eq('user_id', user.id)
         .single();
 
@@ -63,11 +64,12 @@ const Profile = () => {
           place_of_birth: data.place_of_birth,
           latitude: data.latitude,
           longitude: data.longitude,
-          timezone: data.timezone, // Now directly use data.timezone (can be null)
+          timezone: data.timezone,
           gender: data.gender,
           looking_for: data.looking_for,
           min_age: data.min_age,
-          max_age: data.max_age
+          max_age: data.max_age,
+          is_active: data.is_active ?? true, // Use existing value or default to true
         });
       }
     } catch (error) {
@@ -134,7 +136,8 @@ const Profile = () => {
           gender: profile.gender,
           looking_for: profile.looking_for,
           min_age: profile.min_age,
-          max_age: profile.max_age
+          max_age: profile.max_age,
+          is_active: profile.is_active, // Include is_active in update
         })
         .eq('user_id', user.id);
 
