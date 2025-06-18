@@ -118,10 +118,16 @@ function generateRandomTimeOfBirth(): string {
   return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
 }
 
+// Updated to sanitize names for email addresses
 function generateRandomEmail(firstName: string, lastName: string): string {
   const domain = getRandomElement(['example.com', 'mail.com', 'web.net', 'inbox.org']);
   const uniqueId = Math.random().toString(36).substring(2, 8);
-  return `${firstName.toLowerCase()}.${lastName.toLowerCase()}${uniqueId}@${domain}`;
+
+  // Sanitize names: remove accents and non-alphanumeric characters
+  const sanitizedFirstName = firstName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]/g, "");
+  const sanitizedLastName = lastName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]/g, "");
+
+  return `${sanitizedFirstName.toLowerCase()}.${sanitizedLastName.toLowerCase()}${uniqueId}@${domain}`;
 }
 
 function generateRandomPassword(): string {
@@ -207,44 +213,10 @@ serve(async (req) => {
         const minAge = Math.max(18, Math.floor(Math.random() * 20) + 20); // 20-40
         const maxAge = Math.min(99, minAge + Math.floor(Math.random() * 15) + 5); // minAge + 5-20
 
-        // 1. Create user in auth.users
-        const { data: authUserData, error: authError } = await supabaseClient.auth.admin.createUser({
-          email: email,
-          password: password,
-          email_confirm: true, // Auto-confirm for dummy users
-          user_metadata: {
-            first_name: firstName,
-            last_name: lastName,
-            gender: gender,
-            place_of_birth: cityData.city,
-            date_of_birth: dateOfBirth,
-            time_of_birth: timeOfBirth,
-            latitude: cityData.lat,
-            longitude: cityData.lng,
-            timezone: cityData.timezone,
-            looking_for: lookingFor,
-            min_age: minAge,
-            max_age: maxAge,
-            profession: profession,
-          }
-        });
-
-        if (authError) {
-          console.error(`Error creating auth user ${email}:`, authError.message);
-          errors.push(`Auth user creation failed for ${email}: ${authError.message}`);
-          continue; // Skip to next profile
-        }
-
-        const userId = authUserData.user.id;
-        console.log(`Created auth user: ${userId} (${email})`);
-
-        // 2. Prepare profile data
-        const profileData = {
-          id: userId, // Link to auth.users.id
-          user_id: userId, // Also set user_id to the same UUID
+        // Prepare profile data to be passed as user_metadata
+        const profileMetadata = {
           first_name: firstName,
           last_name: lastName,
-          email: email,
           date_of_birth: dateOfBirth,
           time_of_birth: timeOfBirth,
           place_of_birth: cityData.city,
@@ -256,32 +228,34 @@ serve(async (req) => {
           min_age: minAge,
           max_age: maxAge,
           is_active: true, // Mark as automated profile
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          // Temporarily add profession here for prompt generation, will be removed from final insert if not in schema
-          profession: profession,
+          profession: profession, // Temporarily here for prompt generation
         };
 
-        // 3. Generate personality prompt
-        const personalityPrompt = generatePersonalityPrompt(profileData);
+        // Generate personality prompt using the full profileMetadata
+        const personalityPrompt = generatePersonalityPrompt(profileMetadata);
         
-        // Remove profession from profileData if it's not a direct column in your profiles table
-        const { profession: _, ...insertableProfileData } = profileData;
+        // Add personality_prompt to metadata for the SQL trigger
+        const finalUserMetadata = {
+          ...profileMetadata,
+          personality_prompt: personalityPrompt,
+        };
 
-        // 4. Insert into public.profiles
-        const { error: profileInsertError } = await supabaseClient
-          .from('profiles')
-          .insert({ ...insertableProfileData, personality_prompt: personalityPrompt });
+        // 1. Create user in auth.users (this will trigger handle_new_user to create the profile)
+        const { data: authUserData, error: authError } = await supabaseClient.auth.admin.createUser({
+          email: email,
+          password: password,
+          email_confirm: true, // Auto-confirm for dummy users
+          user_metadata: finalUserMetadata
+        });
 
-        if (profileInsertError) {
-          console.error(`Error inserting profile for user ${userId}:`, profileInsertError.message);
-          errors.push(`Profile insertion failed for ${userId}: ${profileInsertError.message}`);
-          // Optionally, delete the auth user if profile insertion fails
-          await supabaseClient.auth.admin.deleteUser(userId);
-          continue;
+        if (authError) {
+          console.error(`Error creating auth user ${email}:`, authError.message);
+          errors.push(`Auth user creation failed for ${email}: ${authError.message}`);
+          continue; // Skip to next profile
         }
 
-        console.log(`Successfully created profile for user: ${userId} (${firstName} ${lastName})`);
+        const userId = authUserData.user.id;
+        console.log(`Created auth user: ${userId} (${email}). Profile will be created by trigger.`);
         createdCount++;
 
       } catch (profileError: any) {
