@@ -72,13 +72,31 @@ const Index = () => {
       
       setProfile(userProfile);
 
-      if (userProfile && userProfile.first_name && userProfile.last_name) {
+      // Define all required fields for a complete profile
+      const requiredFields = [
+        'first_name', 'last_name', 'email', 'date_of_birth', 'time_of_birth',
+        'place_of_birth', 'latitude', 'longitude', 'timezone', 'gender',
+        'looking_for', 'min_age', 'max_age'
+      ];
+
+      // Check if all required fields are present and not null/empty
+      const isProfileComplete = userProfile && requiredFields.every(field => {
+        const value = userProfile[field as keyof typeof userProfile];
+        // For string fields, check if it's not an empty string
+        if (typeof value === 'string') {
+          return value.trim() !== '';
+        }
+        // For number/boolean fields, check if it's not null or undefined
+        return value !== null && value !== undefined;
+      });
+
+      if (isProfileComplete) {
         console.log('Complete profile found, showing dashboard');
         setCurrentView('dashboard');
         // Trigger match generation after a complete profile is found
         refreshMatches(); 
       } else {
-        console.log('No complete profile found, showing registration');
+        console.log('Incomplete profile found, showing registration');
         setCurrentView('registration');
       }
     } catch (error: any) {
