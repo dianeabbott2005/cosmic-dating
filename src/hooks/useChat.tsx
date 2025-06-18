@@ -24,7 +24,7 @@ export interface Chat {
   last_message?: Message;
 }
 
-const AI_RESPONSE_DEBOUNCE_TIME = 30000; // 30 seconds
+const BOT_RESPONSE_DEBOUNCE_TIME = 30000; // 30 seconds
 
 export const useChat = (matchId?: string) => {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -34,16 +34,16 @@ export const useChat = (matchId?: string) => {
   const { user } = useAuth();
 
   // Refs for debounce logic and Realtime Channel instance
-  const aiResponseTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const botResponseTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastUserMessageContentRef = useRef<string | null>(null);
   const realtimeChannelRef = useRef<RealtimeChannel | null>(null); // Ref to store the channel instance
 
-  // Check if a user is an AI (dummy profile) - This function remains as it's used internally by the hook
-  const isAIUser = async (userId: string): Promise<boolean> => {
+  // Check if a user is a bot (dummy profile)
+  const isBotProfile = async (userId: string): Promise<boolean> => {
     try {
       const { data } = await supabase
         .from('profiles')
-        .select('is_dummy_profile')
+        .select('is_dummy_profile') // Keeping is_dummy_profile as it's a DB column name
         .eq('user_id', userId)
         .single();
       
@@ -54,9 +54,9 @@ export const useChat = (matchId?: string) => {
   };
 
   // Trigger automated response
-  const triggerAutomatedResponse = async (chatId: string, userMessage: string, receiverId: string) => {
+  const triggerBotResponse = async (chatId: string, userMessage: string, receiverId: string) => {
     try {
-      const { data, error } = await supabase.functions.invoke('ai-chat-response', {
+      const { data, error } = await supabase.functions.invoke('bot-chat-response', {
         body: {
           chatId,
           senderId: user?.id,
@@ -66,12 +66,12 @@ export const useChat = (matchId?: string) => {
       });
 
       if (error) {
-        console.error('Error triggering automated response:', error);
+        console.error('Error triggering bot response:', error);
         return;
       }
 
     } catch (error) {
-      console.error('Error calling response function:', error);
+      console.error('Error calling bot response function:', error);
     }
   };
 
@@ -232,25 +232,25 @@ export const useChat = (matchId?: string) => {
         // Determine the other user's ID
         const otherUserId = chat.user1_id === user.id ? chat.user2_id : chat.user1_id;
         
-        // Check if the other user is a dummy profile (AI)
-        const isOtherUserAI = await isAIUser(otherUserId);
+        // Check if the other user is a dummy profile (bot)
+        const isOtherUserBot = await isBotProfile(otherUserId);
 
-        if (isOtherUserAI) {
+        if (isOtherUserBot) {
           // Store the content of the last message sent by the user
           lastUserMessageContentRef.current = content.trim();
 
           // Clear any existing timer
-          if (aiResponseTimerRef.current) {
-            clearTimeout(aiResponseTimerRef.current);
+          if (botResponseTimerRef.current) {
+            clearTimeout(botResponseTimerRef.current);
           }
 
           // Set a new timer
-          aiResponseTimerRef.current = setTimeout(() => {
+          botResponseTimerRef.current = setTimeout(() => {
             if (lastUserMessageContentRef.current) {
-              triggerAutomatedResponse(chat.id, lastUserMessageContentRef.current, otherUserId);
+              triggerBotResponse(chat.id, lastUserMessageContentRef.current, otherUserId);
               lastUserMessageContentRef.current = null; // Clear the ref after triggering
             }
-          }, AI_RESPONSE_DEBOUNCE_TIME);
+          }, BOT_RESPONSE_DEBOUNCE_TIME);
         }
       }
     } catch (error) {
@@ -267,7 +267,9 @@ export const useChat = (matchId?: string) => {
 
   // Set up real-time subscription
   useEffect(() => {
-    if (!chat?.id || !user?.id) {
+    if (!chat?.id || !user?.id) { // Ensure chat.id and user.id are available
+      console.log('useChat: Real-time subscription skipped. Chat ID or user ID not available.');
+      // Ensure any existing channel is removed if conditions for subscription are no longer met
       if (realtimeChannelRef.current) {
         console.log(`useChat: Removing existing channel ${realtimeChannelRef.current.topic} due to missing chat/user.`);
         supabase.removeChannel(realtimeChannelRef.current);
@@ -281,16 +283,16 @@ export const useChat = (matchId?: string) => {
 
     // If the channel is already subscribed and it's the one we expect, do nothing.
     // Supabase Realtime channels have a 'state' property.
-    if (realtimeChannelRef.current === channel && channel.state === 'subscribed') {
-      console.log(`useChat: Channel ${channelName} is already subscribed. Skipping re-subscription.`);
+    if (realtimeChannelRef.current && realtimeChannelRef.current.topic === `realtime:${channelName}`) {
+      console.log(`useChat: Channel ${channelName} already subscribed. Skipping re-subscription.`);
       return;
     }
 
     // If a different channel is currently in the ref, remove it first.
-    if (realtimeChannelRef.current && realtimeChannelRef.current !== channel) {
+    if (realtimeChannelRef.current) {
       console.log(`useChat: Removing old channel ${realtimeChannelRef.current.topic} before subscribing to ${channelName}.`);
       supabase.removeChannel(realtimeChannelRef.current);
-      realtimeChannelRef.current = null; // Clear the ref immediately
+      realtimeChannelRef.current = null;
     } 
     // If it's the same channel but not subscribed (e.g., 'closed', 'errored', 'leaving'),
     // ensure it's fully detached before re-subscribing.
@@ -349,9 +351,9 @@ export const useChat = (matchId?: string) => {
         supabase.removeChannel(realtimeChannelRef.current);
         realtimeChannelRef.current = null;
       }
-      if (aiResponseTimerRef.current) {
-        clearTimeout(aiResponseTimerRef.current);
-        aiResponseTimerRef.current = null;
+      if (botResponseTimerRef.current) {
+        clearTimeout(botResponseTimerRef.current);
+        botResponseTimerRef.current = null;
       }
       lastUserMessageContentRef.current = null;
     };

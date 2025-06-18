@@ -46,6 +46,7 @@ const Dashboard = ({ user }: DashboardProps) => {
   if (selectedMatch && activeTab === 'chats') {
     return (
       <EnhancedChatView 
+        key={selectedMatch.user_id} // Add key to force remount when selectedMatch changes
         match={selectedMatch} 
         onBack={() => {
           setSelectedMatch(null);

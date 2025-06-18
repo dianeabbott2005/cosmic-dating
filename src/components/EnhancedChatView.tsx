@@ -21,6 +21,7 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
   }, [match?.user_id]);
 
   useEffect(() => {
+    console.log('EnhancedChatView: Messages state updated:', messages.length, 'messages');
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
