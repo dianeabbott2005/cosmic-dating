@@ -36,6 +36,21 @@ export const useChat = (matchId?: string) => {
   const aiResponseTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastUserMessageContentRef = useRef<string | null>(null);
 
+  // Check if a user is an AI (dummy profile)
+  const isAIUser = async (userId: string): Promise<boolean> => {
+    try {
+      const { data } = await supabase
+        .from('profiles')
+        .select('is_dummy_profile')
+        .eq('user_id', userId)
+        .single();
+      
+      return !!(data?.is_dummy_profile);
+    } catch {
+      return false;
+    }
+  };
+
   // Trigger automated response
   const triggerAutomatedResponse = async (chatId: string, userMessage: string, receiverId: string) => {
     try {
@@ -259,9 +274,11 @@ export const useChat = (matchId?: string) => {
   // Set up real-time subscription
   useEffect(() => {
     if (!chat || !user) {
+      console.log('useChat: Real-time subscription skipped. Chat or user not available.');
       return;
     }
 
+    console.log(`useChat: Attempting to set up real-time subscription for chat ID: ${chat.id}`);
     const channel = supabase
       .channel(`chat-${chat.id}`)
       .on(
@@ -274,21 +291,34 @@ export const useChat = (matchId?: string) => {
         },
         (payload) => {
           const newMessage = payload.new as Message;
+          console.log('useChat: Real-time message received via subscription:', newMessage);
 
           if (newMessage.sender_id !== user.id) { // Ensure it's not our own message
             setMessages(prev => {
               const exists = prev.some(msg => msg.id === newMessage.id);
               if (exists) {
+                console.log(`useChat: Message ${newMessage.id} already exists in state, skipping addition.`);
                 return prev;
               }
+              console.log(`useChat: Adding new message ${newMessage.id} from other user to state.`);
               return [...prev, newMessage];
             });
+          } else {
+            console.log(`useChat: Received own message ${newMessage.id} via real-time, skipping to avoid duplicate in state.`);
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log(`useChat: Supabase Realtime Channel Status for chat-${chat.id}: ${status}`);
+        if (status === 'SUBSCRIBED') {
+          console.log(`useChat: Successfully SUBSCRIBED to chat-${chat.id}`);
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error(`useChat: Error subscribing to chat-${chat.id}. Check RLS policies or network.`);
+        }
+      });
 
     return () => {
+      console.log(`useChat: Cleaning up subscription for chat-${chat.id}. Removing channel.`);
       supabase.removeChannel(channel);
       // Clear any pending automated response timer when unmounting or changing chat
       if (aiResponseTimerRef.current) {
