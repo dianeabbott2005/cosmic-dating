@@ -27,7 +27,7 @@ const ZODIAC_SIGNS = [
 
 const ELEMENTS = {
   fire: ['aries', 'leo', 'sagittarius'],
-  earth: ['taurus', 'virgo', 'capricorn'],
+  earth: ['taurus', 'virgo', 'capricorn'], 
   air: ['gemini', 'libra', 'aquarius'],
   water: ['cancer', 'scorpio', 'pisces']
 };
@@ -192,16 +192,33 @@ serve(async (req) => {
 
     console.log('generate-matches (Edge): Starting match generation for user:', user_id);
 
-    // Get current user's profile
-    const { data: userProfile, error: userProfileError } = await supabaseClient
-      .from('profiles')
-      .select('*')
-      .eq('user_id', user_id)
-      .single();
+    let userProfile = null;
+    let attempts = 0;
+    const MAX_ATTEMPTS = 5;
+    const RETRY_DELAY_MS = 1000; // 1 second
 
-    if (userProfileError || !userProfile) {
-      console.error('generate-matches (Edge): Error fetching user profile or profile not found:', userProfileError?.message || 'Profile not found');
-      return new Response(JSON.stringify({ error: 'User profile not found' }), {
+    while (!userProfile && attempts < MAX_ATTEMPTS) {
+      if (attempts > 0) {
+        console.log(`generate-matches (Edge): Retrying fetch for user profile (${attempts}/${MAX_ATTEMPTS})...`);
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+      }
+      const { data, error } = await supabaseClient
+        .from('profiles')
+        .select('*')
+        .eq('user_id', user_id)
+        .single();
+
+      if (error && error.code !== 'PGRST116') { // PGRST116 is "No rows found"
+        console.error('generate-matches (Edge): Error fetching user profile:', error.message);
+        throw error; // Throw for actual DB errors
+      }
+      userProfile = data;
+      attempts++;
+    }
+
+    if (!userProfile) {
+      console.error('generate-matches (Edge): User profile not found after multiple attempts for ID:', user_id);
+      return new Response(JSON.stringify({ error: 'User profile not found after multiple attempts' }), {
         status: 404,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
