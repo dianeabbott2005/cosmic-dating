@@ -6,6 +6,22 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+/**
+ * Calculates a human-like typing delay for a message.
+ * @param messageLength The length of the message to be "typed".
+ * @returns A delay in milliseconds.
+ */
+const calculateTypingDelay = (messageLength: number): number => {
+  const baseDelay = 500; // 0.5 second minimum per message
+  const typingSpeed = 250; // characters per minute
+  const typingTime = (messageLength / typingSpeed) * 60 * 1000;
+  
+  let randomVariation = Math.random() * 500; // Up to 0.5 seconds random variation
+  
+  const totalDelay = baseDelay + typingTime + randomVariation;
+  return Math.min(totalDelay, 5000); // Cap at 5 seconds to prevent excessive delays within the cron job
+};
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -26,6 +42,7 @@ serve(async (req) => {
       .select('*')
       .eq('status', 'pending')
       .lte('scheduled_send_time', now)
+      .order('scheduled_send_time', { ascending: true }) // Process in order
       .limit(100); // Process in batches
 
     if (fetchError) {
@@ -42,9 +59,14 @@ serve(async (req) => {
 
     console.log(`Found ${delayedMessages.length} messages to send.`);
 
-    // 2. Send each message and update its status
+    // 2. Send each message with a delay and update its status
     for (const msg of delayedMessages) {
       try {
+        // Introduce a typing delay before sending each message
+        const delay = calculateTypingDelay(msg.content.length);
+        console.log(`Delaying message ${msg.id} by ${delay}ms for typing simulation.`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+
         const { error: insertError } = await supabaseClient
           .from('messages')
           .insert({
