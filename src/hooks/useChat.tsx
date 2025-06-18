@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } => 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -17,7 +17,7 @@ export interface Chat {
   created_at: string;
   other_user?: {
     first_name: string;
-    last_name: string;
+    // Removed last_name from this interface as it will no longer be fetched for chat participants
     user_id: string;
   };
   last_message?: Message;
@@ -104,10 +104,10 @@ export const useChat = (matchId?: string) => {
         (userChats || []).map(async (chat) => {
           const otherUserId = chat.user1_id === user.id ? chat.user2_id : chat.user1_id;
           
-          // Select only necessary public profile fields
+          // Select only necessary public profile fields, excluding last_name
           const { data: profile } = await supabase
             .from('profiles')
-            .select('first_name, last_name, user_id') 
+            .select('first_name, user_id') 
             .eq('user_id', otherUserId)
             .single();
 

@@ -6,7 +6,7 @@ export interface MatchProfile {
   id: string;
   user_id: string;
   first_name: string;
-  last_name: string;
+  // Removed last_name from this interface as it will no longer be fetched for matches
   email: string;
   date_of_birth: string;
   time_of_birth: string;
@@ -92,10 +92,10 @@ export const useMatches = () => {
           matched_user_id,
           compatibility_score,
           user1_profile:profiles!matches_user_id_fkey(
-            user_id, first_name, last_name, date_of_birth, time_of_birth, place_of_birth, gender
+            user_id, first_name, date_of_birth, time_of_birth, place_of_birth, gender
           ),
           user2_profile:profiles!matches_matched_user_id_fkey(
-            user_id, first_name, last_name, date_of_birth, time_of_birth, place_of_birth, gender
+            user_id, first_name, date_of_birth, time_of_birth, place_of_birth, gender
           )
         `)
         .or(`user_id.eq.${user.id},matched_user_id.eq.${user.id}`);
