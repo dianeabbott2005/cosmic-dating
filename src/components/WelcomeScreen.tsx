@@ -1,4 +1,3 @@
-
 import { Heart, User, MessageCircle } from 'lucide-react';
 
 interface WelcomeScreenProps {
@@ -50,7 +49,7 @@ const WelcomeScreen = ({ onGetStarted }: WelcomeScreenProps) => {
               <Heart className="w-8 h-8 text-blue-400" />
             </div>
             <h3 className="text-lg font-semibold text-white mb-2">Astrological Matching</h3>
-            <p className="text-gray-400 text-sm">Our AI discovers deeply compatible souls based on detailed birth chart analysis.</p>
+            <p className="text-gray-400 text-sm">Our system discovers deeply compatible souls based on detailed birth chart analysis.</p>
           </div>
 
           <div className="card-cosmic text-center">

@@ -49,7 +49,7 @@ To set up the project locally, follow these steps:
     ```
     *   `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are found in your Supabase project settings (API section).
     *   `VITE_GOOGLE_MAPS_API_KEY` is required for the place search functionality.
-    *   `VITE_GEMINI_API_KEY` is required for AI chat responses.
+    *   `VITE_GEMINI_API_KEY` is required for automated chat responses.
 5.  **Start the development server**:
     ```sh
     npm run dev
