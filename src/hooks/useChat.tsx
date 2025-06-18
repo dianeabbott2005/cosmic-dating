@@ -267,9 +267,7 @@ export const useChat = (matchId?: string) => {
 
   // Set up real-time subscription
   useEffect(() => {
-    if (!chat?.id || !user?.id) { // Ensure chat.id and user.id are available
-      console.log('useChat: Real-time subscription skipped. Chat ID or user ID not available.');
-      // Ensure any existing channel is removed if conditions for subscription are no longer met
+    if (!chat?.id || !user?.id) {
       if (realtimeChannelRef.current) {
         console.log(`useChat: Removing existing channel ${realtimeChannelRef.current.topic} due to missing chat/user.`);
         supabase.removeChannel(realtimeChannelRef.current);
@@ -279,23 +277,34 @@ export const useChat = (matchId?: string) => {
     }
 
     const channelName = `chat-${chat.id}`;
+    let channel = supabase.channel(channelName); // Get or create the channel instance
 
-    // If the channel already exists and is for the current chat, do nothing
-    if (realtimeChannelRef.current && realtimeChannelRef.current.topic === `realtime:${channelName}`) {
-      console.log(`useChat: Channel ${channelName} already subscribed. Skipping re-subscription.`);
+    // If the channel is already subscribed and it's the one we expect, do nothing.
+    // Supabase Realtime channels have a 'state' property.
+    if (realtimeChannelRef.current === channel && channel.state === 'subscribed') {
+      console.log(`useChat: Channel ${channelName} is already subscribed. Skipping re-subscription.`);
       return;
     }
 
-    // If a different channel exists, remove it first
-    if (realtimeChannelRef.current) {
+    // If a different channel is currently in the ref, remove it first.
+    if (realtimeChannelRef.current && realtimeChannelRef.current !== channel) {
       console.log(`useChat: Removing old channel ${realtimeChannelRef.current.topic} before subscribing to ${channelName}.`);
       supabase.removeChannel(realtimeChannelRef.current);
-      realtimeChannelRef.current = null;
+      realtimeChannelRef.current = null; // Clear the ref immediately
+    } 
+    // If it's the same channel but not subscribed (e.g., 'closed', 'errored', 'leaving'),
+    // ensure it's fully detached before re-subscribing.
+    else if (realtimeChannelRef.current && realtimeChannelRef.current === channel && channel.state !== 'subscribed') {
+        console.log(`useChat: Channel ${channelName} exists but is not subscribed (${channel.state}). Re-subscribing.`);
+        supabase.removeChannel(channel); // Ensure it's fully detached before re-subscribing
     }
 
     console.log(`useChat: Attempting to set up real-time subscription for chat ID: ${chat.id}`);
-    const channel = supabase
-      .channel(channelName) // Use the channel name
+    
+    // Re-get the channel to ensure it's fresh after potential removal/detachment
+    channel = supabase.channel(channelName);
+
+    channel
       .on(
         'postgres_changes',
         {
