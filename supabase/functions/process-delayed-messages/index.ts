@@ -34,10 +34,8 @@ serve(async (req) => {
   );
 
   try {
-    console.log('Processing delayed messages...');
-    const now = new Date().toISOString();
-
     // 1. Fetch pending messages that are due
+    const now = new Date().toISOString();
     const { data: delayedMessages, error: fetchError } = await supabaseClient
       .from('delayed_messages')
       .select('*')
@@ -52,20 +50,16 @@ serve(async (req) => {
     }
 
     if (!delayedMessages || delayedMessages.length === 0) {
-      console.log('No delayed messages due for sending.');
       return new Response(JSON.stringify({ success: true, message: 'No messages to send.' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-
-    console.log(`Found ${delayedMessages.length} messages to send.`);
 
     // 2. Send each message and update its status
     for (const msg of delayedMessages) {
       try {
         // Introduce a typing delay before sending each message
         const delay = calculateTypingDelay(msg.content.length);
-        console.log(`Delaying message ${msg.id} by ${delay}ms for typing simulation.`);
         await new Promise(resolve => setTimeout(resolve, delay));
 
         const { error: insertError } = await supabaseClient
@@ -77,14 +71,13 @@ serve(async (req) => {
           });
 
         if (insertError) {
-          console.error(`Failed to send delayed message ${msg.id}:`, insertError);
+          console.error(`Failed to send message ${msg.id}:`, insertError);
           // Mark as failed but continue processing others
           await supabaseClient
             .from('delayed_messages')
             .update({ status: 'failed' })
             .eq('id', msg.id);
         } else {
-          console.log(`Successfully sent delayed message ${msg.id}`);
           // Update status to 'sent' and then delete the record
           const { error: updateAndDeleteError } = await supabaseClient
             .from('delayed_messages')
@@ -92,14 +85,12 @@ serve(async (req) => {
             .eq('id', msg.id);
 
           if (updateAndDeleteError) {
-            console.error(`Failed to delete sent delayed message ${msg.id}:`, updateAndDeleteError);
+            console.error(`Failed to delete sent message ${msg.id}:`, updateAndDeleteError);
             // If deletion fails, at least mark as sent to avoid re-processing
             await supabaseClient
               .from('delayed_messages')
               .update({ status: 'sent', sent_at: new Date().toISOString() })
               .eq('id', msg.id);
-          } else {
-            console.log(`Successfully deleted sent delayed message ${msg.id}`);
           }
         }
       } catch (processError) {
@@ -116,7 +107,7 @@ serve(async (req) => {
     });
 
   } catch (error) {
-    console.error('Error in process-delayed-messages function:', error);
+    console.error('Error in delayed message processing function:', error);
     return new Response(
       JSON.stringify({ error: error.message }),
       {

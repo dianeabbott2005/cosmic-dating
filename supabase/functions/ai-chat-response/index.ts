@@ -149,7 +149,7 @@ function buildConversationHistory(recentMessages: Message[], receiverId: string,
 }
 
 /**
- * Constructs the full prompt for the Gemini API.
+ * Constructs the full prompt for the AI API.
  */
 function buildEnhancedPrompt(receiverProfile: any, senderProfile: any, context: any, conversationHistory: string, message: string): string {
     const age = calculateAge(receiverProfile.date_of_birth);
@@ -160,7 +160,6 @@ function buildEnhancedPrompt(receiverProfile: any, senderProfile: any, context: 
     let promptInstructions = receiverProfile.personality_prompt;
 
     if (!promptInstructions) {
-      console.warn(`No personality_prompt found for ${receiverProfile.first_name}. Using fallback.`);
       promptInstructions = `You are ${receiverProfile.first_name}, a ${age}-year-old ${receiverProfile.gender} from ${receiverProfile.place_of_birth}. Respond naturally and conversationally.`;
     }
     
@@ -216,10 +215,10 @@ Now, respond as ${receiverProfile.first_name}:`;
 }
 
 /**
- * Calls the Gemini API to get a chat response.
+ * Calls the AI API to get a chat response.
  */
-async function callGeminiApi(prompt: string): Promise<string> {
-    const geminiResponse = await fetch(
+async function callAiApi(prompt: string): Promise<string> {
+    const aiResponse = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${Deno.env.get('GEMINI_API_KEY')}`,
       {
         method: 'POST',
@@ -235,12 +234,12 @@ async function callGeminiApi(prompt: string): Promise<string> {
         }),
       }
     );
-    const geminiData = await geminiResponse.json();
-    if (!geminiData.candidates?.[0]?.content?.parts?.[0]?.text) {
-      console.error('Gemini API response error:', JSON.stringify(geminiData, null, 2));
-      throw new Error('Invalid response from Gemini API');
+    const aiData = await aiResponse.json();
+    if (!aiData.candidates?.[0]?.content?.parts?.[0]?.text) {
+      console.error('Error from AI service: Invalid response structure.');
+      throw new Error('Invalid response from AI service');
     }
-    return geminiData.candidates[0].content.parts[0].text.trim();
+    return aiData.candidates[0].content.parts[0].text.trim();
 }
 
 /**
@@ -254,7 +253,7 @@ async function storeAiResponse(supabaseClient: SupabaseClient, chatId: string, r
       .single();
 
     if (error) {
-      console.error('Error storing AI message:', error);
+      console.error('Error storing message:', error);
       throw error;
     }
     return newMessage;
@@ -276,10 +275,9 @@ async function scheduleDelayedMessage(supabaseClient: SupabaseClient, chatId: st
     });
 
   if (error) {
-    console.error('Error scheduling delayed message:', error);
+    console.error('Error scheduling message:', error);
     throw error;
   }
-  console.log(`Message scheduled for ${scheduledTime}`);
 }
 
 /**
@@ -312,9 +310,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Calculate the initial response delay
     const responseDelay = calculateResponseDelay();
-    console.log(`Calculated initial response delay: ${responseDelay}ms`);
 
     const [receiverProfile, senderProfile, context, recentMessages] = await Promise.all([
         getReceiverProfile(supabaseClient, receiverId),
@@ -326,14 +322,12 @@ serve(async (req) => {
     const conversationHistory = buildConversationHistory(recentMessages, receiverId, receiverProfile.first_name, senderProfile?.first_name);
     
     const enhancedPrompt = buildEnhancedPrompt(receiverProfile, senderProfile, context, conversationHistory, message);
-    console.log('Enhanced prompt construction complete.');
 
-    let fullAiResponse = await callGeminiApi(enhancedPrompt);
+    let fullAiResponse = await callAiApi(enhancedPrompt);
     // Post-process: Remove any asterisks from the response
     fullAiResponse = fullAiResponse.replace(/\*/g, '');
-    // NEW: Remove the MESSAGE_DELIMITER from the full response before splitting
+    // Remove the MESSAGE_DELIMITER from the full response before splitting
     fullAiResponse = fullAiResponse.replace(new RegExp(MESSAGE_DELIMITER, 'g'), '');
-    console.log('Full AI response received (post-processed):', fullAiResponse);
 
     const individualMessages = fullAiResponse.split(MESSAGE_DELIMITER)
                                              .map(msg => msg.trim())
@@ -345,7 +339,6 @@ serve(async (req) => {
     const overallDelay = responseDelay + totalTypingDelay + totalInterMessageGaps;
 
     if (overallDelay > IMMEDIATE_SEND_THRESHOLD_MS) {
-      console.log(`Overall delay (${overallDelay}ms) exceeds threshold. Scheduling message.`);
       // Schedule each message with its cumulative delay
       let cumulativeDelay = responseDelay;
       for (let i = 0; i < individualMessages.length; i++) {
@@ -365,7 +358,6 @@ serve(async (req) => {
       );
 
     } else {
-      console.log(`Overall delay (${overallDelay}ms) is within threshold. Sending immediately.`);
       // Proceed with immediate sending as before
       await new Promise(resolve => setTimeout(resolve, responseDelay)); // Initial response delay
 
@@ -373,15 +365,12 @@ serve(async (req) => {
       for (let i = 0; i < individualMessages.length; i++) {
         const msgContent = individualMessages[i];
         const typingDelay = calculateTypingDelay(msgContent.length);
-        console.log(`Calculated typing delay: ${typingDelay}ms for message length: ${msgContent.length}`);
         await new Promise(resolve => setTimeout(resolve, typingDelay));
 
         lastMessageSent = await storeAiResponse(supabaseClient, chatId, receiverId, msgContent);
-        console.log('Stored AI message:', lastMessageSent);
 
         if (i < individualMessages.length - 1) {
           const interMessageGap = calculateInterMessageGap();
-          console.log(`Adding inter-message gap of ${interMessageGap}ms.`);
           await new Promise(resolve => setTimeout(resolve, interMessageGap));
         }
       }
@@ -396,7 +385,7 @@ serve(async (req) => {
     }
 
   } catch (error) {
-    console.error('Error in ai-chat-response function:', error);
+    console.error('Error in response function:', error);
     return new Response(
       JSON.stringify({ error: error.message, success: false }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

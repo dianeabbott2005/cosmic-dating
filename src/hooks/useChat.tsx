@@ -23,7 +23,7 @@ export interface Chat {
   last_message?: Message;
 }
 
-const AI_RESPONSE_DEBOUNCE_TIME = 8000; // 8 seconds
+const AI_RESPONSE_DEBOUNCE_TIME = 30000; // 30 seconds
 
 export const useChat = (matchId?: string) => {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -36,42 +36,25 @@ export const useChat = (matchId?: string) => {
   const aiResponseTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastUserMessageContentRef = useRef<string | null>(null);
 
-  // Check if a user is an AI (dummy profile)
-  const isAIUser = async (userId: string): Promise<boolean> => {
+  // Trigger automated response
+  const triggerAutomatedResponse = async (chatId: string, userMessage: string, receiverId: string) => {
     try {
-      const { data } = await supabase
-        .from('profiles')
-        .select('is_dummy_profile')
-        .eq('user_id', userId)
-        .single();
-      
-      return !!(data?.is_dummy_profile);
-    } catch {
-      return false;
-    }
-  };
-
-  // Trigger AI response (now called after debounce)
-  const triggerAIResponse = async (chatId: string, userMessage: string, receiverId: string) => {
-    try {
-      console.log(`useChat: Triggering AI response for chat ${chatId} with last user message: "${userMessage}"`);
       const { data, error } = await supabase.functions.invoke('ai-chat-response', {
         body: {
           chatId,
           senderId: user?.id,
-          message: userMessage, // This is the last message from the user's burst
+          message: userMessage,
           receiverId
         }
       });
 
       if (error) {
-        console.error('useChat: Error triggering AI response:', error);
+        console.error('Error triggering automated response:', error);
         return;
       }
 
-      console.log('useChat: AI response triggered successfully:', data);
     } catch (error) {
-      console.error('useChat: Error calling AI function:', error);
+      console.error('Error calling response function:', error);
     }
   };
 
@@ -108,7 +91,7 @@ export const useChat = (matchId?: string) => {
           
           const { data: profile } = await supabase
             .from('profiles')
-            .select('first_name, last_name, user_id')
+            .select('first_name, last_name, user_id, is_dummy_profile') // Fetch is_dummy_profile
             .eq('user_id', otherUserId)
             .single();
 
@@ -228,11 +211,22 @@ export const useChat = (matchId?: string) => {
       if (data) {
         setMessages(prev => [...prev, data]);
 
-        // Check if the other user is AI and debounce the AI response
+        // Determine the other user's ID
         const otherUserId = chat.user1_id === user.id ? chat.user2_id : chat.user1_id;
-        const isAI = await isAIUser(otherUserId);
         
-        if (isAI) {
+        // Check if the other user is a dummy profile (AI)
+        const { data: otherUserProfile, error: profileError } = await supabase
+          .from('profiles')
+          .select('is_dummy_profile')
+          .eq('user_id', otherUserId)
+          .single();
+
+        if (profileError) {
+          console.error('Error fetching other user profile for AI check:', profileError);
+          return;
+        }
+
+        if (otherUserProfile?.is_dummy_profile) {
           // Store the content of the last message sent by the user
           lastUserMessageContentRef.current = content.trim();
 
@@ -244,8 +238,7 @@ export const useChat = (matchId?: string) => {
           // Set a new timer
           aiResponseTimerRef.current = setTimeout(() => {
             if (lastUserMessageContentRef.current) {
-              console.log(`useChat: Debounce timer finished. Triggering AI response for last message: "${lastUserMessageContentRef.current}"`);
-              triggerAIResponse(chat.id, lastUserMessageContentRef.current, otherUserId);
+              triggerAutomatedResponse(chat.id, lastUserMessageContentRef.current, otherUserId);
               lastUserMessageContentRef.current = null; // Clear the ref after triggering
             }
           }, AI_RESPONSE_DEBOUNCE_TIME);
@@ -266,11 +259,9 @@ export const useChat = (matchId?: string) => {
   // Set up real-time subscription
   useEffect(() => {
     if (!chat || !user) {
-      console.log('useChat: Real-time subscription skipped. Chat or user not available.', { chat: chat?.id, user: user?.id });
       return;
     }
 
-    console.log(`useChat: Attempting to set up real-time subscription for chat ID: ${chat.id} with user ID: ${user.id}`);
     const channel = supabase
       .channel(`chat-${chat.id}`)
       .on(
@@ -283,36 +274,23 @@ export const useChat = (matchId?: string) => {
         },
         (payload) => {
           const newMessage = payload.new as Message;
-          console.log('useChat: Real-time message received via subscription:', newMessage);
 
           if (newMessage.sender_id !== user.id) { // Ensure it's not our own message
             setMessages(prev => {
               const exists = prev.some(msg => msg.id === newMessage.id);
               if (exists) {
-                console.log(`useChat: Message ${newMessage.id} already exists in state, skipping addition.`);
                 return prev;
               }
-              console.log(`useChat: Adding new message ${newMessage.id} from other user to state.`);
               return [...prev, newMessage];
             });
-          } else {
-            console.log(`useChat: Received own message ${newMessage.id} via real-time, skipping to avoid duplicate in state.`);
           }
         }
       )
-      .subscribe((status) => {
-        console.log(`useChat: Supabase Realtime Channel Status for chat-${chat.id}: ${status}`);
-        if (status === 'SUBSCRIBED') {
-          console.log(`useChat: Successfully SUBSCRIBED to chat-${chat.id}`);
-        } else if (status === 'CHANNEL_ERROR') {
-          console.error(`useChat: Error subscribing to chat-${chat.id}. Check RLS policies or network.`);
-        }
-      });
+      .subscribe();
 
     return () => {
-      console.log(`useChat: Cleaning up subscription for chat-${chat.id}. Removing channel.`);
       supabase.removeChannel(channel);
-      // Clear any pending AI response timer when unmounting or changing chat
+      // Clear any pending automated response timer when unmounting or changing chat
       if (aiResponseTimerRef.current) {
         clearTimeout(aiResponseTimerRef.current);
         aiResponseTimerRef.current = null;
