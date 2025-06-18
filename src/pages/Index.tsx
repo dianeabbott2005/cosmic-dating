@@ -25,6 +25,7 @@ const Index = () => {
       
       if (authUser) {
         console.log('Auth user found:', authUser.id);
+        console.log('initializeView: currentView:', currentView, 'profile:', profile); // ADDED LOG
         // If we are already on the dashboard and have a profile, no need to re-check from DB
         if (currentView === 'dashboard' && profile) {
           console.log('Already on dashboard with profile, skipping DB check.');
@@ -79,8 +80,9 @@ const Index = () => {
       // Define all required fields for a complete profile
       const requiredFields = [
         'first_name', 'last_name', 'email', 'date_of_birth', 'time_of_birth',
-        'place_of_birth', 'latitude', 'longitude', 'timezone', 'gender',
+        'place_of_birth', 'latitude', 'longitude', 'gender',
         'looking_for', 'min_age', 'max_age'
+        // Removed 'timezone' from requiredFields as it can be null in DB
       ];
 
       // Check if all required fields are present and not null/empty
@@ -123,6 +125,22 @@ const Index = () => {
     console.log('Registration completed:', userData);
     setProfile(userData); // Set the profile state directly from the completed data
     setCurrentView('dashboard'); // Transition to dashboard
+
+    // Re-check completeness of the just-submitted userData
+    const requiredFields = [
+      'first_name', 'last_name', 'email', 'date_of_birth', 'time_of_birth',
+      'place_of_birth', 'latitude', 'longitude', 'gender',
+      'looking_for', 'min_age', 'max_age'
+    ];
+    const isSubmittedProfileComplete = userData && requiredFields.every(field => {
+      const value = userData[field as keyof typeof userData];
+      if (typeof value === 'string') {
+        return value.trim() !== '';
+      }
+      return value !== null && value !== undefined;
+    });
+    console.log('handleRegistrationComplete: Is submitted profile complete?', isSubmittedProfileComplete, 'Submitted data:', userData); // ADDED LOG
+
     refreshMatches();
   };
 
