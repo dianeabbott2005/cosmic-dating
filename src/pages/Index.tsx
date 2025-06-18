@@ -23,31 +23,31 @@ const Index = () => {
       setLoading(true);
       setError(null);
       
-      try {
-        if (authUser) {
-          console.log('Auth user found:', authUser.id);
-          await checkUserProfile();
-        } else {
-          console.log('No auth user');
-          const isRegistering = searchParams.get('register');
-          if (isRegistering) {
-            console.log('Registration redirect detected');
-            setCurrentView('registration');
-          } else {
-            setCurrentView('welcome');
-          }
+      if (authUser) {
+        console.log('Auth user found:', authUser.id);
+        // If profile is already loaded and we are on the dashboard, skip re-checking from DB
+        // This prevents re-fetching immediately after registration completes
+        if (profile && currentView === 'dashboard') {
+          console.log('Profile already loaded and on dashboard, skipping DB check.');
+          setLoading(false);
+          return;
         }
-      } catch (err: any) {
-        console.error('Error during view initialization:', err);
-        setError(err.message || 'An unexpected error occurred during initialization.');
-        setCurrentView('welcome');
-      } finally {
-        setLoading(false);
+        await checkUserProfile();
+      } else {
+        console.log('No auth user');
+        const isRegistering = searchParams.get('register');
+        if (isRegistering) {
+          console.log('Registration redirect detected');
+          setCurrentView('registration');
+        } else {
+          setCurrentView('welcome');
+        }
       }
+      setLoading(false);
     };
 
     initializeView();
-  }, [authUser, searchParams]);
+  }, [authUser, searchParams, profile, currentView]); // Added profile and currentView to dependencies
 
   const checkUserProfile = async () => {
     if (!authUser) return;
@@ -121,9 +121,8 @@ const Index = () => {
 
   const handleRegistrationComplete = (userData: any) => {
     console.log('Registration completed:', userData);
-    setProfile(userData);
-    setCurrentView('dashboard');
-    // Trigger match generation after registration is complete
+    setProfile(userData); // Set the profile state directly from the completed data
+    setCurrentView('dashboard'); // Transition to dashboard
     refreshMatches();
   };
 
