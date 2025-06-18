@@ -244,8 +244,12 @@ export const useChat = (matchId?: string) => {
 
   // Set up real-time subscription
   useEffect(() => {
-    if (!chat) return;
+    if (!chat) {
+      console.log('useChat: No chat object, skipping real-time subscription setup.');
+      return;
+    }
 
+    console.log(`useChat: Setting up real-time subscription for chat ID: ${chat.id}`);
     const channel = supabase
       .channel(`chat-${chat.id}`)
       .on(
@@ -258,23 +262,32 @@ export const useChat = (matchId?: string) => {
         },
         (payload) => {
           const newMessage = payload.new as Message;
+          console.log('useChat: Real-time message received:', newMessage);
+
           // Only add if it's not from the current user (to avoid duplicates)
+          // The user's own sent messages are added immediately by sendMessage
           if (newMessage.sender_id !== user?.id) {
             setMessages(prev => {
-              // Check if message already exists
               const exists = prev.some(msg => msg.id === newMessage.id);
-              if (exists) return prev;
+              if (exists) {
+                console.log(`useChat: Message ${newMessage.id} already exists, skipping.`);
+                return prev;
+              }
+              console.log(`useChat: Adding new message ${newMessage.id} from other user.`);
               return [...prev, newMessage];
             });
+          } else {
+            console.log(`useChat: Received own message ${newMessage.id} via real-time, skipping to avoid duplicate.`);
           }
         }
       )
       .subscribe();
 
     return () => {
+      console.log(`useChat: Unsubscribing from chat-${chat.id} channel.`);
       supabase.removeChannel(channel);
     };
-  }, [chat, user?.id]);
+  }, [chat, user?.id]); // Dependencies: chat and user.id
 
   return {
     chat,
