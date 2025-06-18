@@ -124,7 +124,7 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
           <form onSubmit={handleSendMessage} className="flex gap-3">
             <input
               type="text"
-              name="message" {/* Added name attribute here */}
+              name="message"
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               placeholder={`Message ${match.first_name || match.firstName}...`}
