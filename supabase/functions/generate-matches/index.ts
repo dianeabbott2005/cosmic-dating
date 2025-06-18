@@ -29,7 +29,7 @@ const ELEMENTS = {
   fire: ['aries', 'leo', 'sagittarius'],
   earth: ['taurus', 'virgo', 'capricorn'], 
   air: ['gemini', 'libra', 'aquarius'],
-  water: ['water', 'earth', 'air', 'fire'] // Corrected water compatibility
+  water: ['cancer', 'scorpio', 'pisces']
 };
 
 const MODALITIES = {
@@ -87,12 +87,69 @@ const getModality = (sign: string): string => {
   return 'cardinal'; // Default
 };
 
+// --- Compatibility Calculations (copied for self-containment) ---
+const calculateElementCompatibility = (element1: string, element2: string): number => {
+  const compatibleElements = {
+    fire: { fire: 0.9, air: 0.8, earth: 0.4, water: 0.3 },
+    earth: { earth: 0.9, water: 0.8, fire: 0.4, air: 0.3 },
+    air: { air: 0.9, fire: 0.8, water: 0.4, earth: 0.3 },
+    water: { water: 0.9, earth: 0.8, air: 0.4, fire: 0.3 }
+  };
+  
+  return compatibleElements[element1 as keyof typeof compatibleElements]?.[element2 as keyof typeof compatibleElements.fire] || 0.5;
+};
+
+const calculateSunSignCompatibility = (sign1: string, sign2: string): number => {
+  if (sign1 === sign2) return 0.85;
+  
+  const opposites = {
+    aries: 'libra', taurus: 'scorpio', gemini: 'sagittarius',
+    cancer: 'capricorn', leo: 'aquarius', virgo: 'pisces'
+  };
+  
+  const reverseOpposites = Object.fromEntries(
+    Object.entries(opposites).map(([k, v]) => [v, k])
+  );
+  
+  if (opposites[sign1 as keyof typeof opposites] === sign2 || 
+      reverseOpposites[sign1 as keyof typeof reverseOpposites] === sign2) {
+    return 0.75;
+  }
+  
+  const sign1Index = ZODIAC_SIGNS.indexOf(sign1);
+  const sign2Index = ZODIAC_SIGNS.indexOf(sign2);
+  const distance = Math.min(
+    Math.abs(sign1Index - sign2Index),
+    12 - Math.abs(sign1Index - sign2Index)
+  );
+  
+  if (distance === 4) return 0.9;
+  if (distance === 2) return 0.8;
+  if (distance === 3) return 0.4;
+  if (distance === 1 || distance === 5) return 0.6;
+  
+  return 0.5;
+};
+
+const calculateTimeCompatibility = (time1: string, time2: string): number => {
+  const getHour = (time: string) => parseInt(time.split(':')[0]);
+  
+  const hour1 = getHour(time1);
+  const hour2 = getHour(time2);
+  
+  const timeDiff = Math.abs(hour1 - hour2);
+  const minDiff = Math.min(timeDiff, 24 - timeDiff);
+  
+  return Math.max(0.3, 1 - (minDiff / 12));
+};
+
 // --- Composite Compatibility Function ---
 const calculateCompositeCompatibility = (person1: BirthChartData, person2: BirthChartData): number => {
   const sunSign1 = getSunSign(person1.dateOfBirth);
   const sunSign2 = getSunSign(person2.dateOfBirth);
-  const moonSign1 = getMoonSign(person1.dateOfBirth, person1.timeOfBirth);
-  const moonSign2 = getMoonSign(person2.dateOfBirth, person2.timeOfBirth);
+  // Moon sign calculation is not used in the composite score, but keeping for completeness if needed later
+  // const moonSign1 = getMoonSign(person1.dateOfBirth, person1.timeOfBirth);
+  // const moonSign2 = getMoonSign(person2.dateOfBirth, person2.timeOfBirth);
 
   const element1 = getElement(sunSign1);
   const element2 = getElement(sunSign2);
@@ -211,13 +268,12 @@ serve(async (req) => {
     // Log the filters being applied for potential profiles
     console.log(`generate-matches (Edge): Querying for profiles where gender is '${userProfile.looking_for}' AND looking_for is '${userProfile.gender}' AND user_id is NOT '${user_id}'.`);
 
-    // Get potential matches based on mutual preferences, excluding current user and automated profiles
+    // Get potential matches based on mutual preferences, excluding current user
     const { data: potentialProfiles, error: potentialProfilesError } = await supabaseClient
       .from('profiles')
       .select('*')
       .eq('gender', userProfile.looking_for) // Match has the gender current user is looking for
       .eq('looking_for', userProfile.gender) // Match is looking for current user's gender
-      .eq('is_active', false) // Only consider human profiles (is_active: false)
       .neq('user_id', user_id); // Exclude the current user's own profile
 
     if (potentialProfilesError) {
@@ -261,8 +317,8 @@ serve(async (req) => {
         const userFitsMatchAgeRange = userAge >= matchProfile.min_age && userAge <= matchProfile.max_age;
         const matchFitsUserAgeRange = matchAge >= userProfile.min_age && matchAge <= userProfile.max_age;
 
-        console.log(`generate-matches (Edge): Age mismatch for ${matchProfile.first_name}. Skipping.`);
         if (!userFitsMatchAgeRange || !matchFitsUserAgeRange) {
+          console.log(`generate-matches (Edge): Age mismatch for ${matchProfile.first_name}. Skipping.`);
           continue;
         }
 
