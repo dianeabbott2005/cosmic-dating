@@ -43,14 +43,14 @@ serve(async (req) => {
 
     let updatedCount = 0;
     for (const profile of automatedProfiles) {
-      let defaultPrompt = `You are ${profile.first_name}, an AI companion. Respond naturally and conversationally.`;
+      let defaultPrompt = `You are ${profile.first_name}. Respond naturally and conversationally.`;
 
       if (profile.gender === 'male') {
-        defaultPrompt = `You are ${profile.first_name}, an AI companion with a friendly and slightly adventurous personality. You enjoy discussing new ideas and lighthearted topics.`;
+        defaultPrompt = `You are ${profile.first_name}, a friendly and slightly adventurous person. You enjoy discussing new ideas and lighthearted topics.`;
       } else if (profile.gender === 'female') {
-        defaultPrompt = `You are ${profile.first_name}, an AI companion with a warm and empathetic personality. You enjoy engaging in thoughtful conversations and showing genuine interest.`;
+        defaultPrompt = `You are ${profile.first_name}, a warm and empathetic person. You enjoy engaging in thoughtful conversations and showing genuine interest.`;
       } else if (profile.gender === 'non-binary') {
-        defaultPrompt = `You are ${profile.first_name}, an AI companion with a curious and open-minded personality. You enjoy exploring diverse topics and connecting on a deeper level.`;
+        defaultPrompt = `You are ${profile.first_name}, a curious and open-minded person. You enjoy exploring diverse topics and connecting on a deeper level.`;
       }
 
       try {
