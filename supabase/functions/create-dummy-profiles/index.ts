@@ -240,6 +240,8 @@ serve(async (req) => {
           personality_prompt: personalityPrompt,
         };
 
+        console.log('Attempting to create user with metadata:', finalUserMetadata); // Added log
+
         // 1. Create user in auth.users (this will trigger handle_new_user to create the profile)
         const { data: authUserData, error: authError } = await supabaseClient.auth.admin.createUser({
           email: email,
