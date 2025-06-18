@@ -25,15 +25,13 @@ const Index = () => {
       
       if (authUser) {
         console.log('Auth user found:', authUser.id);
-        console.log('initializeView: currentView:', currentView, 'profile:', profile); // ADDED LOG
         // If we are already on the dashboard and have a profile, no need to re-check from DB
         if (currentView === 'dashboard' && profile) {
           console.log('Already on dashboard with profile, skipping DB check.');
-          setLoading(false);
-          return;
+        } else {
+          // Otherwise, check the user profile from DB
+          await checkUserProfile();
         }
-        // Otherwise, check the user profile from DB
-        await checkUserProfile();
       } else {
         console.log('No auth user');
         const isRegistering = searchParams.get('register');
@@ -48,7 +46,7 @@ const Index = () => {
     };
 
     initializeView();
-  }, [authUser, searchParams, currentView]); // Removed 'profile' from dependencies
+  }, [authUser, searchParams]); // Removed 'currentView' and 'profile' from dependencies
 
   const checkUserProfile = async () => {
     if (!authUser) return;

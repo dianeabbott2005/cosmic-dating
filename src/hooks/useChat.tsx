@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { RealtimeChannel } from '@supabase/supabase-js'; // Import RealtimeChannel type
 
 export interface Message {
   id: string;
@@ -32,9 +33,10 @@ export const useChat = (matchId?: string) => {
   const [loading, setLoading] = useState(false);
   const { user } = useAuth();
 
-  // Refs for debounce logic
+  // Refs for debounce logic and Realtime Channel instance
   const aiResponseTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastUserMessageContentRef = useRef<string | null>(null);
+  const realtimeChannelRef = useRef<RealtimeChannel | null>(null); // Ref to store the channel instance
 
   // Check if a user is an AI (dummy profile) - This function remains as it's used internally by the hook
   const isAIUser = async (userId: string): Promise<boolean> => {
@@ -265,14 +267,35 @@ export const useChat = (matchId?: string) => {
 
   // Set up real-time subscription
   useEffect(() => {
-    if (!chat || !user) {
-      console.log('useChat: Real-time subscription skipped. Chat or user not available.');
+    if (!chat?.id || !user?.id) { // Ensure chat.id and user.id are available
+      console.log('useChat: Real-time subscription skipped. Chat ID or user ID not available.');
+      // Ensure any existing channel is removed if conditions for subscription are no longer met
+      if (realtimeChannelRef.current) {
+        console.log(`useChat: Removing existing channel ${realtimeChannelRef.current.topic} due to missing chat/user.`);
+        supabase.removeChannel(realtimeChannelRef.current);
+        realtimeChannelRef.current = null;
+      }
       return;
+    }
+
+    const channelName = `chat-${chat.id}`;
+
+    // If the channel already exists and is for the current chat, do nothing
+    if (realtimeChannelRef.current && realtimeChannelRef.current.topic === `realtime:${channelName}`) {
+      console.log(`useChat: Channel ${channelName} already subscribed. Skipping re-subscription.`);
+      return;
+    }
+
+    // If a different channel exists, remove it first
+    if (realtimeChannelRef.current) {
+      console.log(`useChat: Removing old channel ${realtimeChannelRef.current.topic} before subscribing to ${channelName}.`);
+      supabase.removeChannel(realtimeChannelRef.current);
+      realtimeChannelRef.current = null;
     }
 
     console.log(`useChat: Attempting to set up real-time subscription for chat ID: ${chat.id}`);
     const channel = supabase
-      .channel(`chat-${chat.id}`)
+      .channel(channelName) // Use the channel name
       .on(
         'postgres_changes',
         {
@@ -301,25 +324,29 @@ export const useChat = (matchId?: string) => {
         }
       )
       .subscribe((status) => {
-        console.log(`useChat: Supabase Realtime Channel Status for chat-${chat.id}: ${status}`);
+        console.log(`useChat: Supabase Realtime Channel Status for ${channelName}: ${status}`);
         if (status === 'SUBSCRIBED') {
-          console.log(`useChat: Successfully SUBSCRIBED to chat-${chat.id}`);
+          console.log(`useChat: Successfully SUBSCRIBED to ${channelName}`);
         } else if (status === 'CHANNEL_ERROR') {
-          console.error(`useChat: Error subscribing to chat-${chat.id}. Check RLS policies or network.`);
+          console.error(`useChat: Error subscribing to ${channelName}. Check RLS policies or network.`);
         }
       });
 
+    realtimeChannelRef.current = channel; // Store the new channel instance
+
     return () => {
-      console.log(`useChat: Cleaning up subscription for chat-${chat.id}. Removing channel.`);
-      supabase.removeChannel(channel);
-      // Clear any pending automated response timer when unmounting or changing chat
+      if (realtimeChannelRef.current) {
+        console.log(`useChat: Cleaning up subscription for ${realtimeChannelRef.current.topic}. Removing channel.`);
+        supabase.removeChannel(realtimeChannelRef.current);
+        realtimeChannelRef.current = null;
+      }
       if (aiResponseTimerRef.current) {
         clearTimeout(aiResponseTimerRef.current);
         aiResponseTimerRef.current = null;
       }
       lastUserMessageContentRef.current = null;
     };
-  }, [chat, user?.id]); // Dependencies: chat and user.id
+  }, [chat?.id, user?.id]); // Dependencies: chat.id and user.id (only re-subscribe if chat ID or user changes)
 
   return {
     chat,
