@@ -24,7 +24,7 @@ export interface Chat {
   last_message?: Message;
 }
 
-const BOT_RESPONSE_DEBOUNCE_TIME = 30000; // 30 seconds
+const AUTOMATED_RESPONSE_DEBOUNCE_TIME = 30000; // 30 seconds
 
 export const useChat = (matchId?: string) => {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -34,29 +34,30 @@ export const useChat = (matchId?: string) => {
   const { user } = useAuth();
 
   // Refs for debounce logic and Realtime Channel instance
-  const botResponseTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const automatedResponseTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastUserMessageContentRef = useRef<string | null>(null);
   const realtimeChannelRef = useRef<RealtimeChannel | null>(null); // Ref to store the channel instance
 
-  // Check if a user is a bot (dummy profile)
-  const isBotProfile = async (userId: string): Promise<boolean> => {
+  // Check if a user is an automated profile (inactive)
+  const isAutomatedProfile = async (userId: string): Promise<boolean> => {
     try {
       const { data } = await supabase
         .from('profiles')
-        .select('is_dummy_profile') // Keeping is_dummy_profile as it's a DB column name
+        .select('is_active') // Use 'is_active' column
         .eq('user_id', userId)
         .single();
       
-      return !!(data?.is_dummy_profile);
+      // If is_active is false, it's an automated profile
+      return data?.is_active === false;
     } catch {
       return false;
     }
   };
 
   // Trigger automated response
-  const triggerBotResponse = async (chatId: string, userMessage: string, receiverId: string) => {
+  const triggerAutomatedResponse = async (chatId: string, userMessage: string, receiverId: string) => {
     try {
-      const { data, error } = await supabase.functions.invoke('bot-chat-response', {
+      const { data, error } = await supabase.functions.invoke('chat-response', { // Renamed function call
         body: {
           chatId,
           senderId: user?.id,
@@ -66,12 +67,12 @@ export const useChat = (matchId?: string) => {
       });
 
       if (error) {
-        console.error('Error triggering bot response:', error);
+        console.error('Error triggering automated response:', error);
         return;
       }
 
     } catch (error) {
-      console.error('Error calling bot response function:', error);
+      console.error('Error calling chat response function:', error);
     }
   };
 
@@ -232,25 +233,25 @@ export const useChat = (matchId?: string) => {
         // Determine the other user's ID
         const otherUserId = chat.user1_id === user.id ? chat.user2_id : chat.user1_id;
         
-        // Check if the other user is a dummy profile (bot)
-        const isOtherUserBot = await isBotProfile(otherUserId);
+        // Check if the other user is an automated profile
+        const isOtherUserAutomated = await isAutomatedProfile(otherUserId);
 
-        if (isOtherUserBot) {
+        if (isOtherUserAutomated) {
           // Store the content of the last message sent by the user
           lastUserMessageContentRef.current = content.trim();
 
           // Clear any existing timer
-          if (botResponseTimerRef.current) {
-            clearTimeout(botResponseTimerRef.current);
+          if (automatedResponseTimerRef.current) {
+            clearTimeout(automatedResponseTimerRef.current);
           }
 
           // Set a new timer
-          botResponseTimerRef.current = setTimeout(() => {
+          automatedResponseTimerRef.current = setTimeout(() => {
             if (lastUserMessageContentRef.current) {
-              triggerBotResponse(chat.id, lastUserMessageContentRef.current, otherUserId);
+              triggerAutomatedResponse(chat.id, lastUserMessageContentRef.current, otherUserId);
               lastUserMessageContentRef.current = null; // Clear the ref after triggering
             }
-          }, BOT_RESPONSE_DEBOUNCE_TIME);
+          }, AUTOMATED_RESPONSE_DEBOUNCE_TIME);
         }
       }
     } catch (error) {
@@ -351,9 +352,9 @@ export const useChat = (matchId?: string) => {
         supabase.removeChannel(realtimeChannelRef.current);
         realtimeChannelRef.current = null;
       }
-      if (botResponseTimerRef.current) {
-        clearTimeout(botResponseTimerRef.current);
-        botResponseTimerRef.current = null;
+      if (automatedResponseTimerRef.current) {
+        clearTimeout(automatedResponseTimerRef.current);
+        automatedResponseTimerRef.current = null;
       }
       lastUserMessageContentRef.current = null;
     };
