@@ -23,7 +23,9 @@ const NON_NATIVE_ENGLISH_REGIONS: { [key: string]: { languageIssue: string; dial
 };
 
 // Define a threshold for immediate vs. delayed sending
-const IMMEDIATE_SEND_THRESHOLD_MS = 15 * 1000; // 15 seconds
+// Increased to allow more multi-part responses to be sent directly with setTimeout
+// This ensures staggering for most common AI replies within the Edge Function's timeout limit (60s)
+const IMMEDIATE_SEND_THRESHOLD_MS = 50 * 1000; // 50 seconds
 
 /**
  * Calculates a human-like typing delay, capped to prevent timeouts.
