@@ -182,7 +182,7 @@ function buildEnhancedPrompt(receiverProfile: any, senderProfile: any, context: 
     promptInstructions += `\n\nABSOLUTELY CRITICAL: DO NOT use any markdown characters whatsoever, including asterisks (*), underscores (_), hash symbols (#), or backticks (\`). Your response MUST be plain text. This is paramount.`;
     promptInstructions += `\n\nIMPORTANT: Use emojis very sparingly, if at all. Prioritize clear text over emoji expression.`;
     // Updated instruction for message segmentation and length
-    promptInstructions += `\n\nYour response should be very concise and natural, like a human texting. It can be a single short message, or if it makes sense, break it into 1 to 6 very short, related messages. Vary the length of your messages, but keep them generally brief. If you send multiple messages, separate each with the delimiter: "${MESSAGE_DELIMITER}". This delimiter is ONLY for separating messages and MUST NOT appear within the content of any message. Do not use the phrase "---DYAD" or any part of the delimiter in your conversational responses.`;
+    promptInstructions += `\n\nYour response should be very concise and natural, like a human texting. It can be a single short message, or if it makes sense, break it into 1 to 6 very short, related messages. If you send multiple messages, separate each with the delimiter: "${MESSAGE_DELIMITER}". This delimiter is ONLY for separating messages and MUST NOT appear within the content of any message. Do not use the phrase "---DYAD" or any part of the delimiter in your conversational responses.`;
 
     // Conversational Strategy
     promptInstructions += `\n\nConsider these conversational "moves" in your response, prioritizing them in order, but adapting to the flow of the conversation:
@@ -366,22 +366,27 @@ serve(async (req) => {
     const enhancedPrompt = buildEnhancedPrompt(receiverProfile, senderProfile, context, conversationHistory, message);
 
     let fullAiResponse = await callAiApi(enhancedPrompt);
-    // Post-process: Remove any asterisks from the response
-    fullAiResponse = fullAiResponse.replace(/\*/g, '');
-    // Introduce typos
+    
+    // --- START Enhanced Post-processing ---
+    // 1. Remove all common markdown characters
+    fullAiResponse = fullAiResponse.replace(/[\*_`#]/g, ''); 
+    // 2. Introduce typos
     fullAiResponse = introduceTypos(fullAiResponse);
 
-    // Ensure the delimiter itself and the problematic fragment are not part of the message content after splitting
+    // 3. Split by delimiter and clean each part
     const individualMessages = fullAiResponse.split(MESSAGE_DELIMITER)
                                              .map(msg => msg.trim())
                                              .filter(msg => msg.length > 0)
                                              .map(msg => {
-                                                // Remove the full delimiter if it somehow ended up in a message part
-                                                let cleanedMsg = msg.replace(new RegExp(MESSAGE_DELIMITER.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'g'), '').trim();
-                                                // Also remove the specific problematic fragment reported by the user
-                                                cleanedMsg = cleanedMsg.replace(/_MESSGE_BREAK---/g, '').trim();
+                                                // Remove any occurrence of the delimiter string itself from the message content
+                                                // This regex escapes special characters in MESSAGE_DELIMITER
+                                                const delimiterRegex = new RegExp(MESSAGE_DELIMITER.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'g');
+                                                let cleanedMsg = msg.replace(delimiterRegex, '').trim();
+                                                // Also remove any partials like "---DYAD" or "MESSAGE_BREAK" if they appear
+                                                cleanedMsg = cleanedMsg.replace(/---DYAD/g, '').replace(/_MESSAGE_BREAK---/g, '').trim();
                                                 return cleanedMsg;
                                              });
+    // --- END Enhanced Post-processing ---
 
     // If the total delay (initial response delay + sum of typing delays + sum of inter-message gaps) is too long, schedule it
     const totalTypingDelay = individualMessages.reduce((sum, msg) => sum + calculateTypingDelay(msg.length), 0);
