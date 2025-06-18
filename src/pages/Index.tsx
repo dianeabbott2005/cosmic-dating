@@ -25,13 +25,13 @@ const Index = () => {
       
       if (authUser) {
         console.log('Auth user found:', authUser.id);
-        // If profile is already loaded and we are on the dashboard, skip re-checking from DB
-        // This prevents re-fetching immediately after registration completes
-        if (profile && currentView === 'dashboard') {
-          console.log('Profile already loaded and on dashboard, skipping DB check.');
+        // If we are already on the dashboard and have a profile, no need to re-check from DB
+        if (currentView === 'dashboard' && profile) {
+          console.log('Already on dashboard with profile, skipping DB check.');
           setLoading(false);
           return;
         }
+        // Otherwise, check the user profile from DB
         await checkUserProfile();
       } else {
         console.log('No auth user');
@@ -47,7 +47,7 @@ const Index = () => {
     };
 
     initializeView();
-  }, [authUser, searchParams, profile, currentView]); // Added profile and currentView to dependencies
+  }, [authUser, searchParams, currentView]); // Removed 'profile' from dependencies
 
   const checkUserProfile = async () => {
     if (!authUser) return;
