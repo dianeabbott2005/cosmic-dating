@@ -31,7 +31,7 @@ const ProfileComplete = ({ onNext, userData }: ProfileCompleteProps) => {
     setIsCreating(true);
     
     try {
-      let { latitude, longitude } = userData; // Removed timezone from destructuring here
+      let { latitude, longitude } = userData;
       let timezone: string | null = null; // Initialize timezone as null
 
       if (userData.placeOfBirth && (!latitude || !longitude)) {
@@ -173,7 +173,7 @@ const ProfileComplete = ({ onNext, userData }: ProfileCompleteProps) => {
           </div>
           <div className="col-span-2">
             <span className="text-gray-400">Timezone:</span>
-            <p className="text-white">{timezone || 'Automatically determined'}</p>
+            <p className="text-white">{userData.timezone || 'Automatically determined'}</p>
           </div>
           <div>
             <span className="text-gray-400">Age Range:</span>
