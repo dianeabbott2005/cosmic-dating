@@ -271,35 +271,45 @@ export const useChat = (matchId?: string) => {
     const currentChatId = chat?.id;
     const currentUserId = user?.id;
 
-    // If no chat ID or user ID, or if the component is unmounting, clean up and return.
-    if (!currentChatId || !currentUserId) {
+    // Cleanup function for the effect
+    return () => {
       if (realtimeChannelRef.current) {
-        console.log(`useChat: Cleaning up existing channel ${realtimeChannelRef.current.topic} due to missing chat/user ID or unmount.`);
+        console.log(`useChat: Cleaning up subscription for ${realtimeChannelRef.current.topic}. Removing channel.`);
         supabase.removeChannel(realtimeChannelRef.current);
         realtimeChannelRef.current = null;
       }
+      if (automatedResponseTimerRef.current) {
+        clearTimeout(automatedResponseTimerRef.current);
+        automatedResponseTimerRef.current = null;
+      }
+      lastUserMessageContentRef.current = null;
+    };
+
+    // If no chat ID or user ID, just return (cleanup handles removal).
+    if (!currentChatId || !currentUserId) {
       return;
     }
 
     const channelName = `chat-${currentChatId}`;
+    let channel = supabase.channel(channelName); // Get or create the channel instance
 
-    // If we already have a channel subscribed to the correct topic, do nothing.
-    if (realtimeChannelRef.current && realtimeChannelRef.current.topic === `realtime:${channelName}`) {
-      console.log(`useChat: Channel ${channelName} already subscribed and correct. Skipping re-subscription.`);
+    // Check if the channel is already subscribed or in the process of joining
+    if (channel.state === 'joined' || channel.state === 'joining') {
+      console.log(`useChat: Channel ${channelName} is already in state '${channel.state}'. Skipping re-subscription.`);
+      realtimeChannelRef.current = channel; // Ensure ref is updated even if we don't re-subscribe
       return;
     }
 
-    // If there's an existing channel but it's for a different chat or not subscribed, remove it.
-    if (realtimeChannelRef.current) {
+    // If there's an existing channel in the ref but it's not the one we just got, or it's in a bad state, remove it.
+    if (realtimeChannelRef.current && realtimeChannelRef.current !== channel) {
       console.log(`useChat: Removing old channel ${realtimeChannelRef.current.topic} before subscribing to ${channelName}.`);
       supabase.removeChannel(realtimeChannelRef.current);
       realtimeChannelRef.current = null;
     }
 
     console.log(`useChat: Attempting to set up new real-time subscription for chat ID: ${currentChatId}`);
-    const newChannel = supabase.channel(channelName);
-
-    newChannel
+    
+    channel
       .on(
         'postgres_changes',
         {
@@ -312,7 +322,7 @@ export const useChat = (matchId?: string) => {
           const newMessage = payload.new as Message;
           console.log('useChat: Real-time message received via subscription:', newMessage);
 
-          if (newMessage.sender_id !== currentUserId) { // Ensure it's not our own message
+          if (newMessage.sender_id !== currentUserId) {
             setMessages(prev => {
               const exists = prev.some(msg => msg.id === newMessage.id);
               if (exists) {
@@ -336,21 +346,7 @@ export const useChat = (matchId?: string) => {
         }
       });
 
-    realtimeChannelRef.current = newChannel; // Store the new channel instance
-
-    return () => {
-      // This cleanup runs when the component unmounts or dependencies change.
-      if (realtimeChannelRef.current) {
-        console.log(`useChat: Cleaning up subscription for ${realtimeChannelRef.current.topic}. Removing channel.`);
-        supabase.removeChannel(realtimeChannelRef.current);
-        realtimeChannelRef.current = null;
-      }
-      if (automatedResponseTimerRef.current) {
-        clearTimeout(automatedResponseTimerRef.current);
-        automatedResponseTimerRef.current = null;
-      }
-      lastUserMessageContentRef.current = null;
-    };
+    realtimeChannelRef.current = channel; // Store the channel instance
   }, [chat?.id, user?.id]); // Dependencies: chat.id and user.id (only re-subscribe if chat ID or user changes)
 
   return {
