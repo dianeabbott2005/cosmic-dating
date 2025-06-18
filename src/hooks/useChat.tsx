@@ -36,7 +36,7 @@ export const useChat = (matchId?: string) => {
   const aiResponseTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastUserMessageContentRef = useRef<string | null>(null);
 
-  // Check if a user is an AI (dummy profile)
+  // Check if a user is an AI (dummy profile) - This function remains as it's used internally by the hook
   const isAIUser = async (userId: string): Promise<boolean> => {
     try {
       const { data } = await supabase
@@ -104,9 +104,10 @@ export const useChat = (matchId?: string) => {
         (userChats || []).map(async (chat) => {
           const otherUserId = chat.user1_id === user.id ? chat.user2_id : chat.user1_id;
           
+          // Select only necessary public profile fields
           const { data: profile } = await supabase
             .from('profiles')
-            .select('first_name, last_name, user_id, is_dummy_profile') // Fetch is_dummy_profile
+            .select('first_name, last_name, user_id') 
             .eq('user_id', otherUserId)
             .single();
 
@@ -230,18 +231,9 @@ export const useChat = (matchId?: string) => {
         const otherUserId = chat.user1_id === user.id ? chat.user2_id : chat.user1_id;
         
         // Check if the other user is a dummy profile (AI)
-        const { data: otherUserProfile, error: profileError } = await supabase
-          .from('profiles')
-          .select('is_dummy_profile')
-          .eq('user_id', otherUserId)
-          .single();
+        const isOtherUserAI = await isAIUser(otherUserId);
 
-        if (profileError) {
-          console.error('Error fetching other user profile for AI check:', profileError);
-          return;
-        }
-
-        if (otherUserProfile?.is_dummy_profile) {
+        if (isOtherUserAI) {
           // Store the content of the last message sent by the user
           lastUserMessageContentRef.current = content.trim();
 
