@@ -38,16 +38,16 @@ export const useChat = (matchId?: string) => {
   const lastUserMessageContentRef = useRef<string | null>(null);
   const realtimeChannelRef = useRef<RealtimeChannel | null>(null); // Ref to store the channel instance
 
-  // Check if a user is an automated profile (is_active: true)
-  const isAutomatedProfile = async (userId: string): Promise<boolean> => {
+  // Check if a user is an active profile (is_active: true)
+  const isProfileActive = async (userId: string): Promise<boolean> => {
     try {
       const { data } = await supabase
         .from('profiles')
-        .select('is_active') // Corrected column name from is_dummy_profile to is_active
+        .select('is_active')
         .eq('user_id', userId)
         .single();
       
-      // If is_active is true, it's an automated profile
+      // If is_active is true, it's an active profile (which could be automated)
       return data?.is_active === true;
     } catch {
       return false;
@@ -233,10 +233,10 @@ export const useChat = (matchId?: string) => {
         // Determine the other user's ID
         const otherUserId = chat.user1_id === user.id ? chat.user2_id : chat.user1_id;
         
-        // Check if the other user is an automated profile
-        const isOtherUserAutomated = await isAutomatedProfile(otherUserId);
+        // Check if the other user is an active profile (which could be automated)
+        const isOtherUserActive = await isProfileActive(otherUserId);
 
-        if (isOtherUserAutomated) {
+        if (isOtherUserActive) {
           // Store the content of the last message sent by the user
           lastUserMessageContentRef.current = content.trim();
 
