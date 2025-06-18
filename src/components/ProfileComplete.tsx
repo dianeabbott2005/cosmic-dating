@@ -87,6 +87,7 @@ const ProfileComplete = ({ onNext, userData }: ProfileCompleteProps) => {
         longitude: longitude,
         timezone: timezone, // This will now be string or null
         updated_at: new Date().toISOString(),
+        is_active: false, // Set to false for human profiles
       };
 
       console.log('Updating profile with data:', profileData);

@@ -24,13 +24,14 @@ serve(async (req) => {
 
     console.log('Populating timezones for profiles...');
 
-    // Fetch profiles that need timezone data and have coordinates
+    // Fetch profiles that need timezone data and have coordinates, and are human (is_active: false)
     const { data: profilesToUpdate, error: fetchError } = await supabaseClient
       .from('profiles')
       .select('user_id, latitude, longitude, place_of_birth')
       .is('timezone', null)
       .not('latitude', 'is', null)
       .not('longitude', 'is', null)
+      .eq('is_active', false) // Only process human profiles
       .limit(100); // Process in batches to avoid timeouts
 
     if (fetchError) {

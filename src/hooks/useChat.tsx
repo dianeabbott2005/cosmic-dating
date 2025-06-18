@@ -38,17 +38,17 @@ export const useChat = (matchId?: string) => {
   const lastUserMessageContentRef = useRef<string | null>(null);
   const realtimeChannelRef = useRef<RealtimeChannel | null>(null); // Ref to store the channel instance
 
-  // Check if a user is an automated profile (inactive)
+  // Check if a user is an automated profile (is_active: true)
   const isAutomatedProfile = async (userId: string): Promise<boolean> => {
     try {
       const { data } = await supabase
         .from('profiles')
-        .select('is_active') // Use 'is_active' column
+        .select('is_active')
         .eq('user_id', userId)
         .single();
       
-      // If is_active is false, it's an automated profile
-      return data?.is_active === false;
+      // If is_active is true, it's an automated profile
+      return data?.is_active === true;
     } catch {
       return false;
     }
@@ -57,7 +57,7 @@ export const useChat = (matchId?: string) => {
   // Trigger automated response
   const triggerAutomatedResponse = async (chatId: string, userMessage: string, receiverId: string) => {
     try {
-      const { data, error } = await supabase.functions.invoke('chat-response', { // Renamed function call
+      const { data, error } = await supabase.functions.invoke('chat-response', {
         body: {
           chatId,
           senderId: user?.id,

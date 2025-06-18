@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect } => 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import WelcomeScreen from '@/components/WelcomeScreen';
 import RegistrationFlow from '@/components/RegistrationFlow';
@@ -80,12 +80,12 @@ const Index = () => {
         'first_name', 'last_name', 'email', 'date_of_birth', 'time_of_birth',
         'place_of_birth', 'latitude', 'longitude', 'gender',
         'looking_for', 'min_age', 'max_age'
-        // 'is_active' is not a required field for *completeness* of a human profile,
-        // but rather a flag for automated profiles.
       ];
 
-      // Check if all required fields are present and not null/empty
-      const isProfileComplete = userProfile && requiredFields.every(field => {
+      // Check if all required fields are present and not null/empty, AND if is_active is explicitly false (for human profiles)
+      const isProfileComplete = userProfile && 
+                                userProfile.is_active === false && // Human profiles should have is_active: false
+                                requiredFields.every(field => {
         const value = userProfile[field as keyof typeof userProfile];
         // For string fields, check if it's not an empty string
         if (typeof value === 'string') {
@@ -131,7 +131,9 @@ const Index = () => {
       'place_of_birth', 'latitude', 'longitude', 'gender',
       'looking_for', 'min_age', 'max_age'
     ];
-    const isSubmittedProfileComplete = userData && requiredFields.every(field => {
+    const isSubmittedProfileComplete = userData && 
+                                       userData.is_active === false && // Human profiles should have is_active: false
+                                       requiredFields.every(field => {
       const value = userData[field as keyof typeof userData];
       if (typeof value === 'string') {
         return value.trim() !== '';
@@ -174,7 +176,7 @@ const Index = () => {
         </div>
       </div>
     );
-  }
+  };
 
   return (
     <div className="min-h-screen cosmic-bg">

@@ -211,13 +211,13 @@ serve(async (req) => {
     // Log the filters being applied for potential profiles
     console.log(`generate-matches (Edge): Querying for profiles where gender is '${userProfile.looking_for}' AND looking_for is '${userProfile.gender}' AND user_id is NOT '${user_id}'.`);
 
-    // Get potential matches based on mutual preferences, excluding current user and inactive profiles
+    // Get potential matches based on mutual preferences, excluding current user and automated profiles
     const { data: potentialProfiles, error: potentialProfilesError } = await supabaseClient
       .from('profiles')
       .select('*')
       .eq('gender', userProfile.looking_for) // Match has the gender current user is looking for
       .eq('looking_for', userProfile.gender) // Match is looking for current user's gender
-      .eq('is_active', true) // Only consider active profiles (not bots)
+      .eq('is_active', false) // Only consider human profiles (is_active: false)
       .neq('user_id', user_id); // Exclude the current user's own profile
 
     if (potentialProfilesError) {
@@ -261,10 +261,8 @@ serve(async (req) => {
         const userFitsMatchAgeRange = userAge >= matchProfile.min_age && userAge <= matchProfile.max_age;
         const matchFitsUserAgeRange = matchAge >= userProfile.min_age && matchAge <= userProfile.max_age;
 
-        console.log(`generate-matches (Edge): Age compatibility for ${matchProfile.first_name} - User fits match range: ${userFitsMatchAgeRange}, Match fits user range: ${matchFitsUserAgeRange}`);
-
+        console.log(`generate-matches (Edge): Age mismatch for ${matchProfile.first_name}. Skipping.`);
         if (!userFitsMatchAgeRange || !matchFitsUserAgeRange) {
-          console.log(`generate-matches (Edge): Age mismatch for ${matchProfile.first_name}. Skipping.`);
           continue;
         }
 

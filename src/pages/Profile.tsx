@@ -28,7 +28,7 @@ const Profile = () => {
     looking_for: '',
     min_age: 18,
     max_age: 35,
-    is_active: true, // Default to true for human profiles
+    is_active: false, // Default to false for human profiles
   });
 
   useEffect(() => {
@@ -69,7 +69,7 @@ const Profile = () => {
           looking_for: data.looking_for,
           min_age: data.min_age,
           max_age: data.max_age,
-          is_active: data.is_active ?? true, // Use existing value or default to true
+          is_active: data.is_active ?? false, // Use existing value or default to false
         });
       }
     } catch (error) {
