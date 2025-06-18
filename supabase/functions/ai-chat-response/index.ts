@@ -243,6 +243,47 @@ async function callAiApi(prompt: string): Promise<string> {
 }
 
 /**
+ * Helper function to introduce random typos into a string.
+ * Applies typos with a certain probability per word.
+ */
+function introduceTypos(text: string, typoProbabilityPerWord: number = 0.15): string {
+  const words = text.split(' ');
+  const typedWords = words.map(word => {
+    // Skip very short words or if random chance doesn't hit
+    if (word.length < 3 || Math.random() > typoProbabilityPerWord) {
+      return word;
+    }
+
+    const typoType = Math.floor(Math.random() * 3); // 0: swap, 1: omit, 2: insert
+    let typedWordChars = Array.from(word); // Convert to array for easier manipulation
+
+    switch (typoType) {
+      case 0: // Swap adjacent characters
+        if (typedWordChars.length > 1) {
+          const idx = Math.floor(Math.random() * (typedWordChars.length - 1));
+          [typedWordChars[idx], typedWordChars[idx + 1]] = [typedWordChars[idx + 1], typedWordChars[idx]];
+        }
+        break;
+      case 1: // Omit a character
+        if (typedWordChars.length > 1) { // Ensure word doesn't become empty
+          const omitIdx = Math.floor(Math.random() * typedWordChars.length);
+          typedWordChars.splice(omitIdx, 1);
+        }
+        break;
+      case 2: // Insert a common character
+        const insertIdx = Math.floor(Math.random() * (typedWordChars.length + 1));
+        const commonChars = 'aeioulnrst'; // Common English letters for realistic insertions
+        const charToInsert = commonChars[Math.floor(Math.random() * commonChars.length)];
+        typedWordChars.splice(insertIdx, 0, charToInsert);
+        break;
+    }
+    return typedWordChars.join('');
+  });
+  return typedWords.join(' ');
+}
+
+
+/**
  * Stores the AI-generated message in the database.
  */
 async function storeAiResponse(supabaseClient: SupabaseClient, chatId: string, receiverId: string, aiResponse: string) {
@@ -326,6 +367,8 @@ serve(async (req) => {
     let fullAiResponse = await callAiApi(enhancedPrompt);
     // Post-process: Remove any asterisks from the response
     fullAiResponse = fullAiResponse.replace(/\*/g, '');
+    // Introduce typos
+    fullAiResponse = introduceTypos(fullAiResponse);
     // Remove the MESSAGE_DELIMITER from the full response before splitting
     fullAiResponse = fullAiResponse.replace(new RegExp(MESSAGE_DELIMITER, 'g'), '');
 
