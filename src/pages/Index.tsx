@@ -1,4 +1,4 @@
-import { useState, useEffect } => 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import WelcomeScreen from '@/components/WelcomeScreen';
 import RegistrationFlow from '@/components/RegistrationFlow';
