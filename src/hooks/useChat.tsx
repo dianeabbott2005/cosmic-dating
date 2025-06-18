@@ -268,7 +268,8 @@ export const useChat = (matchId?: string) => {
 
   // Set up real-time subscription
   useEffect(() => {
-    if (!chat?.id || !user?.id) { // Ensure chat.id and user.id are available
+    // Ensure chat.id and user.id are available before attempting to subscribe
+    if (!chat?.id || !user?.id) {
       console.log('useChat: Real-time subscription skipped. Chat ID or user ID not available.');
       // Ensure any existing channel is removed if conditions for subscription are no longer met
       if (realtimeChannelRef.current) {
@@ -280,32 +281,16 @@ export const useChat = (matchId?: string) => {
     }
 
     const channelName = `chat-${chat.id}`;
-    let channel = supabase.channel(channelName); // Get or create the channel instance
+    console.log(`useChat: Attempting to set up real-time subscription for chat ID: ${chat.id}`);
 
-    // If the channel is already subscribed and it's the one we expect, do nothing.
-    // Supabase Realtime channels have a 'state' property.
-    if (realtimeChannelRef.current && realtimeChannelRef.current.topic === `realtime:${channelName}`) {
-      console.log(`useChat: Channel ${channelName} already subscribed. Skipping re-subscription.`);
-      return;
-    }
-
-    // If a different channel is currently in the ref, remove it first.
+    // Always remove the old channel before creating a new one to prevent duplicates
     if (realtimeChannelRef.current) {
       console.log(`useChat: Removing old channel ${realtimeChannelRef.current.topic} before subscribing to ${channelName}.`);
       supabase.removeChannel(realtimeChannelRef.current);
       realtimeChannelRef.current = null;
-    } 
-    // If it's the same channel but not subscribed (e.g., 'closed', 'errored', 'leaving'),
-    // ensure it's fully detached before re-subscribing.
-    else if (realtimeChannelRef.current && realtimeChannelRef.current === channel && channel.state !== 'subscribed') {
-        console.log(`useChat: Channel ${channelName} exists but is not subscribed (${channel.state}). Re-subscribing.`);
-        supabase.removeChannel(channel); // Ensure it's fully detached before re-subscribing
     }
 
-    console.log(`useChat: Attempting to set up real-time subscription for chat ID: ${chat.id}`);
-    
-    // Re-get the channel to ensure it's fresh after potential removal/detachment
-    channel = supabase.channel(channelName);
+    const channel = supabase.channel(channelName);
 
     channel
       .on(
