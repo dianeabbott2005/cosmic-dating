@@ -30,7 +30,7 @@ serve(async (req) => {
       throw new Error('Google Maps API key not configured');
     }
 
-    const { address, latitude, longitude }: GeocodeRequest = await req.json();
+    let { address, latitude, longitude }: GeocodeRequest = await req.json(); // Changed to 'let'
     
     let results: PlaceResult[] = [];
     let timezoneId: string | null = null;
