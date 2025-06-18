@@ -43,7 +43,7 @@ export const useChat = (matchId?: string) => {
     try {
       const { data } = await supabase
         .from('profiles')
-        .select('is_active')
+        .select('is_active') // Corrected column name from is_dummy_profile to is_active
         .eq('user_id', userId)
         .single();
       
