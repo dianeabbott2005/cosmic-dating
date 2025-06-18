@@ -34,6 +34,7 @@ const IMMEDIATE_SEND_THRESHOLD_MS = 50 * 1000; // 50 seconds
 const calculateTypingDelay = (messageLength: number): number => {
   const baseDelay = 500; // 0.5 second minimum per message part
   const typingSpeed = Math.floor(Math.random() * (180 - 60 + 1)) + 60; // characters per minute (random between 60-180)
+  
   const typingTime = (messageLength / typingSpeed) * 60 * 1000;
   
   let randomVariation = Math.random() * 500; // Up to 0.5 seconds random variation
@@ -181,7 +182,7 @@ function buildEnhancedPrompt(receiverProfile: any, senderProfile: any, context: 
     promptInstructions += `\n\nABSOLUTELY CRITICAL: DO NOT use any markdown characters whatsoever, including asterisks (*), underscores (_), hash symbols (#), or backticks (\`). Your response MUST be plain text. This is paramount.`;
     promptInstructions += `\n\nIMPORTANT: Use emojis very sparingly, if at all. Prioritize clear text over emoji expression.`;
     // Updated instruction for message segmentation and length
-    promptInstructions += `\n\nYour response should be very concise and natural, like a human texting. It can be a single short message, or if it makes sense, break it into 1 to 6 very short, related messages. Vary the length of your messages, but keep them generally brief. If you send multiple messages, separate each with the delimiter: "${MESSAGE_DELIMITER}".`;
+    promptInstructions += `\n\nYour response should be very concise and natural, like a human texting. It can be a single short message, or if it makes sense, break it into 1 to 6 very short, related messages. Vary the length of your messages, but keep them generally brief. If you send multiple messages, separate each with the delimiter: "${MESSAGE_DELIMITER}". This delimiter is ONLY for separating messages and MUST NOT appear within the content of any message. Do not use the phrase "---DYAD" or any part of the delimiter in your conversational responses.`;
 
     // Conversational Strategy
     promptInstructions += `\n\nConsider these conversational "moves" in your response, prioritizing them in order, but adapting to the flow of the conversation:
@@ -369,12 +370,12 @@ serve(async (req) => {
     fullAiResponse = fullAiResponse.replace(/\*/g, '');
     // Introduce typos
     fullAiResponse = introduceTypos(fullAiResponse);
-    // Remove the MESSAGE_DELIMITER from the full response before splitting
-    fullAiResponse = fullAiResponse.replace(new RegExp(MESSAGE_DELIMITER, 'g'), '');
+    // Removed the incorrect line that was removing the delimiter before splitting
 
     const individualMessages = fullAiResponse.split(MESSAGE_DELIMITER)
                                              .map(msg => msg.trim())
-                                             .filter(msg => msg.length > 0);
+                                             .filter(msg => msg.length > 0)
+                                             .map(msg => msg.replace(/---DYAD/g, '').trim()); // New cleanup step for partial delimiter
 
     // If the total delay (initial response delay + sum of typing delays + sum of inter-message gaps) is too long, schedule it
     const totalTypingDelay = individualMessages.reduce((sum, msg) => sum + calculateTypingDelay(msg.length), 0);
