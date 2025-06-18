@@ -26,20 +26,20 @@ const NON_NATIVE_ENGLISH_REGIONS: { [key: string]: { languageIssue: string; dial
 const IMMEDIATE_SEND_THRESHOLD_MS = 50 * 1000; // 50 seconds
 
 /**
- * Calculates a human-like typing delay, capped to prevent timeouts.
- * This is for *individual messages* within a multi-message response.
+ * Calculates a human-like typing delay for a single message part.
+ * This is used to determine the time it takes to "type" a message.
  * @param messageLength The length of the message to be "typed".
  * @returns A delay in milliseconds.
  */
 const calculateTypingDelay = (messageLength: number): number => {
-  const baseDelay = 500; // 0.5 second minimum per message
+  const baseDelay = 500; // 0.5 second minimum per message part
   const typingSpeed = Math.floor(Math.random() * (180 - 60 + 1)) + 60; // characters per minute (random between 60-180)
   const typingTime = (messageLength / typingSpeed) * 60 * 1000;
   
   let randomVariation = Math.random() * 500; // Up to 0.5 seconds random variation
   
   const totalDelay = baseDelay + typingTime + randomVariation;
-  return Math.min(totalDelay, 5000); // Cap at 5 seconds to prevent timeouts within the function
+  return Math.min(totalDelay, 5000); // Cap at 5 seconds to prevent excessive internal delays
 };
 
 /**
@@ -57,9 +57,15 @@ const calculateResponseDelay = (): number => {
   } else { // 10% chance for slightly longer delay (10-15 seconds)
     delay = 10 * 1000 + Math.floor(Math.random() * 5 * 1000);
   }
-  // For the purpose of this Edge Function, we cap the *internal* delay
-  // If a longer delay is needed, it will be scheduled.
-  return delay; // No cap here, as the scheduling logic handles long delays
+  return delay;
+};
+
+/**
+ * Calculates a random gap between individual messages when a response is split.
+ * @returns A delay in milliseconds (between 2 and 20 seconds).
+ */
+const calculateInterMessageGap = (): number => {
+  return Math.floor(Math.random() * (20 - 2 + 1) + 2) * 1000; // Random between 2 and 20 seconds
 };
 
 /**
@@ -174,9 +180,9 @@ function buildEnhancedPrompt(receiverProfile: any, senderProfile: any, context: 
 
     // Stronger, overriding instructions for emojis and markdown
     promptInstructions += `\n\nABSOLUTELY CRITICAL: DO NOT use any markdown characters whatsoever, including asterisks (*), underscores (_), hash symbols (#), or backticks (\`). Your response MUST be plain text. This is paramount.`;
-    promptInstructions += `\n\nIMPORTANT: Use emojis very sparingly, only when highly relevant to the message's core meaning. Prioritize clear text over emoji expression.`;
+    promptInstructions += `\n\nIMPORTANT: Use emojis very sparingly, if at all. Prioritize clear text over emoji expression.`;
     // Updated instruction for message segmentation and length
-    promptInstructions += `\n\nYour response should be very concise and natural, like a human texting. It can be a single short message, or if it makes sense, break it into 1 to 4 very short, related messages. Vary the length of your messages, but keep them generally brief. If you send multiple messages, separate each with the delimiter: "${MESSAGE_DELIMITER}".`;
+    promptInstructions += `\n\nYour response should be very concise and natural, like a human texting. It can be a single short message, or if it makes sense, break it into 1 to 6 very short, related messages. Vary the length of your messages, but keep them generally brief. If you send multiple messages, separate each with the delimiter: "${MESSAGE_DELIMITER}".`;
 
     // Conversational Strategy
     promptInstructions += `\n\nConsider these conversational "moves" in your response, prioritizing them in order, but adapting to the flow of the conversation:
@@ -224,7 +230,7 @@ async function callGeminiApi(prompt: string): Promise<string> {
             temperature: 0.8,
             topK: 40,
             topP: 0.95,
-            maxOutputTokens: 75, // Further reduced token limit for shorter replies
+            maxOutputTokens: 50, // Further reduced token limit for shorter replies
           }
         }),
       }
@@ -322,24 +328,31 @@ serve(async (req) => {
     const enhancedPrompt = buildEnhancedPrompt(receiverProfile, senderProfile, context, conversationHistory, message);
     console.log('Enhanced prompt construction complete.');
 
-    const fullAiResponse = await callGeminiApi(enhancedPrompt);
-    console.log('Full AI response received:', fullAiResponse);
+    let fullAiResponse = await callGeminiApi(enhancedPrompt);
+    // Post-process: Remove any asterisks from the response
+    fullAiResponse = fullAiResponse.replace(/\*/g, '');
+    console.log('Full AI response received (post-processed):', fullAiResponse);
 
     const individualMessages = fullAiResponse.split(MESSAGE_DELIMITER)
                                              .map(msg => msg.trim())
                                              .filter(msg => msg.length > 0);
 
-    // If the total delay (initial response delay + sum of typing delays) is too long, schedule it
+    // If the total delay (initial response delay + sum of typing delays + sum of inter-message gaps) is too long, schedule it
     const totalTypingDelay = individualMessages.reduce((sum, msg) => sum + calculateTypingDelay(msg.length), 0);
-    const overallDelay = responseDelay + totalTypingDelay;
+    const totalInterMessageGaps = individualMessages.length > 1 ? (individualMessages.length - 1) * calculateInterMessageGap() : 0;
+    const overallDelay = responseDelay + totalTypingDelay + totalInterMessageGaps;
 
     if (overallDelay > IMMEDIATE_SEND_THRESHOLD_MS) {
       console.log(`Overall delay (${overallDelay}ms) exceeds threshold. Scheduling message.`);
       // Schedule each message with its cumulative delay
       let cumulativeDelay = responseDelay;
-      for (const msgContent of individualMessages) {
+      for (let i = 0; i < individualMessages.length; i++) {
+        const msgContent = individualMessages[i];
         await scheduleDelayedMessage(supabaseClient, chatId, receiverId, msgContent, cumulativeDelay);
         cumulativeDelay += calculateTypingDelay(msgContent.length);
+        if (i < individualMessages.length - 1) {
+          cumulativeDelay += calculateInterMessageGap(); // Add gap between messages
+        }
       }
       // Update context immediately for the user's message + the *intended* AI response
       await updateConversationContext(supabaseClient, chatId, receiverProfile.first_name, senderProfile?.first_name, message, fullAiResponse, context);
@@ -355,13 +368,20 @@ serve(async (req) => {
       await new Promise(resolve => setTimeout(resolve, responseDelay)); // Initial response delay
 
       let lastMessageSent: Message | null = null;
-      for (const msgContent of individualMessages) {
+      for (let i = 0; i < individualMessages.length; i++) {
+        const msgContent = individualMessages[i];
         const typingDelay = calculateTypingDelay(msgContent.length);
         console.log(`Calculated typing delay: ${typingDelay}ms for message length: ${msgContent.length}`);
         await new Promise(resolve => setTimeout(resolve, typingDelay));
 
         lastMessageSent = await storeAiResponse(supabaseClient, chatId, receiverId, msgContent);
         console.log('Stored AI message:', lastMessageSent);
+
+        if (i < individualMessages.length - 1) {
+          const interMessageGap = calculateInterMessageGap();
+          console.log(`Adding inter-message gap of ${interMessageGap}ms.`);
+          await new Promise(resolve => setTimeout(resolve, interMessageGap));
+        }
       }
 
       // Update conversation context with the full AI response (concatenated messages)

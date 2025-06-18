@@ -6,22 +6,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-/**
- * Calculates a human-like typing delay for a message.
- * @param messageLength The length of the message to be "typed".
- * @returns A delay in milliseconds.
- */
-const calculateTypingDelay = (messageLength: number): number => {
-  const baseDelay = 1000; // 1 second minimum per message
-  const typingSpeed = Math.floor(Math.random() * (180 - 60 + 1)) + 60; // characters per minute (random between 60-180)
-  
-  const typingTime = (messageLength / typingSpeed) * 60 * 1000;
-  
-  let randomVariation = Math.random() * 500; // Up to 0.5 seconds random variation
-  
-  const totalDelay = baseDelay + typingTime + randomVariation;
-  return Math.min(totalDelay, 5000); // Cap at 5 seconds to prevent excessive delays within the cron job
-};
+// Removed calculateTypingDelay as delays are now fully managed by ai-chat-response
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -60,14 +45,10 @@ serve(async (req) => {
 
     console.log(`Found ${delayedMessages.length} messages to send.`);
 
-    // 2. Send each message with a delay and update its status
+    // 2. Send each message and update its status
     for (const msg of delayedMessages) {
       try {
-        // Introduce a typing delay before sending each message
-        const delay = calculateTypingDelay(msg.content.length);
-        console.log(`Delaying message ${msg.id} by ${delay}ms for typing simulation.`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-
+        // No additional delay here; the scheduled_send_time already accounts for all delays
         const { error: insertError } = await supabaseClient
           .from('messages')
           .insert({
