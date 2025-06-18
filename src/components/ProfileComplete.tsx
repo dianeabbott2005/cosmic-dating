@@ -31,7 +31,8 @@ const ProfileComplete = ({ onNext, userData }: ProfileCompleteProps) => {
     setIsCreating(true);
     
     try {
-      let { latitude, longitude, timezone } = userData;
+      let { latitude, longitude } = userData; // Removed timezone from destructuring here
+      let timezone: string | null = null; // Initialize timezone as null
 
       if (userData.placeOfBirth && (!latitude || !longitude)) {
         try {
@@ -63,9 +64,11 @@ const ProfileComplete = ({ onNext, userData }: ProfileCompleteProps) => {
             console.log('Timezone fetched automatically:', timezone);
           } else {
             console.warn('Could not automatically determine timezone for coordinates:', { latitude, longitude });
+            timezone = null; // Explicitly set to null if not found
           }
         } catch (timezoneError) {
           console.error('Error fetching timezone automatically:', timezoneError);
+          timezone = null; // Explicitly set to null on error
         }
       }
       
@@ -82,7 +85,7 @@ const ProfileComplete = ({ onNext, userData }: ProfileCompleteProps) => {
         max_age: userData.maxAge,
         latitude: latitude,
         longitude: longitude,
-        timezone: timezone,
+        timezone: timezone, // This will now be string or null
         updated_at: new Date().toISOString(),
       };
 
@@ -170,7 +173,7 @@ const ProfileComplete = ({ onNext, userData }: ProfileCompleteProps) => {
           </div>
           <div className="col-span-2">
             <span className="text-gray-400">Timezone:</span>
-            <p className="text-white">{userData.timezone || 'Automatically determined'}</p>
+            <p className="text-white">{timezone || 'Automatically determined'}</p>
           </div>
           <div>
             <span className="text-gray-400">Age Range:</span>

@@ -23,7 +23,7 @@ const Profile = () => {
     place_of_birth: '',
     latitude: null as number | null,
     longitude: null as number | null,
-    timezone: '',
+    timezone: null as string | null, // Changed to null
     gender: '',
     looking_for: '',
     min_age: 18,
@@ -63,7 +63,7 @@ const Profile = () => {
           place_of_birth: data.place_of_birth,
           latitude: data.latitude,
           longitude: data.longitude,
-          timezone: data.timezone || '',
+          timezone: data.timezone, // Now directly use data.timezone (can be null)
           gender: data.gender,
           looking_for: data.looking_for,
           min_age: data.min_age,
@@ -105,9 +105,11 @@ const Profile = () => {
             console.log('Timezone re-fetched automatically:', currentReadonlyTimezone);
           } else {
             console.warn('Could not automatically determine timezone for coordinates:', { currentLatitude, currentLongitude });
+            currentReadonlyTimezone = null; // Explicitly set to null if not found
           }
         } catch (timezoneError) {
           console.error('Error re-fetching timezone automatically:', timezoneError);
+          currentReadonlyTimezone = null; // Explicitly set to null on error
         }
       }
 
