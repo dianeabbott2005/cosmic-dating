@@ -92,10 +92,10 @@ export const useMatches = () => {
           matched_user_id,
           compatibility_score,
           user1_profile:profiles!matches_user_id_fkey(
-            user_id, first_name, last_name, date_of_birth, time_of_birth, place_of_birth, latitude, longitude, timezone, gender, looking_for, min_age, max_age
+            user_id, first_name, last_name, date_of_birth, time_of_birth, place_of_birth, gender, is_dummy_profile
           ),
           user2_profile:profiles!matches_matched_user_id_fkey(
-            user_id, first_name, last_name, date_of_birth, time_of_birth, place_of_birth, latitude, longitude, timezone, gender, looking_for, min_age, max_age
+            user_id, first_name, last_name, date_of_birth, time_of_birth, place_of_birth, gender, is_dummy_profile
           )
         `)
         .or(`user_id.eq.${user.id},matched_user_id.eq.${user.id}`);
