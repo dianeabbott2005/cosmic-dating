@@ -1,4 +1,4 @@
-# AI Development Rules for Zodiac Heart Sync
+# AI Development Rules for Cosmic Dating
 
 This document outlines the core technologies used in the project and provides clear guidelines on which libraries to use for specific functionalities. Adhering to these rules ensures consistency, maintainability, and optimal performance.
 

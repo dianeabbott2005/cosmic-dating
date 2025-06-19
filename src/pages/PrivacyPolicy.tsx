@@ -17,13 +17,13 @@ const PrivacyPolicy = () => {
         </button>
 
         <div className="card-cosmic p-8">
-          <h1 className="text-3xl font-bold text-white mb-6">Privacy Policy for Zodiac Heart Sync</h1>
+          <h1 className="text-3xl font-bold text-white mb-6">Privacy Policy for Cosmic Dating</h1>
           <p className="text-gray-400 mb-4">
             Last Updated: July 26, 2024
           </p>
 
           <p className="text-gray-300 mb-6">
-            Welcome to Zodiac Heart Sync! We are committed to protecting your privacy and ensuring a safe and enjoyable experience. This Privacy Policy explains how we collect, use, disclose, and protect your information when you use our mobile application and services.
+            Welcome to Cosmic Dating! We are committed to protecting your privacy and ensuring a safe and enjoyable experience. This Privacy Policy explains how we collect, use, disclose, and protect your information when you use our mobile application and services.
           </p>
 
           <h2 className="text-2xl font-semibold text-white mb-4">1. Information We Collect</h2>
@@ -96,7 +96,7 @@ const PrivacyPolicy = () => {
             <li>The right to object to our processing of your information.</li>
             <li>The right to request that we restrict the processing of your personal information.</li>
             <li>The right to data portability.</li>
-            <li>The right to withdraw consent at any time where Zodiac Heart Sync relied on your consent to process your personal information.</li>
+            <li>The right to withdraw consent at any time where Cosmic Dating relied on your consent to process your personal information.</li>
           </ul>
           <p className="text-gray-300 mb-6">
             To exercise any of these rights, please contact us at [Your Contact Email Here].

@@ -17,18 +17,18 @@ const TermsOfService = () => {
         </button>
 
         <div className="card-cosmic p-8">
-          <h1 className="text-3xl font-bold text-white mb-6">Terms of Service for Zodiac Heart Sync</h1>
+          <h1 className="text-3xl font-bold text-white mb-6">Terms of Service for Cosmic Dating</h1>
           <p className="text-gray-400 mb-4">
             Last Updated: July 26, 2024
           </p>
 
           <p className="text-gray-300 mb-6">
-            Welcome to Zodiac Heart Sync! These Terms of Service ("Terms") govern your use of our mobile application and services. By accessing or using our services, you agree to be bound by these Terms.
+            Welcome to Cosmic Dating! These Terms of Service ("Terms") govern your use of our mobile application and services. By accessing or using our services, you agree to be bound by these Terms.
           </p>
 
           <h2 className="text-2xl font-semibold text-white mb-4">1. Acceptance of Terms</h2>
           <p className="text-gray-300 mb-6">
-            By creating an account and using Zodiac Heart Sync, you confirm that you are at least 18 years old and agree to these Terms. If you do not agree to these Terms, you may not use our services.
+            By creating an account and using Cosmic Dating, you confirm that you are at least 18 years old and agree to these Terms. If you do not agree to these Terms, you may not use our services.
           </p>
 
           <h2 className="text-2xl font-semibold text-white mb-4">2. Your Account</h2>
@@ -53,22 +53,22 @@ const TermsOfService = () => {
           <h2 className="text-2xl font-semibold text-white mb-4">4. Content</h2>
           <ul className="list-disc list-inside text-gray-300 mb-6 space-y-2">
             <li>You are solely responsible for the content you post or transmit through the service.</li>
-            <li>You grant Zodiac Heart Sync a worldwide, non-exclusive, royalty-free license to use, reproduce, adapt, publish, and distribute content you post on or through the service.</li>
+            <li>You grant Cosmic Dating a worldwide, non-exclusive, royalty-free license to use, reproduce, adapt, publish, and distribute content you post on or through the service.</li>
           </ul>
 
           <h2 className="text-2xl font-semibold text-white mb-4">5. Intellectual Property</h2>
           <p className="text-gray-300 mb-6">
-            All intellectual property rights in the service and its content (excluding user-provided content) are owned by Zodiac Heart Sync or its licensors.
+            All intellectual property rights in the service and its content (excluding user-provided content) are owned by Cosmic Dating or its licensors.
           </p>
 
           <h2 className="text-2xl font-semibold text-white mb-4">6. Disclaimers</h2>
           <p className="text-gray-300 mb-6">
-            The service is provided "as is" and "as available" without any warranties of any kind, either express or implied. Zodiac Heart Sync does not guarantee the accuracy or reliability of any astrological compatibility calculations or matches.
+            The service is provided "as is" and "as available" without any warranties of any kind, either express or implied. Cosmic Dating does not guarantee the accuracy or reliability of any astrological compatibility calculations or matches.
           </p>
 
           <h2 className="text-2xl font-semibold text-white mb-4">7. Limitation of Liability</h2>
           <p className="text-gray-300 mb-6">
-            To the fullest extent permitted by applicable law, Zodiac Heart Sync shall not be liable for any indirect, incidental, special, consequential, or punitive damages, or any loss of profits or revenues, whether incurred directly or indirectly, or any loss of data, use, goodwill, or other intangible losses, resulting from (a) your access to or use of or inability to access or use the service; (b) any conduct or content of any third party on the service.
+            To the fullest extent permitted by applicable law, Cosmic Dating shall not be liable for any indirect, incidental, special, consequential, or punitive damages, or any loss of profits or revenues, whether incurred directly or indirectly, or any loss of data, use, goodwill, or other intangible losses, resulting from (a) your access to or use of or inability to access or use the service; (b) any conduct or content of any third party on the service.
           </p>
 
           <h2 className="text-2xl font-semibold text-white mb-4">8. Changes to Terms</h2>
