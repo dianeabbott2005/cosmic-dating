@@ -28,7 +28,7 @@ export interface Chat {
   last_message?: Message;
 }
 
-const AUTOMATED_RESPONSE_DEBOUNCE_TIME = 30000; // 30 seconds
+// Removed AUTOMATED_RESPONSE_DEBOUNCE_TIME as it's no longer needed client-side
 
 export const useChat = (matchId?: string) => {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -38,48 +38,26 @@ export const useChat = (matchId?: string) => {
   const { user } = useAuth();
   const isWindowFocused = useWindowFocus(); // Use the new hook
 
-  // Refs for debounce logic and Realtime Channel instance
-  const responseTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const lastUserMessageContentRef = useRef<string | null>(null); // Corrected initialization
+  // Refs for Realtime Channel instance (responseTimerRef and lastUserMessageContentRef are no longer needed)
   const realtimeChannelRef = useRef<RealtimeChannel | null>(null); // Ref to store the channel instance
 
-  // Check if a user is an active profile (is_active: true)
-  const isProfileActive = async (userId: string): Promise<boolean> => {
-    try {
-      const { data } = await supabase
-        .from('profiles')
-        .select('is_active')
-        .eq('user_id', userId)
-        .single();
+  // isProfileActive is no longer needed for triggering, but could be kept for other logic if desired.
+  // For now, removing it as its primary use was for client-side AI triggering.
+  // const isProfileActive = async (userId: string): Promise<boolean> => {
+  //   try {
+  //     const { data } = await supabase
+  //       .from('profiles')
+  //       .select('is_active')
+  //       .eq('user_id', userId)
+  //       .single();
       
-      // If is_active is true, it's an active profile (which could be automated)
-      return data?.is_active === true;
-    } catch {
-      return false;
-    }
-  };
+  //     return data?.is_active === true;
+  //   } catch {
+  //     return false;
+  //   }
+  // };
 
-  // Trigger automated response
-  const triggerResponse = async (chatId: string, userMessage: string, receiverId: string) => {
-    try {
-      const { data, error } = await supabase.functions.invoke('chat-response', {
-        body: {
-          chatId,
-          senderId: user?.id,
-          message: userMessage,
-          receiverId
-        }
-      });
-
-      if (error) {
-        console.error('Error triggering response:', error);
-        return;
-      }
-
-    } catch (error) {
-      console.error('Error calling chat response function:', error);
-    }
-  };
+  // Removed triggerResponse function as it's now handled by the database trigger
 
   // Load all chats for the current user
   const loadUserChats = async () => {
@@ -145,7 +123,7 @@ export const useChat = (matchId?: string) => {
               id: lastMessage.id,
               content: lastMessage.content,
               sender_id: lastMessage.sender_id,
-              created_at: lastMessage.created_id,
+              created_at: lastMessage.created_at, // Corrected from created_id
               chat_id: lastMessage.chat_id
             } : undefined
           };
@@ -245,30 +223,7 @@ export const useChat = (matchId?: string) => {
       // Add the message to local state immediately for better UX
       if (data) {
         setMessages(prev => [...prev, data]);
-
-        // Determine the other user's ID
-        const otherUserId = chat.user1_id === user.id ? chat.user2_id : chat.user1_id;
-        
-        // Check if the other user is an active profile (which could be automated)
-        const isOtherUserActive = await isProfileActive(otherUserId);
-
-        if (isOtherUserActive) {
-          // Store the content of the last message sent by the user
-          lastUserMessageContentRef.current = content.trim();
-
-          // Clear any existing timer
-          if (responseTimerRef.current) {
-            clearTimeout(responseTimerRef.current);
-          }
-
-          // Set a new timer
-          responseTimerRef.current = setTimeout(() => {
-            if (lastUserMessageContentRef.current) {
-              triggerResponse(chat.id, lastUserMessageContentRef.current, otherUserId);
-              lastUserMessageContentRef.current = null; // Clear the ref after triggering
-            }
-          }, AUTOMATED_RESPONSE_DEBOUNCE_TIME);
-        }
+        // No longer trigger AI response from here; the database trigger will handle it.
       }
     } catch (error) {
       console.error('Error sending message:', error);
@@ -357,12 +312,7 @@ export const useChat = (matchId?: string) => {
         realtimeChannelRef.current.unsubscribe();
         realtimeChannelRef.current = null; // Clear the ref
       }
-      // Also clear any pending response timers if the chat view is closed
-      if (responseTimerRef.current) {
-        clearTimeout(responseTimerRef.current);
-        responseTimerRef.current = null;
-      }
-      lastUserMessageContentRef.current = null;
+      // Removed responseTimerRef and lastUserMessageContentRef cleanup as they are no longer used
     };
   }, [chat?.id, user?.id]); // Dependencies: chat.id and user.id
 
