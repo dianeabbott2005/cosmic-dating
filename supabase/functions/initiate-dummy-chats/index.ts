@@ -192,7 +192,8 @@ function buildAiPrompt(aiProfile: any, humanProfile: any, context: any, conversa
       if (timeSinceLastAiMessage !== null && timeSinceLastAiMessage >= MIN_GAP_FOR_REENGAGEMENT_HOURS) {
           promptInstructions += `\n\nIt has been approximately ${Math.round(timeSinceLastAiMessage)} hours since your last message in this chat.`;
           if (wasAiLastSpeaker) {
-            promptInstructions += ` You were the last one to speak. Inquire if everything is alright, or gently pick up from the last topic you discussed, showing concern or continued interest.`;
+            // Updated instruction: Do not apologize, inquire about user's absence or pick up conversation
+            promptInstructions += ` Do NOT apologize for the gap. Instead, inquire if everything is alright, or gently pick up from the last topic you discussed, showing concern or continued interest. Vary the way you do this.`;
           } else {
             promptInstructions += ` Acknowledge this gap naturally, perhaps with a friendly re-initiation or by expressing a slight curiosity about the delay, without being accusatory.`;
           }
