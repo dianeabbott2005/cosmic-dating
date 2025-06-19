@@ -7,7 +7,7 @@ import ConsentScreen from '@/components/ConsentScreen';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import type { Database } from '@/integrations/supabase/types';
-import { useMatches } from '@/hooks/useMatches';
+// Removed useMatches here as its refreshMatches is no longer explicitly called from Index.
 
 const Index = () => {
   const [currentView, setCurrentView] = useState<'welcome' | 'consent' | 'registration' | 'dashboard'>('welcome');
@@ -17,7 +17,6 @@ const Index = () => {
   const { user: authUser } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  // Removed useMatches here as its refreshMatches is no longer explicitly called from Index.
 
   useEffect(() => {
     const initializeView = async () => {
@@ -47,6 +46,10 @@ const Index = () => {
   const checkUserProfile = async () => {
     if (!authUser) return;
 
+    // Add a small initial delay to allow Supabase triggers to complete
+    console.log('Index.tsx: Introducing initial delay before profile fetch...');
+    await new Promise(resolve => setTimeout(resolve, 500)); // Wait 0.5 seconds
+
     let userProfile: Database['public']['Tables']['profiles']['Row'] | null = null;
     let attempts = 0;
     const MAX_ATTEMPTS = 5;
@@ -54,7 +57,7 @@ const Index = () => {
 
     while (!userProfile && attempts < MAX_ATTEMPTS) {
       if (attempts > 0) {
-        console.log(`Index.tsx: Attempting to fetch user profile (${attempts}/${MAX_ATTEMPTS})...`);
+        console.log(`Index.tsx: Retrying fetch for user profile (${attempts}/${MAX_ATTEMPTS})...`);
         await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
       }
       try {
@@ -91,6 +94,7 @@ const Index = () => {
     }
       
     setProfile(userProfile);
+    console.log('Index.tsx: Fetched user profile:', userProfile);
 
     // Define all required fields for a complete profile
     const requiredFields = [
@@ -112,14 +116,16 @@ const Index = () => {
       return value !== null && value !== undefined;
     });
 
+    console.log('Index.tsx: isProfileComplete check result:', isProfileComplete);
+    console.log('Index.tsx: has_agreed_to_terms status:', userProfile?.has_agreed_to_terms);
+
     // New logic: Check consent first
     if (!userProfile || userProfile.has_agreed_to_terms === false) {
-      console.log('Index.tsx: User has not agreed to terms, showing consent screen.');
+      console.log('Index.tsx: User has not agreed to terms or profile is missing, showing consent screen.');
       setCurrentView('consent');
     } else if (isProfileComplete) {
       console.log('Index.tsx: Complete profile found and terms agreed, showing dashboard.');
       setCurrentView('dashboard');
-      // Removed refreshMatches() call here, useMatches will handle it
     } else {
       console.log('Index.tsx: Incomplete profile found but terms agreed, showing registration.');
       setCurrentView('registration');
@@ -146,7 +152,6 @@ const Index = () => {
     console.log('Index.tsx: Registration completed, setting view to dashboard.');
     setProfile(userData); // Set the profile state directly from the completed data
     setCurrentView('dashboard'); // Transition to dashboard
-    // Removed refreshMatches() call here, useMatches will handle it
   };
 
   const handleBackToWelcome = () => {
