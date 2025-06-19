@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { calculateAge } from '@/utils/dateCalculations'; // Import from new utility
 
 export interface MatchProfile {
   id: string;
@@ -23,20 +24,6 @@ export interface MatchProfile {
   compatibility_score?: number;
   age?: number;
 }
-
-// Helper function to calculate accurate age
-const calculateAge = (dateOfBirth: string): number => {
-  const today = new Date();
-  const birthDate = new Date(dateOfBirth);
-  let age = today.getFullYear() - birthDate.getFullYear();
-  const monthDiff = today.getMonth() - birthDate.getMonth();
-  
-  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-    age--;
-  }
-  
-  return age;
-};
 
 export const useMatches = () => {
   const [matches, setMatches] = useState<MatchProfile[]>([]);

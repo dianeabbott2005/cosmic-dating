@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { RealtimeChannel } from '@supabase/supabase-js'; // Import RealtimeChannel type
+import { calculateAge } from '@/utils/dateCalculations'; // Import from new utility
 
 export interface Message {
   id: string;
@@ -19,6 +20,9 @@ export interface Chat {
   other_user?: {
     first_name: string;
     user_id: string;
+    date_of_birth?: string; // Add date_of_birth to other_user
+    place_of_birth?: string; // Add place_of_birth to other_user
+    age?: number; // Add age to other_user
   };
   last_message?: Message;
 }
@@ -106,12 +110,17 @@ export const useChat = (matchId?: string) => {
         (userChats || []).map(async (chat) => {
           const otherUserId = chat.user1_id === user.id ? chat.user2_id : chat.user1_id;
           
-          // Select only necessary public profile fields, excluding last_name
+          // Select necessary public profile fields, including date_of_birth and place_of_birth
           const { data: profile } = await supabase
             .from('profiles')
-            .select('first_name, user_id') 
+            .select('first_name, user_id, date_of_birth, place_of_birth') 
             .eq('user_id', otherUserId)
             .single();
+
+          let otherUserAge: number | undefined;
+          if (profile?.date_of_birth) {
+            otherUserAge = calculateAge(profile.date_of_birth);
+          }
 
           // Get the last message and ensure it has all required fields
           const lastMessage = chat.messages && chat.messages.length > 0 
@@ -123,7 +132,13 @@ export const useChat = (matchId?: string) => {
             user1_id: chat.user1_id,
             user2_id: chat.user2_id,
             created_at: chat.created_at,
-            other_user: profile,
+            other_user: profile ? {
+              first_name: profile.first_name,
+              user_id: profile.user_id,
+              date_of_birth: profile.date_of_birth,
+              place_of_birth: profile.place_of_birth,
+              age: otherUserAge,
+            } : undefined,
             last_message: lastMessage ? {
               id: lastMessage.id,
               content: lastMessage.content,

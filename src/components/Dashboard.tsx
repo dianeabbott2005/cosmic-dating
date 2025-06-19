@@ -6,6 +6,7 @@ import EnhancedChatView from '@/components/EnhancedChatView';
 import { useMatches } from '@/hooks/useMatches';
 import { useChat } from '@/hooks/useChat';
 import type { Database } from '@/integrations/supabase/types';
+import { calculateAge } from '@/utils/dateCalculations'; // Import calculateAge
 
 interface DashboardProps {
   user: Database['public']['Tables']['profiles']['Row'];
@@ -34,11 +35,13 @@ const Dashboard = ({ user }: DashboardProps) => {
 
   const handleChatClick = (chat: any) => {
     // Convert chat to match-like object for EnhancedChatView
+    // Now, chat.other_user should have date_of_birth and age
     const matchFromChat = {
       user_id: chat.other_user?.user_id,
       first_name: chat.other_user?.first_name,
-      age: 25, // Default age since we don't have it in chat
+      age: chat.other_user?.age, // Use the actual age from chat.other_user
       place_of_birth: chat.other_user?.place_of_birth,
+      date_of_birth: chat.other_user?.date_of_birth, // Pass date_of_birth for sun sign calculation
     };
     setSelectedMatch(matchFromChat);
   };
