@@ -5,7 +5,9 @@ import { ArrowLeft, Save } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import PlaceSearch from '@/components/PlaceSearch';
 import { useGoogleMaps } from '@/hooks/useGoogleMaps';
-import { useMatches } from '@/hooks/useMatches'; // Import useMatches
+import { useMatches } from '@/hooks/useMatches';
+import { Checkbox } from '@/components/ui/checkbox'; // Import Checkbox
+import { Label } from '@/components/ui/label';     // Import Label
 
 const Profile = () => {
   const { user, signOut } = useAuth();
@@ -13,7 +15,7 @@ const Profile = () => {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const { getTimezone } = useGoogleMaps();
-  const { refreshMatches } = useMatches(); // Get refreshMatches from useMatches
+  const { refreshMatches } = useMatches();
   const [profile, setProfile] = useState({
     first_name: '',
     last_name: '',
@@ -28,8 +30,8 @@ const Profile = () => {
     looking_for: '',
     min_age: 18,
     max_age: 35,
-    is_active: false, // Default to false for human profiles
-    has_agreed_to_terms: false, // New field
+    is_active: false,
+    has_agreed_to_terms: false,
   });
 
   useEffect(() => {
@@ -50,7 +52,7 @@ const Profile = () => {
           latitude, longitude, looking_for, max_age, min_age, personality_prompt,
           place_of_birth, time_of_birth, updated_at, user_id, timezone, is_active,
           has_agreed_to_terms
-        `) // Explicitly select fields, including is_active and has_agreed_to_terms
+        `)
         .eq('user_id', user.id)
         .single();
 
@@ -71,8 +73,8 @@ const Profile = () => {
           looking_for: data.looking_for,
           min_age: data.min_age,
           max_age: data.max_age,
-          is_active: data.is_active ?? false, // Use existing value or default to false
-          has_agreed_to_terms: data.has_agreed_to_terms ?? false, // Use existing value or default to false
+          is_active: data.is_active ?? false,
+          has_agreed_to_terms: data.has_agreed_to_terms ?? false,
         });
       }
     } catch (error) {
@@ -110,11 +112,11 @@ const Profile = () => {
             console.log('Timezone re-fetched automatically:', currentReadonlyTimezone);
           } else {
             console.warn('Could not automatically determine timezone for coordinates:', { currentLatitude, currentLongitude });
-            currentReadonlyTimezone = null; // Explicitly set to null if not found
+            currentReadonlyTimezone = null;
           }
         } catch (timezoneError) {
           console.error('Error re-fetching timezone automatically:', timezoneError);
-          currentReadonlyTimezone = null; // Explicitly set to null on error
+          currentReadonlyTimezone = null;
         }
       }
 
@@ -140,8 +142,8 @@ const Profile = () => {
           looking_for: profile.looking_for,
           min_age: profile.min_age,
           max_age: profile.max_age,
-          is_active: profile.is_active, // Include is_active in update
-          has_agreed_to_terms: profile.has_agreed_to_terms, // Include has_agreed_to_terms in update
+          is_active: profile.is_active,
+          has_agreed_to_terms: profile.has_agreed_to_terms,
         })
         .eq('user_id', user.id);
 
@@ -151,7 +153,7 @@ const Profile = () => {
 
       console.log('Profile updated successfully with coordinates and timezone');
       alert('Profile updated successfully!');
-      refreshMatches(); // Trigger match generation after profile update
+      refreshMatches();
     } catch (error) {
       console.error('Error saving profile:', error);
       alert('Error saving profile. Please try again.');
