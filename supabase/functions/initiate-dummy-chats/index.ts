@@ -408,7 +408,7 @@ serve(async (req) => {
           continue;
         }
 
-        let currentChatId: string;
+        let currentChatId: string | undefined;
         let isInitialChat = false;
         let lastHumanMessage: string | null = null;
         let timeSinceLastAiMessage: number | null = null;
@@ -422,16 +422,20 @@ serve(async (req) => {
           console.log(`initiate-dummy-chats (Edge): Chat already exists (${currentChatId}) between ${dummyProfile.first_name} and ${humanProfile.first_name}. Checking for re-engagement.`);
 
           // Fetch context and recent messages for existing chat
-          const [fetchedContext, recentMsgs, lastAiMsgTimestamp, lastHumanMsgTimestamp] = await Promise.all([
+          const [fetchedContext, recentMsgs, lastAiMsgTimestamp] = await Promise.all([
               getConversationContext(supabaseClient, currentChatId),
               getRecentMessages(supabaseClient, currentChatId),
               getLastMessageTimestamp(supabaseClient, currentChatId, dummyProfile.user_id), // Last message from AI
-              getLastMessageTimestamp(supabaseClient, currentChatId, humanProfile.user_id) // Last message from Human
           ]);
 
           context = fetchedContext;
           conversationHistory = buildConversationHistory(recentMsgs, dummyProfile.user_id, dummyProfile.first_name, humanProfile.first_name);
           
+          const lastMessageOverall = recentMsgs.length > 0 ? recentMsgs[0] : null;
+          if (lastMessageOverall) {
+            wasAiLastSpeaker = lastMessageOverall.sender_id === dummyProfile.user_id;
+          }
+
           // Determine last human message if available
           const lastHumanMessageObj = recentMsgs.find(msg => msg.sender_id === humanProfile.user_id);
           lastHumanMessage = lastHumanMessageObj ? lastHumanMessageObj.content : null;
@@ -443,21 +447,19 @@ serve(async (req) => {
             timeSinceLastAiMessage = (now.getTime() - lastAiDate.getTime()) / (1000 * 60 * 60); // in hours
           }
 
-          // Determine if AI was the last speaker
-          if (recentMsgs.length > 0) {
-            wasAiLastSpeaker = recentMsgs[0].sender_id === dummyProfile.user_id;
-          }
-          
-          // Re-engagement logic: Re-engage if there's a significant gap, regardless of who was the last speaker
-          if (timeSinceLastAiMessage !== null && timeSinceLastAiMessage >= MIN_GAP_FOR_REENGAGEMENT_HOURS) {
+          // Logic for existing chats:
+          // Only consider processing if AI was the last speaker AND there's a significant gap
+          if (wasAiLastSpeaker && timeSinceLastAiMessage !== null && timeSinceLastAiMessage >= MIN_GAP_FOR_REENGAGEMENT_HOURS) {
             if (Math.random() < REENGAGEMENT_RATE) {
               shouldProcess = true;
               console.log(`initiate-dummy-chats (Edge): Re-engaging with ${humanProfile.first_name} (gap: ${timeSinceLastAiMessage.toFixed(1)} hours, AI was last speaker: ${wasAiLastSpeaker}).`);
             } else {
               console.log(`initiate-dummy-chats (Edge): Skipping re-engagement for ${humanProfile.first_name} (random chance).`);
             }
+          } else if (!wasAiLastSpeaker && lastMessageOverall) { // Human was last speaker and there's a message
+            console.log(`initiate-dummy-chats (Edge): Human was last speaker for ${humanProfile.first_name}. Skipping proactive re-engagement (chat-response handles this).`);
           } else {
-            console.log(`initiate-dummy-chats (Edge): No re-engagement needed for ${humanProfile.first_name} (no significant gap).`);
+            console.log(`initiate-dummy-chats (Edge): No re-engagement needed for ${humanProfile.first_name} (no significant gap or AI was not last speaker).`);
           }
 
         } else {
@@ -489,7 +491,7 @@ serve(async (req) => {
           }
         }
 
-        if (shouldProcess && currentChatId!) {
+        if (shouldProcess && currentChatId) {
           try {
             const aiPrompt = buildAiPrompt(dummyProfile, humanProfile, context, conversationHistory, lastHumanMessage, timeSinceLastAiMessage, isInitialChat, wasAiLastSpeaker);
             let fullAiResponse = await callAiApi(aiPrompt);
