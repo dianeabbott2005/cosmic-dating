@@ -16,8 +16,7 @@ const Auth = () => {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          // IMPORTANT: Replace 'com.cosmicdating.app' with your actual appId from capacitor.config.ts
-          redirectTo: 'com.cosmicdating.app://callback' 
+          redirectTo: window.location.origin // Reverted to use window.location.origin
         }
       });
       if (error) throw error;
