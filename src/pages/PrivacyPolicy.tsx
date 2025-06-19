@@ -19,7 +19,7 @@ const PrivacyPolicy = () => {
         <div className="card-cosmic p-8">
           <h1 className="text-3xl font-bold text-white mb-6">Privacy Policy for Cosmic Dating</h1>
           <p className="text-gray-400 mb-4">
-            Last Updated: July 26, 2024
+            Last Updated: June 16, 2025
           </p>
 
           <p className="text-gray-300 mb-6">
