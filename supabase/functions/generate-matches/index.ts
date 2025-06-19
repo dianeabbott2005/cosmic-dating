@@ -320,7 +320,14 @@ serve(async (req) => {
         const matchFitsUserAgeRange = matchAge >= userProfile.min_age && matchAge <= userProfile.max_age;
 
         if (!userFitsMatchAgeRange || !matchFitsUserAgeRange) {
-          console.log(`generate-matches (Edge): Age mismatch for ${matchProfile.first_name}. Skipping.`);
+          let mismatchReason = [];
+          if (!userFitsMatchAgeRange) {
+            mismatchReason.push(`User's age (${userAge}) is outside ${matchProfile.first_name}'s preferred range (${matchProfile.min_age}-${matchProfile.max_age})`);
+          }
+          if (!matchFitsUserAgeRange) {
+            mismatchReason.push(`${matchProfile.first_name}'s age (${matchAge}) is outside User's preferred range (${userProfile.min_age}-${userProfile.max_age})`);
+          }
+          console.log(`generate-matches (Edge): Age mismatch for ${matchProfile.first_name}. Skipping. Reason: ${mismatchReason.join(' and ')}`);
           continue;
         }
 
