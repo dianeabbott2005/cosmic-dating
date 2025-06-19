@@ -137,6 +137,26 @@ async function getRecentMessages(supabaseClient: SupabaseClient, chatId: string)
 }
 
 /**
+ * Fetches the timestamp of the last message sent by a specific sender in a chat.
+ */
+async function getLastMessageTimestamp(supabaseClient: SupabaseClient, chatId: string, senderId: string): Promise<string | null> {
+  const { data, error } = await supabaseClient
+    .from('messages')
+    .select('created_at')
+    .eq('chat_id', chatId)
+    .eq('sender_id', senderId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single();
+
+  if (error && error.code !== 'PGRST116') { // PGRST116 is "No rows found"
+    console.error('Error fetching last message timestamp:', error);
+    return null;
+  }
+  return data?.created_at || null;
+}
+
+/**
  * Builds a string of recent conversation history.
  */
 function buildConversationHistory(recentMessages: Message[], receiverId: string, receiverFirstName: string, senderFirstName: string | undefined) {
@@ -152,7 +172,7 @@ function buildConversationHistory(recentMessages: Message[], receiverId: string,
 /**
  * Constructs the full prompt for the AI API.
  */
-function buildEnhancedPrompt(receiverProfile: any, senderProfile: any, context: any, conversationHistory: string, message: string): string {
+function buildEnhancedPrompt(receiverProfile: any, senderProfile: any, context: any, conversationHistory: string, message: string, timeSinceLastAiMessage: number | null): string {
     const age = calculateAge(receiverProfile.date_of_birth);
     let ageGroup = 'middle';
     if (age < 25) ageGroup = 'young';
@@ -178,6 +198,14 @@ function buildEnhancedPrompt(receiverProfile: any, senderProfile: any, context: 
     // NEW: Add dating platform context
     promptInstructions += `\n\nThis is a new dating platform focused on astrological compatibility. You discovered it through either Reddit or X (formerly Twitter). Your goal is to get to know the user better in a romantic context, as you would on a dating app. Keep the conversation engaging, flirty or even kinky if appropriate, but always respectful.`;
 
+    // Add gap awareness instruction
+    if (timeSinceLastAiMessage !== null && timeSinceLastAiMessage > 3) { // If AI hasn't spoken in > 3 hours
+        promptInstructions += `\n\nIt has been approximately ${Math.round(timeSinceLastAiMessage)} hours since your last message in this chat. Acknowledge this gap naturally, perhaps with a friendly re-initiation or by expressing a slight curiosity about the delay, without being accusatory.`;
+        if (timeSinceLastAiMessage > 24) { // If it's been more than a day
+            promptInstructions += ` This is a very long gap, so your response should be more like a re-engagement after a significant pause.`;
+        }
+    }
+
     // Stronger, overriding instructions for emojis and markdown
     promptInstructions += `\n\nABSOLUTELY CRITICAL: DO NOT use any markdown characters whatsoever, including asterisks (*), underscores (_), hash symbols (#), or backticks (\`). Your response MUST be plain text. This is paramount.`;
     promptInstructions += `\n\nIMPORTANT: Use emojis very sparingly, if at all. Prioritize clear text over emoji expression.`;
@@ -186,7 +214,7 @@ function buildEnhancedPrompt(receiverProfile: any, senderProfile: any, context: 
 
     // Conversational Strategy
     promptInstructions += `\n\nConversational Strategy: Consider these conversational "moves" in your response, prioritizing them in order, but adapting to the flow of the conversation:
--   **Discourse Initiation (DI):** IMP: Use this only if the gap between messages has been more than a few hours - Open with a friendly greeting ("Hi!", "Hey there!").
+-   **Discourse Initiation (DI):** ${timeSinceLastAiMessage !== null && timeSinceLastAiMessage > 3 ? 'Use this to re-engage after the long gap.' : 'Only use this if there has been a significant pause in the conversation (e.g., several hours or days) and you are initiating.'} Open with a friendly greeting ("Hi!", "Hey there!").
 -   **Question-Answer (QAR):** Exchange information with wh-questions or yes/no questions ("Where are you from?", "I live in Ibadan.").
 -   **Declaration of Dating Intention (DDI):** Gently check relationship goals or suggest meeting ("Are you single?", "Would you like to meet up?").
 -   **Topic Formation (TF):** Sustain small talk to keep the conversation flowing ("How was your day?", "Any favorite movies?").
@@ -354,16 +382,24 @@ serve(async (req) => {
 
     const responseDelay = calculateResponseDelay();
 
-    const [receiverProfile, senderProfile, context, recentMessages] = await Promise.all([
+    const [receiverProfile, senderProfile, context, recentMessages, lastAiMessageTimestamp] = await Promise.all([
         getReceiverProfile(supabaseClient, receiverId),
         getSenderProfile(supabaseClient, senderId),
         getConversationContext(supabaseClient, chatId),
         getRecentMessages(supabaseClient, chatId),
+        getLastMessageTimestamp(supabaseClient, chatId, receiverId) // Fetch last AI message timestamp
     ]);
     
+    let timeSinceLastAiMessage: number | null = null;
+    if (lastAiMessageTimestamp) {
+      const lastMessageDate = new Date(lastAiMessageTimestamp);
+      const now = new Date();
+      timeSinceLastAiMessage = (now.getTime() - lastMessageDate.getTime()) / (1000 * 60 * 60); // in hours
+    }
+
     const conversationHistory = buildConversationHistory(recentMessages, receiverId, receiverProfile.first_name, senderProfile?.first_name);
     
-    const enhancedPrompt = buildEnhancedPrompt(receiverProfile, senderProfile, context, conversationHistory, message);
+    const enhancedPrompt = buildEnhancedPrompt(receiverProfile, senderProfile, context, conversationHistory, message, timeSinceLastAiMessage);
 
     let fullAiResponse = await callAiApi(enhancedPrompt);
     
