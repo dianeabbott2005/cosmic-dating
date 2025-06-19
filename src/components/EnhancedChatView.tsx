@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Send, MapPin } from 'lucide-react';
 import { useChat } from '@/hooks/useChat';
 import { useAuth } from '@/hooks/useAuth';
+import { getSunSign } from '@/utils/astro/zodiacCalculations'; // Import getSunSign
 
 interface EnhancedChatViewProps {
   match: any;
@@ -13,6 +14,14 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
   const { user } = useAuth();
   const { chat, messages, loading, initializeChat, sendMessage } = useChat();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Calculate sun sign
+  const sunSign = match.date_of_birth ? getSunSign(match.date_of_birth) : null;
+
+  const formatSignName = (sign: string | null) => {
+    if (!sign) return '';
+    return sign.charAt(0).toUpperCase() + sign.slice(1);
+  };
 
   useEffect(() => {
     if (match?.user_id) {
@@ -72,6 +81,11 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
               <p className="text-sm text-gray-400 flex items-center gap-1">
                 <MapPin className="w-3 h-3" />
                 {match.place_of_birth}
+              </p>
+            )}
+            {sunSign && (
+              <p className="text-sm text-purple-300 font-medium mt-1">
+                ☀️ {formatSignName(sunSign)}
               </p>
             )}
           </div>
