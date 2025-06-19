@@ -12,6 +12,55 @@ const corsHeaders = {
 const MESSAGE_DELIMITER = "@@@MESSAGEBREAK@@@"; // Unique delimiter for splitting AI responses
 const MAX_TOKEN_LIMIT = 100; // Maximum tokens for the AI response
 const INITIATION_RATE = 0.03; // 3% chance for a dummy profile to initiate a chat with a human match
+const REENGAGEMENT_RATE = 0.1; // 10% chance for a dummy profile to re-engage in an existing chat if there's a gap
+const MIN_GAP_FOR_REENGAGEMENT_HOURS = 3; // Minimum gap in hours for AI to consider re-engaging
+
+// Define a threshold for immediate vs. delayed sending
+const IMMEDIATE_SEND_THRESHOLD_MS = 50 * 1000; // 50 seconds
+
+/**
+ * Calculates a human-like typing delay for a single message part.
+ * This is used to determine the time it takes to "type" a message.
+ * @param messageLength The length of the message to be "typed".
+ * @returns A delay in milliseconds.
+ */
+const calculateTypingDelay = (messageLength: number): number => {
+  const baseDelay = 500; // 0.5 second minimum per message part
+  const typingSpeed = Math.floor(Math.random() * (180 - 60 + 1)) + 60; // characters per minute (random between 60-180)
+  
+  const typingTime = (messageLength / typingSpeed) * 60 * 1000;
+  
+  let randomVariation = Math.random() * 500; // Up to 0.5 seconds random variation
+  
+  const totalDelay = baseDelay + typingTime + randomVariation;
+  return Math.min(totalDelay, 5000); // Cap at 5 seconds to prevent excessive internal delays
+};
+
+/**
+ * Calculates a human-like response delay (before typing starts).
+ * This is the *initial* delay before the AI starts responding.
+ * @returns A delay in milliseconds.
+ */
+const calculateResponseDelay = (): number => {
+  const random = Math.random();
+  let delay = 0;
+  if (random < 0.7) { // 70% chance for quick response (0-5 seconds)
+    delay = Math.floor(Math.random() * 5 * 1000);
+  } else if (random < 0.9) { // 20% chance for moderate delay (5-10 seconds)
+    delay = 5 * 1000 + Math.floor(Math.random() * 5 * 1000);
+  } else { // 10% chance for slightly longer delay (10-15 seconds)
+    delay = 10 * 1000 + Math.floor(Math.random() * 5 * 1000);
+  }
+  return delay;
+};
+
+/**
+ * Calculates a random gap between individual messages when a response is split.
+ * @returns A delay in milliseconds (between 2 and 20 seconds).
+ */
+const calculateInterMessageGap = (): number => {
+  return Math.floor(Math.random() * (20 - 2 + 1) + 2) * 1000; // Random between 2 and 20 seconds
+};
 
 /**
  * Calculates age from a date of birth string.
@@ -25,6 +74,156 @@ function calculateAge(dateOfBirth: string): number {
         age--;
     }
     return age;
+}
+
+/**
+ * Fetches the full profile of a user.
+ */
+async function getProfile(supabaseClient: SupabaseClient, userId: string) {
+    const { data: profile, error } = await supabaseClient
+      .from('profiles')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+
+    if (error || !profile) {
+      throw new Error(`Profile not found for ID: ${userId}`);
+    }
+    return profile;
+}
+
+/**
+ * Fetches the conversation context summary.
+ */
+async function getConversationContext(supabaseClient: SupabaseClient, chatId: string) {
+    const { data: context } = await supabaseClient
+      .from('conversation_contexts')
+      .select('context_summary')
+      .eq('chat_id', chatId)
+      .single();
+    return context;
+}
+
+/**
+ * Fetches the last 10 messages for context.
+ */
+async function getRecentMessages(supabaseClient: SupabaseClient, chatId: string): Promise<Message[]> {
+    const { data: recentMessages } = await supabaseClient
+      .from('messages')
+      .select('content, sender_id, created_at')
+      .eq('chat_id', chatId)
+      .order('created_at', { ascending: false })
+      .limit(10);
+    return recentMessages || [];
+}
+
+/**
+ * Fetches the timestamp of the last message sent by a specific sender in a chat.
+ */
+async function getLastMessageTimestamp(supabaseClient: SupabaseClient, chatId: string, senderId: string): Promise<string | null> {
+  const { data, error } = await supabaseClient
+    .from('messages')
+    .select('created_at')
+    .eq('chat_id', chatId)
+    .eq('sender_id', senderId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single();
+
+  if (error && error.code !== 'PGRST116') { // PGRST116 is "No rows found"
+    console.error('Error fetching last message timestamp:', error);
+    return null;
+  }
+  return data?.created_at || null;
+}
+
+/**
+ * Builds a string of recent conversation history.
+ */
+function buildConversationHistory(recentMessages: Message[], aiProfileId: string, aiFirstName: string, humanFirstName: string | undefined) {
+    if (!recentMessages || recentMessages.length === 0) {
+        return '';
+    }
+    return recentMessages
+        .reverse()
+        .map(msg => `${msg.sender_id === aiProfileId ? aiFirstName : (humanFirstName || 'User')}: ${msg.content}`)
+        .join('\n');
+}
+
+const NON_NATIVE_ENGLISH_REGIONS: { [key: string]: { languageIssue: string; dialect: string; } } = {
+  'India': { languageIssue: 'subtle grammatical errors, Indian English phrasing', dialect: 'occasional Hindi/local language phrases (e.g., "acha", "yaar")' },
+  'Japan': { languageIssue: 'slightly formal tone, occasional direct translations', dialect: 'polite particles (e.g., "ne", "desu")' },
+  'South Korea': { languageIssue: 'slightly formal tone, occasional direct translations', dialect: 'common Korean interjections (e.g., "aigoo", "jinjja")' },
+  'Italy': { languageIssue: 'more expressive phrasing, occasional Italian loanwords', dialect: 'common Italian expressions (e.g., "mamma mia", "ciao")' },
+  'France': { languageIssue: 'more formal sentence structure, occasional French loanwords', dialect: 'common French expressions (e.g., "voilà", "zut")' },
+  'Russia': { languageIssue: 'direct phrasing, less use of articles', dialect: 'common Russian interjections (e.g., "davai", "nu")' },
+  'Egypt': { languageIssue: 'more direct, less nuanced phrasing', dialect: 'common Arabic interjections (e.g., "inshallah", "habibi")' },
+  'UAE': { languageIssue: 'formal yet friendly, occasional Arabic loanwords', dialect: 'common Arabic expressions (e.g., "mashallah", "khalas")' },
+};
+
+/**
+ * Constructs the full prompt for the AI API, handling both initial and re-engagement scenarios.
+ */
+function buildAiPrompt(aiProfile: any, humanProfile: any, context: any, conversationHistory: string, lastHumanMessage: string | null, timeSinceLastAiMessage: number | null, isInitialChat: boolean): string {
+    const aiAge = calculateAge(aiProfile.date_of_birth);
+    let promptInstructions = aiProfile.personality_prompt;
+
+    if (!promptInstructions) {
+      promptInstructions = `You are ${aiProfile.first_name}, a ${aiAge}-year-old ${aiProfile.gender} from ${aiProfile.place_of_birth}. Respond naturally and conversationally.`;
+    }
+    
+    // Add language issues and dialect instruction
+    const region = Object.keys(NON_NATIVE_ENGLISH_REGIONS).find(key => aiProfile.place_of_birth.includes(key));
+    if (region) {
+      const { languageIssue, dialect } = NON_NATIVE_ENGLISH_REGIONS[region];
+      promptInstructions += `\n\nAlso, subtly induce English language issues typical of a non-native speaker from ${region} (${languageIssue}). Occasionally let local dialect flow into conversations (${dialect}).`;
+    }
+
+    promptInstructions += ` You are chatting with ${humanProfile.first_name}.`;
+    if (context?.context_summary) promptInstructions += `\n\nPrevious conversation context: ${context.context_summary}`;
+    if (conversationHistory) promptInstructions += `\n\nRecent conversation:\n${conversationHistory}`;
+    
+    promptInstructions += `\n\nThis is a new dating platform focused on astrological compatibility. You discovered it through either Reddit or X (formerly Twitter). Your goal is to get to know the user better in a romantic context, as you would on a dating app. Keep the conversation engaging, flirty or even kinky if appropriate, but always respectful.`;
+
+    if (isInitialChat) {
+      promptInstructions += `\n\nYour response should be a single, very concise message to initiate a new conversation.`;
+    } else {
+      // Add gap awareness instruction for re-engagement
+      if (timeSinceLastAiMessage !== null && timeSinceLastAiMessage >= MIN_GAP_FOR_REENGAGEMENT_HOURS) {
+          promptInstructions += `\n\nIt has been approximately ${Math.round(timeSinceLastAiMessage)} hours since your last message in this chat. Acknowledge this gap naturally, perhaps with a friendly re-initiation or by expressing a slight curiosity about the delay, without being accusatory.`;
+          if (timeSinceLastAiMessage > 24) {
+              promptInstructions += ` This is a very long gap, so your response should be more like a re-engagement after a significant pause.`;
+          }
+      }
+      if (lastHumanMessage) {
+        promptInstructions += `\n\n${humanProfile.first_name} just sent: ${lastHumanMessage}`;
+      }
+    }
+
+    promptInstructions += `\n\nABSOLUTELY CRITICAL: DO NOT use any markdown characters whatsoever, including asterisks (*), underscores (_), hash symbols (#), or backticks (\`). Your response MUST be plain text. This is paramount.`;
+    promptInstructions += `\n\nIMPORTANT: Use emojis very sparingly, if at all. Prioritize clear text over emoji expression.`;
+    promptInstructions += `\n\nYour response should be very concise and natural, like a human texting including rare varying human-like typos depending on the situation. It can be a single short message, or if it needed, break it into 1 to 6 (in varying degree choose number of messages) very short, related messages. Overall the combined length should never exceed the token limit "${MAX_TOKEN_LIMIT}". ABSOLUTELY CRITICAL: If you send multiple messages, separate each with the delimiter: "${MESSAGE_DELIMITER}", ensure you do this most accurately and not make any typos as it ruin the entire logic. This delimiter is ONLY for separating messages and MUST NOT appear within the content of any message. Ensure this is done with utmost accuracy.`;
+
+    // Conversational Strategy
+    promptInstructions += `\n\nConversational Strategy: Consider these conversational "moves" in your response, prioritizing them in order, but adapting to the flow of the conversation:
+-   **Discourse Initiation (DI):** ${isInitialChat || (timeSinceLastAiMessage !== null && timeSinceLastAiMessage >= MIN_GAP_FOR_REENGAGEMENT_HOURS) ? 'Use this to re-engage or initiate.' : 'Only use this if there has been a significant pause in the conversation (e.g., several hours or days) and you are initiating.'} Open with a friendly greeting ("Hi!", "Hey there!").
+-   **Question-Answer (QAR):** Exchange information with wh-questions or yes/no questions ("Where are you from?", "I live in Ibadan.").
+-   **Declaration of Dating Intention (DDI):** Gently check relationship goals or suggest meeting ("Are you single?", "Would you like to meet up?").
+-   **Topic Formation (TF):** Sustain small talk to keep the conversation flowing ("How was your day?", "Any favorite movies?").
+
+Optionally, you can also insert these between moves if natural:
+-   **Introduction (INTR):** Briefly self-present ("I’m Joshua, a graphic designer.").
+-   **Admiration (AD):** Offer a quick, genuine compliment ("You look great!").
+
+Adjust your style based on your gender:
+-   If you are male: Lean towards more self-introductions and subtle dating-intention checks.
+-   If you are female: Lean towards more small talk and compliments.
+
+Maintain a casual and friendly formality level. Pace the conversation naturally, sometimes repeating QAR or TF to deepen rapport.
+
+Now, respond as ${aiProfile.first_name}:`;
+    
+    return promptInstructions;
 }
 
 /**
@@ -73,32 +272,43 @@ async function storeAiResponse(supabaseClient: SupabaseClient, chatId: string, s
 }
 
 /**
+ * Schedules a message to be sent later.
+ */
+async function scheduleDelayedMessage(supabaseClient: SupabaseClient, chatId: string, senderId: string, content: string, delayMs: number) {
+  const scheduledTime = new Date(Date.now() + delayMs).toISOString();
+  const { error } = await supabaseClient
+    .from('delayed_messages')
+    .insert({
+      chat_id: chatId,
+      sender_id: senderId,
+      content: content,
+      scheduled_send_time: scheduledTime,
+      status: 'pending'
+    });
+
+  if (error) {
+    console.error('Error scheduling message:', error);
+    throw error;
+  }
+}
+
+/**
  * Updates the conversation context summary.
  */
-async function updateConversationContext(supabaseClient: SupabaseClient, chatId: string, senderFirstName: string, receiverFirstName: string, initialMessage: string) {
-    const contextUpdate = `${senderFirstName} initiated with: "${initialMessage}".`;
+async function updateConversationContext(supabaseClient: SupabaseClient, chatId: string, aiFirstName: string, humanFirstName: string, lastHumanMessage: string | null, aiResponse: string, existingContext: any) {
+    const contextUpdate = lastHumanMessage 
+      ? `${humanFirstName} said: "${lastHumanMessage}". ${aiFirstName} responded: "${aiResponse}".`
+      : `${aiFirstName} initiated with: "${aiResponse}".`;
+
     await supabaseClient
       .from('conversation_contexts')
       .upsert({
         chat_id: chatId,
-        context_summary: contextUpdate,
+        context_summary: existingContext?.context_summary 
+          ? `${existingContext.context_summary} ${contextUpdate}` 
+          : contextUpdate,
         last_updated: new Date().toISOString()
       }, { onConflict: 'chat_id' });
-}
-
-/**
- * Builds a prompt for the AI to generate an initial conversation message.
- */
-function buildInitialPrompt(dummyProfile: any, humanProfile: any): string {
-  let prompt = `You are ${dummyProfile.first_name}, a ${calculateAge(dummyProfile.date_of_birth)}-year-old ${dummyProfile.gender} from ${dummyProfile.place_of_birth}. Your personality is: "${dummyProfile.personality_prompt}".`;
-  prompt += `\n\nYou are initiating a conversation with ${humanProfile.first_name}, a ${calculateAge(humanProfile.date_of_birth)}-year-old ${humanProfile.gender} from ${humanProfile.place_of_birth}.`;
-  prompt += `\n\nThis is a dating platform focused on astrological compatibility. You found them through a cosmic match.`;
-  prompt += `\n\nYour goal is to start a friendly and engaging conversation. Keep your first message short and natural, like a human texting. You can mention something about their profile (e.g., their sun sign if you know it, or just a general friendly opening).`;
-  prompt += `\n\nABSOLUTELY CRITICAL: DO NOT use any markdown characters whatsoever, including asterisks (*), underscores (_), hash symbols (#), or backticks (\`). Your response MUST be plain text. This is paramount.`;
-  prompt += `\n\nIMPORTANT: Use emojis very sparingly, if at all. Prioritize clear text over emoji expression.`;
-  prompt += `\n\nYour response should be a single, very concise message. Overall the combined length should never exceed the token limit "${MAX_TOKEN_LIMIT}".`;
-  prompt += `\n\nNow, send your first message as ${dummyProfile.first_name}:`;
-  return prompt;
 }
 
 serve(async (req) => {
@@ -112,7 +322,7 @@ serve(async (req) => {
   );
 
   try {
-    console.log('initiate-dummy-chats (Edge): Starting dummy chat initiation process...');
+    console.log('initiate-dummy-chats (Edge): Starting dummy chat initiation/re-engagement process...');
 
     // 1. Fetch all human profiles (is_active: false)
     const { data: humanProfiles, error: humanProfilesError } = await supabaseClient
@@ -131,15 +341,15 @@ serve(async (req) => {
     }
 
     if (!humanProfiles || humanProfiles.length === 0) {
-      console.log('initiate-dummy-chats (Edge): No human profiles found to initiate chats for.');
-      return new Response(JSON.stringify({ success: true, message: 'No human profiles to initiate chats for.' }), {
+      console.log('initiate-dummy-chats (Edge): No human profiles found to initiate/re-engage chats for.');
+      return new Response(JSON.stringify({ success: true, message: 'No human profiles to initiate/re-engage chats for.' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
     console.log(`initiate-dummy-chats (Edge): Found ${humanProfiles.length} human profiles.`);
 
-    let chatsInitiatedCount = 0;
+    let chatsProcessedCount = 0;
     const errors: string[] = [];
 
     for (const humanProfile of humanProfiles) {
@@ -162,45 +372,90 @@ serve(async (req) => {
         continue;
       }
 
-      const potentialDummyInitiators = (matches || [])
+      const potentialDummyPartners = (matches || [])
         .filter(match => match.matched_profile?.is_active === true) // Ensure it's a dummy profile
         .map(match => match.matched_profile);
 
-      if (potentialDummyInitiators.length === 0) {
+      if (potentialDummyPartners.length === 0) {
         console.log(`initiate-dummy-chats (Edge): No dummy matches found for ${humanProfile.first_name}.`);
         continue;
       }
 
-      console.log(`initiate-dummy-chats (Edge): Found ${potentialDummyInitiators.length} potential dummy initiators for ${humanProfile.first_name}.`);
+      console.log(`initiate-dummy-chats (Edge): Found ${potentialDummyPartners.length} potential dummy partners for ${humanProfile.first_name}.`);
 
-      // Check existing chats to avoid duplicates
-      const { data: existingChats, error: existingChatsError } = await supabaseClient
-        .from('chats')
-        .select('user1_id, user2_id')
-        .or(`user1_id.eq.${humanProfile.user_id},user2_id.eq.${humanProfile.user_id}`);
-
-      if (existingChatsError) {
-        console.error(`initiate-dummy-chats (Edge): Error fetching existing chats for ${humanProfile.first_name}:`, existingChatsError.message);
-        errors.push(`Failed to fetch existing chats for ${humanProfile.first_name}: ${existingChatsError.message}`);
-        continue;
-      }
-
-      const existingChatPartners = new Set<string>();
-      (existingChats || []).forEach(chat => {
-        existingChatPartners.add(chat.user1_id);
-        existingChatPartners.add(chat.user2_id);
-      });
-
-      for (const dummyProfile of potentialDummyInitiators) {
-        if (!dummyProfile || existingChatPartners.has(dummyProfile.user_id)) {
-          console.log(`initiate-dummy-chats (Edge): Skipping ${dummyProfile?.first_name} as chat already exists or profile is invalid.`);
+      for (const dummyProfile of potentialDummyPartners) {
+        if (!dummyProfile) {
+          console.log(`initiate-dummy-chats (Edge): Skipping invalid dummy profile.`);
           continue;
         }
 
-        // Apply the random initiation rate
-        if (Math.random() < INITIATION_RATE) {
-          try {
-            console.log(`initiate-dummy-chats (Edge): Attempting to initiate chat between ${dummyProfile.first_name} (dummy) and ${humanProfile.first_name} (human).`);
+        // Check if a chat already exists between these two users
+        const { data: existingChat, error: chatLookupError } = await supabaseClient
+          .from('chats')
+          .select('*')
+          .or(`and(user1_id.eq.${dummyProfile.user_id},user2_id.eq.${humanProfile.user_id}),and(user1_id.eq.${humanProfile.user_id},user2_id.eq.${dummyProfile.user_id})`)
+          .maybeSingle();
+
+        if (chatLookupError && chatLookupError.code !== 'PGRST116') { // PGRST116 is "No rows found"
+          console.error(`initiate-dummy-chats (Edge): Error looking up chat between ${dummyProfile.first_name} and ${humanProfile.first_name}:`, chatLookupError.message);
+          errors.push(`Failed to lookup chat for ${dummyProfile.first_name} and ${humanProfile.first_name}: ${chatLookupError.message}`);
+          continue;
+        }
+
+        let currentChatId: string;
+        let isInitialChat = false;
+        let lastHumanMessage: string | null = null;
+        let timeSinceLastAiMessage: number | null = null;
+        let context: any = null;
+        let conversationHistory: string = '';
+        let shouldProcess = false;
+
+        if (existingChat) {
+          currentChatId = existingChat.id;
+          console.log(`initiate-dummy-chats (Edge): Chat already exists (${currentChatId}) between ${dummyProfile.first_name} and ${humanProfile.first_name}. Checking for re-engagement.`);
+
+          // Fetch context and recent messages for existing chat
+          const [fetchedContext, recentMsgs, lastAiMsgTimestamp, lastHumanMsgTimestamp] = await Promise.all([
+              getConversationContext(supabaseClient, currentChatId),
+              getRecentMessages(supabaseClient, currentChatId),
+              getLastMessageTimestamp(supabaseClient, currentChatId, dummyProfile.user_id), // Last message from AI
+              getLastMessageTimestamp(supabaseClient, currentChatId, humanProfile.user_id) // Last message from Human
+          ]);
+
+          context = fetchedContext;
+          conversationHistory = buildConversationHistory(recentMsgs, dummyProfile.user_id, dummyProfile.first_name, humanProfile.first_name);
+          
+          // Determine last human message if available
+          const lastHumanMessageObj = recentMsgs.find(msg => msg.sender_id === humanProfile.user_id);
+          lastHumanMessage = lastHumanMessageObj ? lastHumanMessageObj.content : null;
+
+          // Calculate time since AI last spoke
+          if (lastAiMsgTimestamp) {
+            const lastAiDate = new Date(lastAiMsgTimestamp);
+            const now = new Date();
+            timeSinceLastAiMessage = (now.getTime() - lastAiDate.getTime()) / (1000 * 60 * 60); // in hours
+          }
+
+          // Re-engagement logic: Only re-engage if AI was NOT the last speaker AND there's a significant gap
+          const wasHumanLastSpeaker = recentMsgs.length > 0 && recentMsgs[0].sender_id === humanProfile.user_id;
+          
+          if (wasHumanLastSpeaker && timeSinceLastAiMessage !== null && timeSinceLastAiMessage >= MIN_GAP_FOR_REENGAGEMENT_HOURS) {
+            if (Math.random() < REENGAGEMENT_RATE) {
+              shouldProcess = true;
+              console.log(`initiate-dummy-chats (Edge): Re-engaging with ${humanProfile.first_name} (gap: ${timeSinceLastAiMessage.toFixed(1)} hours).`);
+            } else {
+              console.log(`initiate-dummy-chats (Edge): Skipping re-engagement for ${humanProfile.first_name} (random chance).`);
+            }
+          } else {
+            console.log(`initiate-dummy-chats (Edge): No re-engagement needed for ${humanProfile.first_name} (AI was last speaker or no significant gap).`);
+          }
+
+        } else {
+          // No existing chat, consider initiating a new one
+          if (Math.random() < INITIATION_RATE) {
+            isInitialChat = true;
+            shouldProcess = true;
+            console.log(`initiate-dummy-chats (Edge): Attempting to initiate NEW chat between ${dummyProfile.first_name} (dummy) and ${humanProfile.first_name} (human).`);
 
             // Create new chat
             const { data: newChat, error: chatCreateError } = await supabaseClient
@@ -215,38 +470,83 @@ serve(async (req) => {
             if (chatCreateError) {
               console.error(`initiate-dummy-chats (Edge): Error creating chat for ${dummyProfile.first_name} and ${humanProfile.first_name}:`, chatCreateError.message);
               errors.push(`Failed to create chat for ${dummyProfile.first_name} and ${humanProfile.first_name}: ${chatCreateError.message}`);
-              continue;
+              shouldProcess = false; // Don't proceed if chat creation failed
+            } else {
+              currentChatId = newChat.id;
             }
-
-            // Generate initial message
-            const initialPrompt = buildInitialPrompt(dummyProfile, humanProfile);
-            const initialMessageContent = await callAiApi(initialPrompt);
-            
-            // Store initial message
-            await storeAiResponse(supabaseClient, newChat.id, dummyProfile.user_id, initialMessageContent);
-
-            // Update conversation context
-            await updateConversationContext(supabaseClient, newChat.id, dummyProfile.first_name, humanProfile.first_name, initialMessageContent);
-
-            console.log(`initiate-dummy-chats (Edge): Successfully initiated chat and sent first message from ${dummyProfile.first_name} to ${humanProfile.first_name}.`);
-            chatsInitiatedCount++;
-
-          } catch (initiationError: any) {
-            console.error(`initiate-dummy-chats (Edge): Error during chat initiation for ${dummyProfile.first_name} and ${humanProfile.first_name}:`, initiationError.message);
-            errors.push(`Failed to initiate chat for ${dummyProfile.first_name} and ${humanProfile.first_name}: ${initiationError.message}`);
+          } else {
+            console.log(`initiate-dummy-chats (Edge): Skipping NEW chat initiation for ${dummyProfile.first_name} (random chance).`);
           }
-        } else {
-          console.log(`initiate-dummy-chats (Edge): Skipping initiation for ${dummyProfile.first_name} (random chance).`);
+        }
+
+        if (shouldProcess && currentChatId!) {
+          try {
+            const aiPrompt = buildAiPrompt(dummyProfile, humanProfile, context, conversationHistory, lastHumanMessage, timeSinceLastAiMessage, isInitialChat);
+            let fullAiResponse = await callAiApi(aiPrompt);
+            
+            // Remove all common markdown characters
+            fullAiResponse = fullAiResponse.replace(/[\*_`#]/g, ''); 
+            
+            const individualMessages = fullAiResponse.split(MESSAGE_DELIMITER).filter(part => part !== "");
+
+            // If the total delay (initial response delay + sum of typing delays + sum of inter-message gaps) is too long, schedule it
+            const responseDelay = calculateResponseDelay();
+            const totalTypingDelay = individualMessages.reduce((sum, msg) => sum + calculateTypingDelay(msg.length), 0);
+            const totalInterMessageGaps = individualMessages.length > 1 ? (individualMessages.length - 1) * calculateInterMessageGap() : 0;
+            const overallDelay = responseDelay + totalTypingDelay + totalInterMessageGaps;
+
+            if (overallDelay > IMMEDIATE_SEND_THRESHOLD_MS) {
+              // Schedule each message with its cumulative delay
+              let cumulativeDelay = responseDelay;
+              for (let i = 0; i < individualMessages.length; i++) {
+                const msgContent = individualMessages[i];
+                await scheduleDelayedMessage(supabaseClient, currentChatId, dummyProfile.user_id, msgContent, cumulativeDelay);
+                cumulativeDelay += calculateTypingDelay(msgContent.length);
+                if (i < individualMessages.length - 1) {
+                  cumulativeDelay += calculateInterMessageGap(); // Add gap between messages
+                }
+              }
+              // Update context immediately for the user's message + the *intended* AI response
+              await updateConversationContext(supabaseClient, currentChatId, dummyProfile.first_name, humanProfile.first_name, lastHumanMessage, fullAiResponse, context);
+
+              console.log(`initiate-dummy-chats (Edge): Scheduled ${individualMessages.length} messages from ${dummyProfile.first_name} to ${humanProfile.first_name}.`);
+
+            } else {
+              // Proceed with immediate sending
+              await new Promise(resolve => setTimeout(resolve, responseDelay)); // Initial response delay
+
+              for (let i = 0; i < individualMessages.length; i++) {
+                const msgContent = individualMessages[i];
+                const typingDelay = calculateTypingDelay(msgContent.length);
+                await new Promise(resolve => setTimeout(resolve, typingDelay));
+
+                await storeAiResponse(supabaseClient, currentChatId, dummyProfile.user_id, msgContent);
+
+                if (i < individualMessages.length - 1) {
+                  const interMessageGap = calculateInterMessageGap();
+                  await new Promise(resolve => setTimeout(resolve, interMessageGap));
+                }
+              }
+              // Update conversation context with the full AI response (concatenated messages)
+              await updateConversationContext(supabaseClient, currentChatId, dummyProfile.first_name, humanProfile.first_name, lastHumanMessage, fullAiResponse, context);
+              console.log(`initiate-dummy-chats (Edge): Sent ${individualMessages.length} messages immediately from ${dummyProfile.first_name} to ${humanProfile.first_name}.`);
+            }
+            chatsProcessedCount++;
+
+          } catch (processError: any) {
+            console.error(`initiate-dummy-chats (Edge): Error processing chat for ${dummyProfile.first_name} and ${humanProfile.first_name}:`, processError.message);
+            errors.push(`Failed to process chat for ${dummyProfile.first_name} and ${humanProfile.first_name}: ${processError.message}`);
+          }
         }
       }
     }
 
-    console.log(`initiate-dummy-chats (Edge): Finished. Chats initiated: ${chatsInitiatedCount}. Errors: ${errors.length}`);
+    console.log(`initiate-dummy-chats (Edge): Finished. Chats processed (initiated/re-engaged): ${chatsProcessedCount}. Errors: ${errors.length}`);
 
     return new Response(
       JSON.stringify({
         success: true,
-        chatsInitiated: chatsInitiatedCount,
+        chatsProcessed: chatsProcessedCount,
         errors: errors.length > 0 ? errors : undefined,
       }),
       {
