@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { Capacitor } from '@capacitor/core'; // Import Capacitor
 
 const Auth = () => {
   const [loading, setLoading] = useState(false);
@@ -12,12 +13,18 @@ const Auth = () => {
     setLoading(true);
     setError('');
 
+    // Determine the redirect URL based on the platform
+    const redirectUrl = Capacitor.isNative
+      ? 'com.cosmicdating.app://callback' // For Capacitor (Android/iOS)
+      : window.location.origin;           // For web browsers
+
+    console.log('Auth.tsx: Using redirect URL:', redirectUrl);
+
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          // This MUST match your appId from capacitor.config.ts and the intent filter in AndroidManifest.xml
-          redirectTo: 'com.cosmicdating.app://callback' 
+          redirectTo: redirectUrl 
         }
       });
       if (error) throw error;
