@@ -200,7 +200,7 @@ function buildEnhancedPrompt(receiverProfile: any, senderProfile: any, context: 
 
     // Add gap awareness instruction
     if (timeSinceLastAiMessage !== null && timeSinceLastAiMessage > 3) { // If AI hasn't spoken in > 3 hours
-        promptInstructions += `\n\nIt has been approximately ${Math.round(timeSinceLastAiMessage)} hours since your last message in this chat. Acknowledge this gap naturally, perhaps with a friendly re-initiation or by expressing a slight curiosity about the delay, without being accusatory.`;
+        promptInstructions += `\n\nIt has been approximately ${Math.round(timeSinceLastAiMessage)} hours since your last message in this chat. Acknowledge this gap naturally, perhaps with a friendly re-initiation or by expressing a slight curiosity about the delay. Do NOT be accusatory or apologetic for this gap.`;
         if (timeSinceLastAiMessage > 24) { // If it's been more than a day
             promptInstructions += ` This is a very long gap, so your response should be more like a re-engagement after a significant pause.`;
         }
