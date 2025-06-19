@@ -308,8 +308,10 @@ serve(async (req) => {
     // Calculate compatibility and filter by mutual age preferences
     for (const matchProfile of potentialProfiles) {
       try {
+        // Log the raw date of birth for the match profile
+        console.log(`generate-matches (Edge): Raw date_of_birth for ${matchProfile.first_name}: ${matchProfile.date_of_birth}`);
         const matchAge = calculateAge(matchProfile.date_of_birth);
-        console.log(`generate-matches (Edge): Processing match ${matchProfile.first_name} (ID: ${matchProfile.user_id}), age: ${matchAge}`);
+        console.log(`generate-matches (Edge): Processing match ${matchProfile.first_name} (ID: ${matchProfile.user_id}), calculated age: ${matchAge}`);
         console.log(`generate-matches (Edge): Match's gender: '${matchProfile.gender}', looking_for: '${matchProfile.looking_for}'`);
 
 
