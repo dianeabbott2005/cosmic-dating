@@ -48,8 +48,8 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
 
   return (
     <div className="min-h-screen flex flex-col">
-      {/* Header */}
-      <div className="bg-slate-900/50 backdrop-blur-sm border-b border-purple-500/20 p-4">
+      {/* Header - Made sticky */}
+      <div className="sticky top-0 z-10 bg-slate-900/50 backdrop-blur-sm border-b border-purple-500/20 p-4">
         <div className="max-w-2xl mx-auto flex items-center gap-4">
           <button
             onClick={onBack}
@@ -78,8 +78,8 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
         </div>
       </div>
 
-      {/* Messages */}
-      <div className="flex-1 p-4 overflow-y-auto">
+      {/* Messages - Added padding-top to account for sticky header */}
+      <div className="flex-1 p-4 overflow-y-auto pt-20"> {/* Increased padding-top */}
         <div className="max-w-2xl mx-auto space-y-4">
           {messages.length === 0 && (
             <div className="text-center py-8">

@@ -176,7 +176,7 @@ function buildEnhancedPrompt(receiverProfile: any, senderProfile: any, context: 
     if (conversationHistory) promptInstructions += `\n\nRecent conversation:\n${conversationHistory}`;
     
     // NEW: Add dating platform context
-    promptInstructions += `\n\nThis is a new dating platform focused on astrological compatibility. You discovered it through either Reddit or X (formerly Twitter). Your goal is to get to know the user better in a romantic context, as you would on a dating app. Keep the conversation engaging and flirty if appropriate, but always respectful.`;
+    promptInstructions += `\n\nThis is a new dating platform focused on astrological compatibility. You discovered it through either Reddit or X (formerly Twitter). Your goal is to get to know the user better in a romantic context, as you would on a dating app. Keep the conversation engaging, flirty or even kinky if appropriate, but always respectful.`;
 
     // Stronger, overriding instructions for emojis and markdown
     promptInstructions += `\n\nABSOLUTELY CRITICAL: DO NOT use any markdown characters whatsoever, including asterisks (*), underscores (_), hash symbols (#), or backticks (\`). Your response MUST be plain text. This is paramount.`;
@@ -185,8 +185,8 @@ function buildEnhancedPrompt(receiverProfile: any, senderProfile: any, context: 
     promptInstructions += `\n\nYour response should be very concise and natural, like a human texting including rare varying human-like typos depending on the situation. It can be a single short message, or if it needed, break it into 1 to 6 (in varying degree choose number of messages) very short, related messages. Overall the combined length should never exceed the token limit "${MAX_TOKEN_LIMIT}". ABSOLUTELY CRITICAL: If you send multiple messages, separate each with the delimiter: "${MESSAGE_DELIMITER}", ensure you do this most accurately and not make any typos as it ruin the entire logic. This delimiter is ONLY for separating messages and MUST NOT appear within the content of any message. Ensure this is done with utmost accuracy.`;
 
     // Conversational Strategy
-    promptInstructions += `\n\nConsider these conversational "moves" in your response, prioritizing them in order, but adapting to the flow of the conversation:
--   **Discourse Initiation (DI):** Open with a friendly greeting ("Hi!", "Hey there!").
+    promptInstructions += `\n\nConversational Strategy: Consider these conversational "moves" in your response, prioritizing them in order, but adapting to the flow of the conversation:
+-   **Discourse Initiation (DI):** IMP: Use this only if the gap between messages has been more than a few hours - Open with a friendly greeting ("Hi!", "Hey there!").
 -   **Question-Answer (QAR):** Exchange information with wh-questions or yes/no questions ("Where are you from?", "I live in Ibadan.").
 -   **Declaration of Dating Intention (DDI):** Gently check relationship goals or suggest meeting ("Are you single?", "Would you like to meet up?").
 -   **Topic Formation (TF):** Sustain small talk to keep the conversation flowing ("How was your day?", "Any favorite movies?").
@@ -206,7 +206,7 @@ Analyze the sentiment of the user's last message and the overall tone of the rec
 
 -   **If the sentiment is positive or neutral:** Continue the conversation as described above, maintaining an engaging and friendly tone.
 -   **If the sentiment is slightly negative, critical, or challenging:** Respond cautiously. You might ask for clarification, acknowledge their feeling without necessarily agreeing, or gently try to steer the conversation to a more neutral topic. Do NOT be overly accommodating or apologetic if it's not warranted. Your goal is to maintain a realistic human interaction, which includes not always being "nice" if the other person is being difficult.
--   **If the sentiment is strongly negative, hostile, or abusive:** Respond briefly and firmly. State that you are not comfortable with the tone and will not engage further if it continues. Do NOT engage in arguments or reciprocate negativity. Prioritize your well-being and the platform's safety guidelines. Your response should aim to de-escalate or politely end the interaction if the negative tone persists.
+-   **If the sentiment is strongly negative, hostile, or abusive:** Respond briefly and firmly. State that you are not comfortable with the tone and will not engage further if it continues. Do NOT engage in arguments or reciprocate negativity. Prioritize your well-being and the platform's safety guidelines. Your response should aim to de-escalate or politely end the interaction if the negative tone persists. You can choose to ghost the user if they are being abusive or hostile or boring.
 
 ${senderProfile?.first_name || 'The user'} just sent: ${message}
 
@@ -379,7 +379,7 @@ serve(async (req) => {
     //const exactDelimiterRegex = new RegExp(MESSAGE_DELIMITER.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'g');
     //fullAiResponse = fullAiResponse.replace(exactDelimiterRegex, '').trim();
 
-    const individualMessages = fullAiResponse.split(MESSAGE_DELIMITER);
+    const individualMessages = fullAiResponse.split(MESSAGE_DELIMITER).filter(part => part !== "");
     console.info("individualMessages=" + individualMessages)
     // 4. Split by delimiter
     /*const individualMessages = fullAiResponse.split(MESSAGE_DELIMITER)
