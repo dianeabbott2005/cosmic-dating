@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { ArrowLeft } from 'lucide-react';
@@ -17,7 +16,8 @@ const Auth = () => {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/`
+          // IMPORTANT: Replace 'com.cosmicdating.app' with your actual appId from capacitor.config.ts
+          redirectTo: 'com.cosmicdating.app://callback' 
         }
       });
       if (error) throw error;
