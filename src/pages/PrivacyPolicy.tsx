@@ -116,7 +116,7 @@ const PrivacyPolicy = () => {
           <p className="text-gray-300">
             If you have any questions about this Privacy Policy, please contact us at:
             <br />
-            support@zodiacheartsync.com
+            support@cosmic-dating.com
           </p>
         </div>
       </div>
