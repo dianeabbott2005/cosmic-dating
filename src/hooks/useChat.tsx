@@ -202,9 +202,14 @@ export const useChat = (matchId?: string) => {
 
   // Send a message
   const sendMessage = async (content: string) => {
-    if (!chat || !user || !content.trim()) return;
+    console.log('sendMessage called with content:', content); // Added log
+    if (!chat || !user || !content.trim()) {
+      console.error('Cannot send message: chat, user, or content is missing.', { chat, user, content }); // Added error log
+      return;
+    }
 
     try {
+      console.log('Attempting to insert message into Supabase...'); // Added log
       const { data, error } = await supabase
         .from('messages')
         .insert({
@@ -216,17 +221,20 @@ export const useChat = (matchId?: string) => {
         .single();
 
       if (error) {
-        console.error('Error sending message:', error);
-        return;
+        console.error('Error sending message to Supabase:', error); // Added error log
+        // Optionally, show a toast notification here
+        return; // Return to prevent further execution on error
       }
 
+      console.log('Message sent successfully to Supabase:', data); // Added log
       // Add the message to local state immediately for better UX
       if (data) {
         setMessages(prev => [...prev, data]);
-        // No longer trigger AI response from here; the database trigger will handle it.
+        console.log('Message added to local state:', data); // Added log
       }
     } catch (error) {
-      console.error('Error sending message:', error);
+      console.error('Unexpected error in sendMessage:', error); // Added error log
+      // Optionally, show a toast notification here
     }
   };
 

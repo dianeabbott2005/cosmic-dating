@@ -36,9 +36,12 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('handleSendMessage called. Message:', message); // Added log
     if (message.trim()) {
       await sendMessage(message);
       setMessage('');
+    } else {
+      console.log('Message is empty or just whitespace, not sending.'); // Added log
     }
   };
 
