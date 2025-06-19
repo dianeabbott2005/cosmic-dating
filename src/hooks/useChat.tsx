@@ -41,24 +41,6 @@ export const useChat = (matchId?: string) => {
   // Refs for Realtime Channel instance (responseTimerRef and lastUserMessageContentRef are no longer needed)
   const realtimeChannelRef = useRef<RealtimeChannel | null>(null); // Ref to store the channel instance
 
-  // isProfileActive is no longer needed for triggering, but could be kept for other logic if desired.
-  // For now, removing it as its primary use was for client-side AI triggering.
-  // const isProfileActive = async (userId: string): Promise<boolean> => {
-  //   try {
-  //     const { data } = await supabase
-  //       .from('profiles')
-  //       .select('is_active')
-  //       .eq('user_id', userId)
-  //       .single();
-      
-  //     return data?.is_active === true;
-  //   } catch {
-  //     return false;
-  //   }
-  // };
-
-  // Removed triggerResponse function as it's now handled by the database trigger
-
   // Load all chats for the current user
   const loadUserChats = async () => {
     if (!user) return;
@@ -77,15 +59,15 @@ export const useChat = (matchId?: string) => {
             chat_id
           )
         `)
-        .or(`user1_id.eq.${user.id},user2_id.eq.${user.id}`)
-        .order('created_at', { ascending: false });
+        .or(`user1_id.eq.${user.id},user2_id.eq.${user.id}`);
+        // Removed .order('created_at', { ascending: false }) from here
 
       if (error) {
         console.error('Error loading chats:', error);
         return;
       }
 
-      // For each chat, get the other user's profile information
+      // For each chat, get the other user's profile information and the last message
       const chatsWithProfiles = await Promise.all(
         (userChats || []).map(async (chat) => {
           const otherUserId = chat.user1_id === user.id ? chat.user2_id : chat.user1_id;
@@ -102,7 +84,7 @@ export const useChat = (matchId?: string) => {
             otherUserAge = calculateAge(profile.date_of_birth);
           }
 
-          // Get the last message and ensure it has all required fields
+          // Get the last message by sorting the messages array
           const lastMessage = chat.messages && chat.messages.length > 0 
             ? chat.messages.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]
             : null;
@@ -123,14 +105,21 @@ export const useChat = (matchId?: string) => {
               id: lastMessage.id,
               content: lastMessage.content,
               sender_id: lastMessage.sender_id,
-              created_at: lastMessage.created_at, // Corrected from created_id
+              created_at: lastMessage.created_at,
               chat_id: lastMessage.chat_id
             } : undefined
           };
         })
       );
 
-      setChats(chatsWithProfiles);
+      // Sort chats by the latest message's created_at timestamp (descending)
+      const sortedChats = chatsWithProfiles.sort((a, b) => {
+        const dateA = a.last_message?.created_at ? new Date(a.last_message.created_at).getTime() : new Date(a.created_at).getTime();
+        const dateB = b.last_message?.created_at ? new Date(b.last_message.created_at).getTime() : new Date(b.created_at).getTime();
+        return dateB - dateA; // Descending order
+      });
+
+      setChats(sortedChats);
     } catch (error) {
       console.error('Error loading user chats:', error);
     } finally {
