@@ -18,7 +18,6 @@ export interface Chat {
   created_at: string;
   other_user?: {
     first_name: string;
-    // Removed last_name from this interface as it will no longer be fetched for chat participants
     user_id: string;
   };
   last_message?: Message;
@@ -266,50 +265,21 @@ export const useChat = (matchId?: string) => {
     }
   }, [user]);
 
-  // Set up real-time subscription
+  // Set up real-time subscription for messages
   useEffect(() => {
     const currentChatId = chat?.id;
     const currentUserId = user?.id;
 
-    // Cleanup function for the effect
-    return () => {
-      if (realtimeChannelRef.current) {
-        console.log(`useChat: Cleaning up subscription for ${realtimeChannelRef.current.topic}. Removing channel.`);
-        supabase.removeChannel(realtimeChannelRef.current);
-        realtimeChannelRef.current = null;
-      }
-      if (responseTimerRef.current) {
-        clearTimeout(responseTimerRef.current);
-        responseTimerRef.current = null;
-      }
-      lastUserMessageContentRef.current = null;
-    };
-
-    // If no chat ID or user ID, just return (cleanup handles removal).
     if (!currentChatId || !currentUserId) {
+      console.log('useChat: No chat ID or user ID, skipping real-time subscription setup.');
       return;
     }
 
+    console.log(`useChat: Setting up real-time subscription for chat ID: ${currentChatId}`);
     const channelName = `chat-${currentChatId}`;
-    let channel = supabase.channel(channelName); // Get or create the channel instance
+    const channel = supabase.channel(channelName);
 
-    // Check if the channel is already subscribed or in the process of joining
-    if (channel.state === 'joined' || channel.state === 'joining') {
-      console.log(`useChat: Channel ${channelName} is already in state '${channel.state}'. Skipping re-subscription.`);
-      realtimeChannelRef.current = channel; // Ensure ref is updated even if we don't re-subscribe
-      return;
-    }
-
-    // If there's an existing channel in the ref but it's not the one we just got, or it's in a bad state, remove it.
-    if (realtimeChannelRef.current && realtimeChannelRef.current !== channel) {
-      console.log(`useChat: Removing old channel ${realtimeChannelRef.current.topic} before subscribing to ${channelName}.`);
-      supabase.removeChannel(realtimeChannelRef.current);
-      realtimeChannelRef.current = null;
-    }
-
-    console.log(`useChat: Attempting to set up new real-time subscription for chat ID: ${currentChatId}`);
-    
-    channel
+    const { data: { subscription } } = channel
       .on(
         'postgres_changes',
         {
@@ -346,8 +316,21 @@ export const useChat = (matchId?: string) => {
         }
       });
 
-    realtimeChannelRef.current = channel; // Store the channel instance
-  }, [chat?.id, user?.id]); // Dependencies: chat.id and user.id (only re-subscribe if chat ID or user changes)
+    // Store the subscription object in the ref for cleanup
+    realtimeChannelRef.current = channel; 
+
+    // Cleanup function: unsubscribe from the channel when the component unmounts or dependencies change
+    return () => {
+      console.log(`useChat: Cleaning up subscription for chat ID: ${currentChatId}. Unsubscribing.`);
+      subscription.unsubscribe();
+      // Also clear any pending response timers if the chat view is closed
+      if (responseTimerRef.current) {
+        clearTimeout(responseTimerRef.current);
+        responseTimerRef.current = null;
+      }
+      lastUserMessageContentRef.current = null;
+    };
+  }, [chat?.id, user?.id]); // Dependencies: chat.id and user.id
 
   return {
     chat,
