@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import WelcomeScreen from '@/components/WelcomeScreen';
 import RegistrationFlow from '@/components/RegistrationFlow';
 import Dashboard from '@/components/Dashboard';
-import ConsentScreen from '@/components/ConsentScreen'; // Import new ConsentScreen
+import ConsentScreen from '@/components/ConsentScreen';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import type { Database } from '@/integrations/supabase/types';
@@ -46,68 +46,81 @@ const Index = () => {
   const checkUserProfile = async () => {
     if (!authUser) return;
 
-    try {
-      console.log('Checking profile for user:', authUser.id);
-      
-      const { data: userProfile, error: dbError } = await supabase
-        .from('profiles')
-        .select(`
-          created_at, date_of_birth, email, first_name, gender, id, last_name,
-          latitude, longitude, looking_for, max_age, min_age, personality_prompt,
-          place_of_birth, time_of_birth, updated_at, user_id, timezone, is_active,
-          has_agreed_to_terms
-        `)
-        .eq('user_id', authUser.id)
-        .maybeSingle();
+    let userProfile: Database['public']['Tables']['profiles']['Row'] | null = null;
+    let attempts = 0;
+    const MAX_ATTEMPTS = 5;
+    const RETRY_DELAY_MS = 1000; // 1 second
 
-      console.log('Profile check result:', { profile: userProfile, error: dbError });
-
-      if (dbError) {
-        console.error('Error checking profile:', dbError);
-        setProfile(null);
-        setCurrentView('registration'); // Fallback to registration if profile fetch fails
-        return;
+    while (!userProfile && attempts < MAX_ATTEMPTS) {
+      if (attempts > 0) {
+        console.log(`Attempting to fetch user profile (${attempts}/${MAX_ATTEMPTS})...`);
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
       }
-      
-      setProfile(userProfile);
+      try {
+        const { data, error: dbError } = await supabase
+          .from('profiles')
+          .select(`
+            created_at, date_of_birth, email, first_name, gender, id, last_name,
+            latitude, longitude, looking_for, max_age, min_age, personality_prompt,
+            place_of_birth, time_of_birth, updated_at, user_id, timezone, is_active,
+            has_agreed_to_terms
+          `)
+          .eq('user_id', authUser.id)
+          .maybeSingle();
 
-      // Define all required fields for a complete profile
-      const requiredFields = [
-        'first_name', 'last_name', 'email', 'date_of_birth', 'time_of_birth',
-        'place_of_birth', 'latitude', 'longitude', 'gender',
-        'looking_for', 'min_age', 'max_age'
-      ];
-
-      // Check if all required fields are present and not null/empty, AND if is_active is explicitly false (for human profiles)
-      const isProfileComplete = userProfile && 
-                                userProfile.is_active === false && // Human profiles should have is_active: false
-                                requiredFields.every(field => {
-        const value = userProfile[field as keyof typeof userProfile];
-        // For string fields, check if it's not an empty string
-        if (typeof value === 'string') {
-          return value.trim() !== '';
+        if (dbError && dbError.code !== 'PGRST116') { // PGRST116 is "No rows found"
+          console.error('Error checking profile:', dbError);
+          setError(dbError.message);
+          break; // Break on actual database errors
         }
-        // For number/boolean fields, check if it's not null or undefined
-        return value !== null && value !== undefined;
-      });
-
-      // New logic: Check consent first
-      if (!userProfile || userProfile.has_agreed_to_terms === false) {
-        console.log('User has not agreed to terms, showing consent screen.');
-        setCurrentView('consent');
-      } else if (isProfileComplete) {
-        console.log('Complete profile found and terms agreed, showing dashboard');
-        setCurrentView('dashboard');
-        refreshMatches(); 
-      } else {
-        console.log('Incomplete profile found but terms agreed, showing registration');
-        setCurrentView('registration');
+        userProfile = data;
+      } catch (err) {
+        console.error('Unexpected error during profile fetch attempt:', err);
+        setError('Failed to fetch profile due to an unexpected error.');
+        break;
       }
-    } catch (error: any) {
-      console.error('Error in checkUserProfile catch block:', error);
+      attempts++;
+    }
+
+    if (error) { // If an error occurred during fetching
       setProfile(null);
+      setCurrentView('registration'); // Fallback to registration if profile fetch fails
+      return;
+    }
+      
+    setProfile(userProfile);
+
+    // Define all required fields for a complete profile
+    const requiredFields = [
+      'first_name', 'last_name', 'email', 'date_of_birth', 'time_of_birth',
+      'place_of_birth', 'latitude', 'longitude', 'gender',
+      'looking_for', 'min_age', 'max_age'
+    ];
+
+    // Check if all required fields are present and not null/empty, AND if is_active is explicitly false (for human profiles)
+    const isProfileComplete = userProfile && 
+                              userProfile.is_active === false && // Human profiles should have is_active: false
+                              requiredFields.every(field => {
+      const value = userProfile[field as keyof typeof userProfile];
+      // For string fields, check if it's not an empty string
+      if (typeof value === 'string') {
+        return value.trim() !== '';
+      }
+      // For number/boolean fields, check if it's not null or undefined
+      return value !== null && value !== undefined;
+    });
+
+    // New logic: Check consent first
+    if (!userProfile || userProfile.has_agreed_to_terms === false) {
+      console.log('User has not agreed to terms, showing consent screen.');
+      setCurrentView('consent');
+    } else if (isProfileComplete) {
+      console.log('Complete profile found and terms agreed, showing dashboard');
+      setCurrentView('dashboard');
+      refreshMatches(); 
+    } else {
+      console.log('Incomplete profile found but terms agreed, showing registration');
       setCurrentView('registration');
-      throw error;
     }
   };
 
