@@ -128,8 +128,8 @@ const Index = () => {
 
   const handleGetStarted = () => {
     if (authUser) {
-      console.log('Index.tsx: Get Started clicked with auth user, checking profile.');
-      checkUserProfile(); 
+      console.log('Index.tsx: Get Started clicked with auth user, directing to consent screen.');
+      setCurrentView('consent'); // Always go to consent if authenticated
     } else {
       console.log('Index.tsx: Get Started clicked without auth user, navigating to auth.');
       navigate('/auth');
