@@ -80,7 +80,7 @@ const TermsOfService = () => {
           <p className="text-gray-300">
             If you have any questions about these Terms, please contact us at:
             <br />
-            support@zodiacheartsync.com
+            support@cosmic-dating.com
           </p>
         </div>
       </div>
