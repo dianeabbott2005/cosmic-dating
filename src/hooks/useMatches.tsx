@@ -147,9 +147,10 @@ export const useMatches = () => {
   // Initial load of matches when user is available
   useEffect(() => {
     if (user) {
-      getExistingMatches();
+      // When user becomes available, trigger match generation and then fetch
+      triggerMatchGeneration(); 
     }
-  }, [user]);
+  }, [user]); // Only re-run when user object changes
 
   // Refresh matches when window regains focus
   useEffect(() => {

@@ -17,7 +17,7 @@ const Index = () => {
   const { user: authUser } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { refreshMatches } = useMatches();
+  // Removed useMatches here as its refreshMatches is no longer explicitly called from Index.
 
   useEffect(() => {
     const initializeView = async () => {
@@ -119,7 +119,7 @@ const Index = () => {
     } else if (isProfileComplete) {
       console.log('Index.tsx: Complete profile found and terms agreed, showing dashboard.');
       setCurrentView('dashboard');
-      refreshMatches(); 
+      // Removed refreshMatches() call here, useMatches will handle it
     } else {
       console.log('Index.tsx: Incomplete profile found but terms agreed, showing registration.');
       setCurrentView('registration');
@@ -146,7 +146,7 @@ const Index = () => {
     console.log('Index.tsx: Registration completed, setting view to dashboard.');
     setProfile(userData); // Set the profile state directly from the completed data
     setCurrentView('dashboard'); // Transition to dashboard
-    refreshMatches();
+    // Removed refreshMatches() call here, useMatches will handle it
   };
 
   const handleBackToWelcome = () => {
