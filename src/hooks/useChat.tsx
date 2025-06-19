@@ -40,7 +40,7 @@ export const useChat = (matchId?: string) => {
 
   // Refs for debounce logic and Realtime Channel instance
   const responseTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const lastUserMessageContentRef = useRef<string | null>(lastUserMessageContentRef);
+  const lastUserMessageContentRef = useRef<string | null>(null); // Corrected initialization
   const realtimeChannelRef = useRef<RealtimeChannel | null>(null); // Ref to store the channel instance
 
   // Check if a user is an active profile (is_active: true)
