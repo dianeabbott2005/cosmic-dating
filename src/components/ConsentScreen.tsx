@@ -72,9 +72,8 @@ const ConsentScreen = ({ onAgree }: ConsentScreenProps) => {
       description: "You must agree to the Privacy Policy and Terms of Service to use the application. Redirecting to home.",
       variant: "destructive",
     });
-    setTimeout(() => {
-      navigate('/'); // Redirect to home if they don't agree
-    }, 3000); // Give user time to read the toast
+    // Immediately navigate to home without a timeout
+    navigate('/'); 
   };
 
   return (

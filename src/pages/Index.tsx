@@ -25,15 +25,16 @@ const Index = () => {
       setError(null);
       
       if (authUser) {
-        console.log('Auth user found:', authUser.id);
+        console.log('Index.tsx: Auth user found:', authUser.id);
         await checkUserProfile();
       } else {
-        console.log('No auth user');
+        console.log('Index.tsx: No auth user');
         const isRegistering = searchParams.get('register');
         if (isRegistering) {
-          console.log('Registration redirect detected, but no auth user. Redirecting to auth.');
+          console.log('Index.tsx: Registration redirect detected, but no auth user. Redirecting to auth.');
           navigate('/auth'); // Ensure user is authenticated before registration flow
         } else {
+          console.log('Index.tsx: Setting view to welcome (no auth user, no registration param).');
           setCurrentView('welcome');
         }
       }
@@ -53,7 +54,7 @@ const Index = () => {
 
     while (!userProfile && attempts < MAX_ATTEMPTS) {
       if (attempts > 0) {
-        console.log(`Attempting to fetch user profile (${attempts}/${MAX_ATTEMPTS})...`);
+        console.log(`Index.tsx: Attempting to fetch user profile (${attempts}/${MAX_ATTEMPTS})...`);
         await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
       }
       try {
@@ -69,13 +70,13 @@ const Index = () => {
           .maybeSingle();
 
         if (dbError && dbError.code !== 'PGRST116') { // PGRST116 is "No rows found"
-          console.error('Error checking profile:', dbError);
+          console.error('Index.tsx: Error checking profile:', dbError);
           setError(dbError.message);
           break; // Break on actual database errors
         }
         userProfile = data;
       } catch (err) {
-        console.error('Unexpected error during profile fetch attempt:', err);
+        console.error('Index.tsx: Unexpected error during profile fetch attempt:', err);
         setError('Failed to fetch profile due to an unexpected error.');
         break;
       }
@@ -83,6 +84,7 @@ const Index = () => {
     }
 
     if (error) { // If an error occurred during fetching
+      console.log('Index.tsx: Error state detected, falling back to registration view.');
       setProfile(null);
       setCurrentView('registration'); // Fallback to registration if profile fetch fails
       return;
@@ -112,40 +114,43 @@ const Index = () => {
 
     // New logic: Check consent first
     if (!userProfile || userProfile.has_agreed_to_terms === false) {
-      console.log('User has not agreed to terms, showing consent screen.');
+      console.log('Index.tsx: User has not agreed to terms, showing consent screen.');
       setCurrentView('consent');
     } else if (isProfileComplete) {
-      console.log('Complete profile found and terms agreed, showing dashboard');
+      console.log('Index.tsx: Complete profile found and terms agreed, showing dashboard.');
       setCurrentView('dashboard');
       refreshMatches(); 
     } else {
-      console.log('Incomplete profile found but terms agreed, showing registration');
+      console.log('Index.tsx: Incomplete profile found but terms agreed, showing registration.');
       setCurrentView('registration');
     }
   };
 
   const handleGetStarted = () => {
     if (authUser) {
-      // If user is logged in, check profile completeness and consent
+      console.log('Index.tsx: Get Started clicked with auth user, checking profile.');
       checkUserProfile(); 
     } else {
+      console.log('Index.tsx: Get Started clicked without auth user, navigating to auth.');
       navigate('/auth');
     }
   };
 
   const handleConsentAgree = () => {
+    console.log('Index.tsx: Consent agreed, re-checking user profile.');
     // After agreeing to terms, proceed to check profile completeness
     checkUserProfile();
   };
 
   const handleRegistrationComplete = (userData: any) => {
-    console.log('Registration completed:', userData);
+    console.log('Index.tsx: Registration completed, setting view to dashboard.');
     setProfile(userData); // Set the profile state directly from the completed data
     setCurrentView('dashboard'); // Transition to dashboard
     refreshMatches();
   };
 
   const handleBackToWelcome = () => {
+    console.log('Index.tsx: Back button clicked from registration flow.');
     if (authUser) {
       // If user is logged in, going back from registration means they might need to re-agree or complete profile
       checkUserProfile(); 
