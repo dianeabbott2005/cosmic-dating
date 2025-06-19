@@ -14,6 +14,7 @@ const MAX_TOKEN_LIMIT = 100; // Maximum tokens for the AI response
 const INITIATION_RATE = 0.03; // 3% chance for a dummy profile to initiate a chat with a human match
 const REENGAGEMENT_RATE = 0.1; // 10% chance for a dummy profile to re-engage in an existing chat if there's a gap
 const MIN_GAP_FOR_REENGAGEMENT_HOURS = 3; // Minimum gap in hours for AI to consider re-engaging
+const UNRESPONDED_MESSAGE_THRESHOLD_MINUTES = 5; // If human sent last message and AI hasn't responded in this many minutes, trigger response
 
 // Define a threshold for immediate vs. delayed sending
 const IMMEDIATE_SEND_THRESHOLD_MS = 50 * 1000; // 50 seconds
@@ -419,20 +420,23 @@ serve(async (req) => {
 
         if (existingChat) {
           currentChatId = existingChat.id;
-          console.log(`initiate-dummy-chats (Edge): Chat already exists (${currentChatId}) between ${dummyProfile.first_name} and ${humanProfile.first_name}. Checking for re-engagement.`);
+          console.log(`initiate-dummy-chats (Edge): Chat already exists (${currentChatId}) between ${dummyProfile.first_name} and ${humanProfile.first_name}.`);
 
           // Fetch context and recent messages for existing chat
-          const [fetchedContext, recentMsgs, lastAiMsgTimestamp] = await Promise.all([
+          const [fetchedContext, recentMsgs] = await Promise.all([
               getConversationContext(supabaseClient, currentChatId),
               getRecentMessages(supabaseClient, currentChatId),
-              getLastMessageTimestamp(supabaseClient, currentChatId, dummyProfile.user_id), // Last message from AI
           ]);
 
           context = fetchedContext;
           conversationHistory = buildConversationHistory(recentMsgs, dummyProfile.user_id, dummyProfile.first_name, humanProfile.first_name);
           
           const lastMessageOverall = recentMsgs.length > 0 ? recentMsgs[0] : null;
+          let timeSinceLastMessageOverall: number | null = null;
           if (lastMessageOverall) {
+            const lastMessageDate = new Date(lastMessageOverall.created_at);
+            const now = new Date();
+            timeSinceLastMessageOverall = (now.getTime() - lastMessageDate.getTime()) / (1000 * 60); // in minutes
             wasAiLastSpeaker = lastMessageOverall.sender_id === dummyProfile.user_id;
           }
 
@@ -440,26 +444,29 @@ serve(async (req) => {
           const lastHumanMessageObj = recentMsgs.find(msg => msg.sender_id === humanProfile.user_id);
           lastHumanMessage = lastHumanMessageObj ? lastHumanMessageObj.content : null;
 
-          // Calculate time since AI last spoke
+          // Calculate time since AI last spoke (for re-engagement)
+          const lastAiMsgTimestamp = await getLastMessageTimestamp(supabaseClient, currentChatId, dummyProfile.user_id);
           if (lastAiMsgTimestamp) {
             const lastAiDate = new Date(lastAiMsgTimestamp);
             const now = new Date();
             timeSinceLastAiMessage = (now.getTime() - lastAiDate.getTime()) / (1000 * 60 * 60); // in hours
           }
 
-          // Logic for existing chats:
-          // Only consider processing if AI was the last speaker AND there's a significant gap
-          if (wasAiLastSpeaker && timeSinceLastAiMessage !== null && timeSinceLastAiMessage >= MIN_GAP_FOR_REENGAGEMENT_HOURS) {
+          // Case 1: Human was the last speaker AND there's a significant delay in AI response
+          if (!wasAiLastSpeaker && lastMessageOverall && timeSinceLastMessageOverall !== null && timeSinceLastMessageOverall >= UNRESPONDED_MESSAGE_THRESHOLD_MINUTES) {
+            shouldProcess = true;
+            console.log(`initiate-dummy-chats (Edge): Human was last speaker for ${humanProfile.first_name}. Triggering AI response due to unresponded message gap (${timeSinceLastMessageOverall.toFixed(1)} minutes).`);
+          } 
+          // Case 2: AI was the last speaker AND there's a significant gap for re-engagement
+          else if (wasAiLastSpeaker && timeSinceLastAiMessage !== null && timeSinceLastAiMessage >= MIN_GAP_FOR_REENGAGEMENT_HOURS) {
             if (Math.random() < REENGAGEMENT_RATE) {
               shouldProcess = true;
-              console.log(`initiate-dummy-chats (Edge): Re-engaging with ${humanProfile.first_name} (gap: ${timeSinceLastAiMessage.toFixed(1)} hours, AI was last speaker: ${wasAiLastSpeaker}).`);
+              console.log(`initiate-dummy-chats (Edge): Re-engaging with ${humanProfile.first_name} (gap: ${timeSinceLastAiMessage.toFixed(1)} hours, AI was last speaker).`);
             } else {
               console.log(`initiate-dummy-chats (Edge): Skipping re-engagement for ${humanProfile.first_name} (random chance).`);
             }
-          } else if (!wasAiLastSpeaker && lastMessageOverall) { // Human was last speaker and there's a message
-            console.log(`initiate-dummy-chats (Edge): Human was last speaker for ${humanProfile.first_name}. Skipping proactive re-engagement (chat-response handles this).`);
           } else {
-            console.log(`initiate-dummy-chats (Edge): No re-engagement needed for ${humanProfile.first_name} (no significant gap or AI was not last speaker).`);
+            console.log(`initiate-dummy-chats (Edge): No action needed for ${humanProfile.first_name} (chat is active or no re-engagement criteria met).`);
           }
 
         } else {
