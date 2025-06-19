@@ -40,22 +40,26 @@ const ConsentScreen = ({ onAgree }: ConsentScreenProps) => {
 
     setLoading(true);
     try {
+      console.log('ConsentScreen: Attempting to update profile consent for user ID:', user.id);
       const { error } = await supabase
         .from('profiles')
         .update({ has_agreed_to_terms: true })
         .eq('user_id', user.id);
 
       if (error) {
-        console.error('Error updating consent:', error);
+        console.error('ConsentScreen: Supabase update error for consent:', error.message);
         throw error;
+      } else {
+        console.log('ConsentScreen: Successfully updated profile consent for user ID:', user.id);
       }
 
       toast({
         title: "Consent Recorded",
         description: "Thank you for agreeing to our terms.",
       });
-      onAgree(); // Proceed to the next step (registration flow)
+      onAgree(); // This calls checkUserProfile in Index.tsx
     } catch (error: any) {
+      console.error('ConsentScreen: Failed to record consent:', error);
       toast({
         title: "Error",
         description: error.message || "Failed to record consent. Please try again.",
@@ -72,7 +76,7 @@ const ConsentScreen = ({ onAgree }: ConsentScreenProps) => {
       description: "You must agree to the Privacy Policy and Terms of Service to use the application. Redirecting to home.",
       variant: "destructive",
     });
-    // Immediately navigate to home without a timeout
+    // Immediately navigate to home
     navigate('/'); 
   };
 
