@@ -3,20 +3,21 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import WelcomeScreen from '@/components/WelcomeScreen';
 import RegistrationFlow from '@/components/RegistrationFlow';
 import Dashboard from '@/components/Dashboard';
+import ConsentScreen from '@/components/ConsentScreen'; // Import new ConsentScreen
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import type { Database } from '@/integrations/supabase/types';
-import { useMatches } from '@/hooks/useMatches'; // Import useMatches
+import { useMatches } from '@/hooks/useMatches';
 
 const Index = () => {
-  const [currentView, setCurrentView] = useState<'welcome' | 'registration' | 'dashboard'>('welcome');
+  const [currentView, setCurrentView] = useState<'welcome' | 'consent' | 'registration' | 'dashboard'>('welcome');
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<Database['public']['Tables']['profiles']['Row'] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { user: authUser } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { refreshMatches } = useMatches(); // Get refreshMatches from useMatches
+  const { refreshMatches } = useMatches();
 
   useEffect(() => {
     const initializeView = async () => {
@@ -25,19 +26,13 @@ const Index = () => {
       
       if (authUser) {
         console.log('Auth user found:', authUser.id);
-        // If we are already on the dashboard and have a profile, no need to re-check from DB
-        if (currentView === 'dashboard' && profile) {
-          console.log('Already on dashboard with profile, skipping DB check.');
-        } else {
-          // Otherwise, check the user profile from DB
-          await checkUserProfile();
-        }
+        await checkUserProfile();
       } else {
         console.log('No auth user');
         const isRegistering = searchParams.get('register');
         if (isRegistering) {
-          console.log('Registration redirect detected');
-          setCurrentView('registration');
+          console.log('Registration redirect detected, but no auth user. Redirecting to auth.');
+          navigate('/auth'); // Ensure user is authenticated before registration flow
         } else {
           setCurrentView('welcome');
         }
@@ -46,7 +41,7 @@ const Index = () => {
     };
 
     initializeView();
-  }, [authUser, searchParams]); // Removed 'currentView' and 'profile' from dependencies
+  }, [authUser, searchParams]);
 
   const checkUserProfile = async () => {
     if (!authUser) return;
@@ -59,8 +54,9 @@ const Index = () => {
         .select(`
           created_at, date_of_birth, email, first_name, gender, id, last_name,
           latitude, longitude, looking_for, max_age, min_age, personality_prompt,
-          place_of_birth, time_of_birth, updated_at, user_id, timezone, is_active
-        `) // Explicitly select fields, including is_active
+          place_of_birth, time_of_birth, updated_at, user_id, timezone, is_active,
+          has_agreed_to_terms
+        `)
         .eq('user_id', authUser.id)
         .maybeSingle();
 
@@ -69,7 +65,7 @@ const Index = () => {
       if (dbError) {
         console.error('Error checking profile:', dbError);
         setProfile(null);
-        setCurrentView('registration');
+        setCurrentView('registration'); // Fallback to registration if profile fetch fails
         return;
       }
       
@@ -95,13 +91,16 @@ const Index = () => {
         return value !== null && value !== undefined;
       });
 
-      if (isProfileComplete) {
-        console.log('Complete profile found, showing dashboard');
+      // New logic: Check consent first
+      if (!userProfile || userProfile.has_agreed_to_terms === false) {
+        console.log('User has not agreed to terms, showing consent screen.');
+        setCurrentView('consent');
+      } else if (isProfileComplete) {
+        console.log('Complete profile found and terms agreed, showing dashboard');
         setCurrentView('dashboard');
-        // Trigger match generation after a complete profile is found
         refreshMatches(); 
       } else {
-        console.log('Incomplete profile found, showing registration');
+        console.log('Incomplete profile found but terms agreed, showing registration');
         setCurrentView('registration');
       }
     } catch (error: any) {
@@ -114,40 +113,29 @@ const Index = () => {
 
   const handleGetStarted = () => {
     if (authUser) {
-      setCurrentView('registration');
+      // If user is logged in, check profile completeness and consent
+      checkUserProfile(); 
     } else {
       navigate('/auth');
     }
+  };
+
+  const handleConsentAgree = () => {
+    // After agreeing to terms, proceed to check profile completeness
+    checkUserProfile();
   };
 
   const handleRegistrationComplete = (userData: any) => {
     console.log('Registration completed:', userData);
     setProfile(userData); // Set the profile state directly from the completed data
     setCurrentView('dashboard'); // Transition to dashboard
-
-    // Re-check completeness of the just-submitted userData
-    const requiredFields = [
-      'first_name', 'last_name', 'email', 'date_of_birth', 'time_of_birth',
-      'place_of_birth', 'latitude', 'longitude', 'gender',
-      'looking_for', 'min_age', 'max_age'
-    ];
-    const isSubmittedProfileComplete = userData && 
-                                       userData.is_active === false && // Human profiles should have is_active: false
-                                       requiredFields.every(field => {
-      const value = userData[field as keyof typeof userData];
-      if (typeof value === 'string') {
-        return value.trim() !== '';
-      }
-      return value !== null && value !== undefined;
-    });
-    console.log('handleRegistrationComplete: Is submitted profile complete?', isSubmittedProfileComplete, 'Submitted data:', userData); // ADDED LOG
-
     refreshMatches();
   };
 
   const handleBackToWelcome = () => {
     if (authUser) {
-      setCurrentView('registration');
+      // If user is logged in, going back from registration means they might need to re-agree or complete profile
+      checkUserProfile(); 
     } else {
       setCurrentView('welcome');
     }
@@ -184,7 +172,11 @@ const Index = () => {
         <WelcomeScreen onGetStarted={handleGetStarted} />
       )}
       
-      {currentView === 'registration' && (
+      {currentView === 'consent' && authUser && (
+        <ConsentScreen onAgree={handleConsentAgree} />
+      )}
+
+      {currentView === 'registration' && authUser && (
         <RegistrationFlow 
           onComplete={handleRegistrationComplete}
           onBack={handleBackToWelcome}

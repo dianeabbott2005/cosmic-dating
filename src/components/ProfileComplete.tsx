@@ -88,6 +88,7 @@ const ProfileComplete = ({ onNext, userData }: ProfileCompleteProps) => {
         timezone: timezone, // This will now be string or null
         updated_at: new Date().toISOString(),
         is_active: false, // Set to false for human profiles
+        has_agreed_to_terms: true, // Set to true upon profile completion
       };
 
       console.log('Updating profile with data:', profileData);

@@ -157,7 +157,7 @@ export type Database = {
           first_name: string
           gender: string
           id: string
-          is_active: boolean | null // Changed from is_dummy_profile
+          is_active: boolean | null
           last_name: string
           latitude: number | null
           longitude: number | null
@@ -170,6 +170,7 @@ export type Database = {
           updated_at: string
           user_id: string
           timezone: string | null
+          has_agreed_to_terms: boolean | null // New column
         }
         Insert: {
           created_at?: string
@@ -178,7 +179,7 @@ export type Database = {
           first_name: string
           gender: string
           id?: string
-          is_active?: boolean | null // Changed from is_dummy_profile
+          is_active?: boolean | null
           last_name: string
           latitude?: number | null
           longitude?: number | null
@@ -191,6 +192,7 @@ export type Database = {
           updated_at?: string
           user_id: string
           timezone?: string | null
+          has_agreed_to_terms?: boolean | null // New column
         }
         Update: {
           created_at?: string
@@ -199,7 +201,7 @@ export type Database = {
           first_name?: string
           gender?: string
           id?: string
-          is_active?: boolean | null // Changed from is_dummy_profile
+          is_active?: boolean | null
           last_name?: string
           latitude?: number | null
           longitude?: number | null
@@ -212,6 +214,7 @@ export type Database = {
           updated_at?: string
           user_id?: string
           timezone?: string | null
+          has_agreed_to_terms?: boolean | null // New column
         }
         Relationships: []
       }

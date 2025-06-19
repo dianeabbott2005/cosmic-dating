@@ -29,6 +29,7 @@ const Profile = () => {
     min_age: 18,
     max_age: 35,
     is_active: false, // Default to false for human profiles
+    has_agreed_to_terms: false, // New field
   });
 
   useEffect(() => {
@@ -47,8 +48,9 @@ const Profile = () => {
         .select(`
           created_at, date_of_birth, email, first_name, gender, id, last_name,
           latitude, longitude, looking_for, max_age, min_age, personality_prompt,
-          place_of_birth, time_of_birth, updated_at, user_id, timezone, is_active
-        `) // Explicitly select fields, including is_active
+          place_of_birth, time_of_birth, updated_at, user_id, timezone, is_active,
+          has_agreed_to_terms
+        `) // Explicitly select fields, including is_active and has_agreed_to_terms
         .eq('user_id', user.id)
         .single();
 
@@ -70,6 +72,7 @@ const Profile = () => {
           min_age: data.min_age,
           max_age: data.max_age,
           is_active: data.is_active ?? false, // Use existing value or default to false
+          has_agreed_to_terms: data.has_agreed_to_terms ?? false, // Use existing value or default to false
         });
       }
     } catch (error) {
@@ -138,6 +141,7 @@ const Profile = () => {
           min_age: profile.min_age,
           max_age: profile.max_age,
           is_active: profile.is_active, // Include is_active in update
+          has_agreed_to_terms: profile.has_agreed_to_terms, // Include has_agreed_to_terms in update
         })
         .eq('user_id', user.id);
 
@@ -346,6 +350,27 @@ const Profile = () => {
                   className="input-cosmic"
                 />
               </div>
+            </div>
+
+            {/* Terms Agreement (read-only in profile settings) */}
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Terms Agreement
+              </label>
+              <div className="flex items-center space-x-2">
+                <Checkbox 
+                  id="terms-profile" 
+                  checked={profile.has_agreed_to_terms ?? false} 
+                  disabled // This checkbox is read-only here
+                  className="border-purple-500 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
+                />
+                <Label htmlFor="terms-profile" className="text-gray-300 text-base">
+                  Agreed to Privacy Policy & Terms
+                </Label>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                This is set during initial profile creation.
+              </p>
             </div>
 
             {/* Action Buttons */}
