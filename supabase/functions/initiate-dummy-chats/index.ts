@@ -164,7 +164,7 @@ const NON_NATIVE_ENGLISH_REGIONS: { [key: string]: { languageIssue: string; dial
 /**
  * Constructs the full prompt for the AI API, handling both initial and re-engagement scenarios.
  */
-function buildAiPrompt(aiProfile: any, humanProfile: any, context: any, conversationHistory: string, lastHumanMessage: string | null, timeSinceLastAiMessage: number | null, isInitialChat: boolean): string {
+function buildAiPrompt(aiProfile: any, humanProfile: any, context: any, conversationHistory: string, lastHumanMessage: string | null, timeSinceLastAiMessage: number | null, isInitialChat: boolean, wasAiLastSpeaker: boolean): string {
     const aiAge = calculateAge(aiProfile.date_of_birth);
     let promptInstructions = aiProfile.personality_prompt;
 
@@ -190,7 +190,12 @@ function buildAiPrompt(aiProfile: any, humanProfile: any, context: any, conversa
     } else {
       // Add gap awareness instruction for re-engagement
       if (timeSinceLastAiMessage !== null && timeSinceLastAiMessage >= MIN_GAP_FOR_REENGAGEMENT_HOURS) {
-          promptInstructions += `\n\nIt has been approximately ${Math.round(timeSinceLastAiMessage)} hours since your last message in this chat. Acknowledge this gap naturally, perhaps with a friendly re-initiation or by expressing a slight curiosity about the delay, without being accusatory.`;
+          promptInstructions += `\n\nIt has been approximately ${Math.round(timeSinceLastAiMessage)} hours since your last message in this chat.`;
+          if (wasAiLastSpeaker) {
+            promptInstructions += ` You were the last one to speak. Inquire if everything is alright, or gently pick up from the last topic you discussed, showing concern or continued interest.`;
+          } else {
+            promptInstructions += ` Acknowledge this gap naturally, perhaps with a friendly re-initiation or by expressing a slight curiosity about the delay, without being accusatory.`;
+          }
           if (timeSinceLastAiMessage > 24) {
               promptInstructions += ` This is a very long gap, so your response should be more like a re-engagement after a significant pause.`;
           }
@@ -342,7 +347,7 @@ serve(async (req) => {
 
     if (!humanProfiles || humanProfiles.length === 0) {
       console.log('initiate-dummy-chats (Edge): No human profiles found to initiate/re-engage chats for.');
-      return new Response(JSON.stringify({ success: true, message: 'No human profiles to initiate/re-engage chats for.' }), {
+      return new Response(JSON.stringify({ success: true, message: 'No human profiles to initiate chats for.' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -409,6 +414,7 @@ serve(async (req) => {
         let context: any = null;
         let conversationHistory: string = '';
         let shouldProcess = false;
+        let wasAiLastSpeaker = false;
 
         if (existingChat) {
           currentChatId = existingChat.id;
@@ -436,18 +442,21 @@ serve(async (req) => {
             timeSinceLastAiMessage = (now.getTime() - lastAiDate.getTime()) / (1000 * 60 * 60); // in hours
           }
 
-          // Re-engagement logic: Only re-engage if AI was NOT the last speaker AND there's a significant gap
-          const wasHumanLastSpeaker = recentMsgs.length > 0 && recentMsgs[0].sender_id === humanProfile.user_id;
+          // Determine if AI was the last speaker
+          if (recentMsgs.length > 0) {
+            wasAiLastSpeaker = recentMsgs[0].sender_id === dummyProfile.user_id;
+          }
           
-          if (wasHumanLastSpeaker && timeSinceLastAiMessage !== null && timeSinceLastAiMessage >= MIN_GAP_FOR_REENGAGEMENT_HOURS) {
+          // Re-engagement logic: Re-engage if there's a significant gap, regardless of who was the last speaker
+          if (timeSinceLastAiMessage !== null && timeSinceLastAiMessage >= MIN_GAP_FOR_REENGAGEMENT_HOURS) {
             if (Math.random() < REENGAGEMENT_RATE) {
               shouldProcess = true;
-              console.log(`initiate-dummy-chats (Edge): Re-engaging with ${humanProfile.first_name} (gap: ${timeSinceLastAiMessage.toFixed(1)} hours).`);
+              console.log(`initiate-dummy-chats (Edge): Re-engaging with ${humanProfile.first_name} (gap: ${timeSinceLastAiMessage.toFixed(1)} hours, AI was last speaker: ${wasAiLastSpeaker}).`);
             } else {
               console.log(`initiate-dummy-chats (Edge): Skipping re-engagement for ${humanProfile.first_name} (random chance).`);
             }
           } else {
-            console.log(`initiate-dummy-chats (Edge): No re-engagement needed for ${humanProfile.first_name} (AI was last speaker or no significant gap).`);
+            console.log(`initiate-dummy-chats (Edge): No re-engagement needed for ${humanProfile.first_name} (no significant gap).`);
           }
 
         } else {
@@ -481,7 +490,7 @@ serve(async (req) => {
 
         if (shouldProcess && currentChatId!) {
           try {
-            const aiPrompt = buildAiPrompt(dummyProfile, humanProfile, context, conversationHistory, lastHumanMessage, timeSinceLastAiMessage, isInitialChat);
+            const aiPrompt = buildAiPrompt(dummyProfile, humanProfile, context, conversationHistory, lastHumanMessage, timeSinceLastAiMessage, isInitialChat, wasAiLastSpeaker);
             let fullAiResponse = await callAiApi(aiPrompt);
             
             // Remove all common markdown characters
