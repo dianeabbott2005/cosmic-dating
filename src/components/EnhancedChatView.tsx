@@ -34,7 +34,8 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
   };
 
   const formatTime = (dateString: string) => {
-    return new Date(dateString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    // Updated to include seconds
+    return new Date(dateString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   };
 
   if (loading) {
