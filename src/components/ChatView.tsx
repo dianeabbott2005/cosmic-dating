@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { ArrowLeft, Send } from 'lucide-react';
 
@@ -7,33 +6,41 @@ interface ChatViewProps {
   onBack: () => void;
 }
 
+// Define a type for the messages to ensure consistency
+interface ChatMessage {
+  id: number;
+  text: string;
+  sender: 'me' | 'other'; // 'me' for current user, 'other' for match
+  created_at: string; // Use ISO string for timestamp
+}
+
 const ChatView = ({ match, onBack }: ChatViewProps) => {
   const [message, setMessage] = useState('');
-  const [messages, setMessages] = useState([
+  const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 1,
       text: `Hi ${match.firstName}! I noticed we have amazing cosmic compatibility. I'd love to get to know you better! ✨`,
       sender: 'me',
-      timestamp: new Date(Date.now() - 1000 * 60 * 30) // 30 minutes ago
+      created_at: new Date(Date.now() - 1000 * 60 * 30).toISOString() // 30 minutes ago, as ISO string
     }
   ]);
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
     if (message.trim()) {
-      const newMessage = {
+      const newMessage: ChatMessage = {
         id: messages.length + 1,
         text: message,
         sender: 'me',
-        timestamp: new Date()
+        created_at: new Date().toISOString() // Current time as ISO string
       };
       setMessages([...messages, newMessage]);
       setMessage('');
     }
   };
 
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const formatTime = (dateString: string) => {
+    return new Date(dateString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
   return (
@@ -86,7 +93,7 @@ const ChatView = ({ match, onBack }: ChatViewProps) => {
                     msg.sender === 'me' ? 'text-purple-100' : 'text-gray-500'
                   }`}
                 >
-                  {formatTime(msg.timestamp)}
+                  {formatTime(msg.created_at)}
                 </p>
               </div>
             </div>

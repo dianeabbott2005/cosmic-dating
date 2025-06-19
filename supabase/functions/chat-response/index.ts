@@ -9,8 +9,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const MESSAGE_DELIMITER = "---MESSAGE_BREAK---"; // Unique delimiter for splitting AI responses
-
+const MESSAGE_DELIMITER = "@@@MESSAGEBREAK@@@"; // Unique delimiter for splitting AI responses
+const MAX_TOKEN_LIMIT = 100; // Maximum tokens for the AI response
 const NON_NATIVE_ENGLISH_REGIONS: { [key: string]: { languageIssue: string; dialect: string; } } = {
   'India': { languageIssue: 'subtle grammatical errors, Indian English phrasing', dialect: 'occasional Hindi/local language phrases (e.g., "acha", "yaar")' },
   'Japan': { languageIssue: 'slightly formal tone, occasional direct translations', dialect: 'polite particles (e.g., "ne", "desu")' },
@@ -182,7 +182,7 @@ function buildEnhancedPrompt(receiverProfile: any, senderProfile: any, context: 
     promptInstructions += `\n\nABSOLUTELY CRITICAL: DO NOT use any markdown characters whatsoever, including asterisks (*), underscores (_), hash symbols (#), or backticks (\`). Your response MUST be plain text. This is paramount.`;
     promptInstructions += `\n\nIMPORTANT: Use emojis very sparingly, if at all. Prioritize clear text over emoji expression.`;
     // Updated instruction for message segmentation and length
-    promptInstructions += `\n\nYour response should be very concise and natural, like a human texting. It can be a single short message, or if it makes sense, break it into 1 to 6 very short, related messages. If you send multiple messages, separate each with the delimiter: "${MESSAGE_DELIMITER}". This delimiter is ONLY for separating messages and MUST NOT appear within the content of any message.`;
+    promptInstructions += `\n\nYour response should be very concise and natural, like a human texting including rare varying human-like typos depending on the situation. It can be a single short message, or if it needed, break it into 1 to 6 (in varying degree choose number of messages) very short, related messages. Overall the combined length should never exceed the token limit "${MAX_TOKEN_LIMIT}". ABSOLUTELY CRITICAL: If you send multiple messages, separate each with the delimiter: "${MESSAGE_DELIMITER}", ensure you do this most accurately and not make any typos as it ruin the entire logic. This delimiter is ONLY for separating messages and MUST NOT appear within the content of any message. Ensure this is done with utmost accuracy.`;
 
     // Conversational Strategy
     promptInstructions += `\n\nConsider these conversational "moves" in your response, prioritizing them in order, but adapting to the flow of the conversation:
@@ -230,7 +230,7 @@ async function callAiApi(prompt: string): Promise<string> {
             temperature: 0.8,
             topK: 40,
             topP: 0.95,
-            maxOutputTokens: 75, // Increased token limit for more complete messages
+            maxOutputTokens: MAX_TOKEN_LIMIT, // Increased token limit for more complete messages
           }
         }),
       }
@@ -247,7 +247,7 @@ async function callAiApi(prompt: string): Promise<string> {
  * Helper function to introduce random typos into a string.
  * Applies typos with a certain probability per word.
  */
-function introduceTypos(text: string, typoProbabilityPerWord: number = 0.10): string { // Reduced typo probability
+function introduceTypos(text: string, typoProbabilityPerWord: number = 0.05): string { // Reduced typo probability
   const words = text.split(' ');
   const typedWords = words.map(word => {
     // Skip very short words or if random chance doesn't hit
@@ -372,15 +372,17 @@ serve(async (req) => {
     fullAiResponse = fullAiResponse.replace(/[\*_`#]/g, ''); 
     
     // 2. Introduce typos (with reduced probability)
-    fullAiResponse = introduceTypos(fullAiResponse);
-
+    //fullAiResponse = introduceTypos(fullAiResponse);
+    console.info("fullAiResponse=" + fullAiResponse)
     // 3. Remove the exact delimiter from the full response before splitting,
     //    in case the AI accidentally included it in a non-splitting context.
-    const exactDelimiterRegex = new RegExp(MESSAGE_DELIMITER.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'g');
-    fullAiResponse = fullAiResponse.replace(exactDelimiterRegex, '').trim();
+    //const exactDelimiterRegex = new RegExp(MESSAGE_DELIMITER.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'g');
+    //fullAiResponse = fullAiResponse.replace(exactDelimiterRegex, '').trim();
 
+    const individualMessages = fullAiResponse.split(MESSAGE_DELIMITER);
+    console.info("individualMessages=" + individualMessages)
     // 4. Split by delimiter
-    const individualMessages = fullAiResponse.split(MESSAGE_DELIMITER)
+    /*const individualMessages = fullAiResponse.split(MESSAGE_DELIMITER)
                                              .map(msg => msg.trim())
                                              .filter(msg => msg.length > 0)
                                              .map(msg => {
@@ -390,7 +392,7 @@ serve(async (req) => {
                                                 return cleanedMsg;
                                              });
     // --- END Enhanced Post-processing ---
-
+    */
     // If the total delay (initial response delay + sum of typing delays + sum of inter-message gaps) is too long, schedule it
     const totalTypingDelay = individualMessages.reduce((sum, msg) => sum + calculateTypingDelay(msg.length), 0);
     const totalInterMessageGaps = individualMessages.length > 1 ? (individualMessages.length - 1) * calculateInterMessageGap() : 0;
