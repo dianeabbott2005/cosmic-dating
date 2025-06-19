@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { RealtimeChannel } from '@supabase/supabase-js'; // Import RealtimeChannel type
-import { calculateAge } from '@/utils/dateCalculations'; // Import from new utility
+import { calculateAge } from '@/utils/dateCalculations';
+import { useWindowFocus } from '@/hooks/useWindowFocus'; // Import the new hook
 
 export interface Message {
   id: string;
@@ -35,10 +36,11 @@ export const useChat = (matchId?: string) => {
   const [chats, setChats] = useState<Chat[]>([]);
   const [loading, setLoading] = useState(false);
   const { user } = useAuth();
+  const isWindowFocused = useWindowFocus(); // Use the new hook
 
   // Refs for debounce logic and Realtime Channel instance
   const responseTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const lastUserMessageContentRef = useRef<string | null>(null);
+  const lastUserMessageContentRef = useRef<string | null>(lastUserMessageContentRef);
   const realtimeChannelRef = useRef<RealtimeChannel | null>(null); // Ref to store the channel instance
 
   // Check if a user is an active profile (is_active: true)
@@ -143,7 +145,7 @@ export const useChat = (matchId?: string) => {
               id: lastMessage.id,
               content: lastMessage.content,
               sender_id: lastMessage.sender_id,
-              created_at: lastMessage.created_at,
+              created_at: lastMessage.created_id,
               chat_id: lastMessage.chat_id
             } : undefined
           };
@@ -279,6 +281,17 @@ export const useChat = (matchId?: string) => {
       loadUserChats();
     }
   }, [user]);
+
+  // Refresh chats and messages when window regains focus
+  useEffect(() => {
+    if (isWindowFocused && user) {
+      console.log('useChat: Window gained focus, refreshing chats and current messages.');
+      loadUserChats(); // Refresh the list of chats
+      if (chat?.id) {
+        loadMessages(chat.id); // Refresh messages for the active chat
+      }
+    }
+  }, [isWindowFocused, user, chat?.id]); // Depend on chat.id to refresh messages for the current chat
 
   // Set up real-time subscription for messages
   useEffect(() => {

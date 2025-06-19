@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { calculateAge } from '@/utils/dateCalculations'; // Import from new utility
+import { calculateAge } from '@/utils/dateCalculations';
+import { useWindowFocus } from '@/hooks/useWindowFocus'; // Import the new hook
 
 export interface MatchProfile {
   id: string;
@@ -29,6 +30,7 @@ export const useMatches = () => {
   const [matches, setMatches] = useState<MatchProfile[]>([]);
   const [loading, setLoading] = useState(false);
   const { user } = useAuth();
+  const isWindowFocused = useWindowFocus(); // Use the new hook
 
   // Function to trigger the match generation Edge Function
   const triggerMatchGeneration = async () => {
@@ -146,11 +148,16 @@ export const useMatches = () => {
   useEffect(() => {
     if (user) {
       getExistingMatches();
-    } else {
-      setMatches([]);
-      setLoading(false);
     }
   }, [user]);
+
+  // Refresh matches when window regains focus
+  useEffect(() => {
+    if (isWindowFocused && user) {
+      console.log('useMatches: Window gained focus, refreshing matches.');
+      getExistingMatches(); // Refresh existing matches
+    }
+  }, [isWindowFocused, user]);
 
   // Listen for profile updates to trigger match recalculation
   useEffect(() => {
