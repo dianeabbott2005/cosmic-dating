@@ -279,7 +279,8 @@ export const useChat = (matchId?: string) => {
     const channelName = `chat-${currentChatId}`;
     const channel = supabase.channel(channelName);
 
-    const { data: { subscription } } = channel
+    // Corrected subscription: directly assign the result of subscribe()
+    const subscription = channel
       .on(
         'postgres_changes',
         {
@@ -292,6 +293,7 @@ export const useChat = (matchId?: string) => {
           const newMessage = payload.new as Message;
           console.log('useChat: Real-time message received via subscription:', newMessage);
 
+          // Only add messages from the other user to avoid duplicates (own messages are added immediately on send)
           if (newMessage.sender_id !== currentUserId) {
             setMessages(prev => {
               const exists = prev.some(msg => msg.id === newMessage.id);
@@ -322,7 +324,11 @@ export const useChat = (matchId?: string) => {
     // Cleanup function: unsubscribe from the channel when the component unmounts or dependencies change
     return () => {
       console.log(`useChat: Cleaning up subscription for chat ID: ${currentChatId}. Unsubscribing.`);
-      subscription.unsubscribe();
+      // Use the stored channel instance to unsubscribe
+      if (realtimeChannelRef.current) {
+        realtimeChannelRef.current.unsubscribe();
+        realtimeChannelRef.current = null; // Clear the ref
+      }
       // Also clear any pending response timers if the chat view is closed
       if (responseTimerRef.current) {
         clearTimeout(responseTimerRef.current);
