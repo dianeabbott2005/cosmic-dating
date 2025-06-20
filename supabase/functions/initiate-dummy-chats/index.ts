@@ -16,6 +16,7 @@ const INITIATION_RATE = 0.03; // 3% chance for a dummy profile to initiate a cha
 const REENGAGEMENT_RATE = 0.1; // 10% chance for a dummy profile to re-engage in an existing chat if there's a gap
 const MIN_GAP_FOR_REENGAGEMENT_HOURS = 3; // Minimum gap in hours for AI to consider re-engaging
 const UNRESPONDED_MESSAGE_THRESHOLD_MINUTES = 5; // If human sent last message and AI hasn't responded in this many minutes, trigger response
+const NEGATIVE_SENTIMENT_THRESHOLD = -0.05; // Threshold to consider a message "negative"
 
 // Define a threshold for immediate vs. delayed sending
 const IMMEDIATE_SEND_THRESHOLD_MS = 50 * 1000; // 50 seconds
@@ -99,7 +100,7 @@ function buildConversationHistory(messages: Message[], aiUserId: string, aiName:
 async function getConversationContext(supabaseClient: SupabaseClient, chatId: string) {
     const { data: context } = await supabaseClient
       .from('conversation_contexts')
-      .select('context_summary, detailed_chat')
+      .select('context_summary, detailed_chat, current_threshold, consecutive_negative_count')
       .eq('chat_id', chatId)
       .single();
     return context;
@@ -312,13 +313,37 @@ async function updateConversationContext(supabaseClient: SupabaseClient, chatId:
     const analysisPrompt = buildAnalysisPrompt(existingContext?.context_summary, existingContext?.detailed_chat, latestExchange, aiFirstName, humanFirstName);
     const analysisResponse = await callAiApi(analysisPrompt);
 
-    let newSummary = "Conversation is ongoing."; // Fallback
+    let newSummary = "Conversation is ongoing.";
+    let sentimentAdjustment = 0.0;
+
     if (analysisResponse.includes(ANALYSIS_DELIMITER)) {
-        newSummary = analysisResponse.split(ANALYSIS_DELIMITER)[0].trim();
+        const parts = analysisResponse.split(ANALYSIS_DELIMITER);
+        newSummary = parts[0].trim();
+        const parsedSentiment = parseFloat(parts[1].trim());
+        if (!isNaN(parsedSentiment)) {
+            sentimentAdjustment = parsedSentiment;
+        }
     } else {
         newSummary = analysisResponse.trim();
         console.warn("Analysis delimiter not found in initiate-dummy-chats, using full response as summary.");
     }
+
+    const consecutiveNegativeCount = existingContext?.consecutive_negative_count ?? 0;
+    let finalSentimentAdjustment = sentimentAdjustment;
+    let newConsecutiveNegativeCount = 0;
+
+    if (sentimentAdjustment < NEGATIVE_SENTIMENT_THRESHOLD) {
+      newConsecutiveNegativeCount = consecutiveNegativeCount + 1;
+      if (newConsecutiveNegativeCount > 1) {
+        const multiplier = 1 + (0.1 * (newConsecutiveNegativeCount - 1));
+        finalSentimentAdjustment *= Math.min(multiplier, 1.5);
+      }
+    } else {
+      newConsecutiveNegativeCount = 0;
+    }
+
+    const currentThreshold = existingContext?.current_threshold ?? 0.5;
+    const newCurrentThreshold = currentThreshold + finalSentimentAdjustment;
 
     await supabaseClient
       .from('conversation_contexts')
@@ -326,7 +351,9 @@ async function updateConversationContext(supabaseClient: SupabaseClient, chatId:
         chat_id: chatId,
         context_summary: newSummary,
         detailed_chat: updatedDetailedChat,
-        last_updated: new Date().toISOString()
+        last_updated: new Date().toISOString(),
+        current_threshold: newCurrentThreshold,
+        consecutive_negative_count: newConsecutiveNegativeCount,
       }, { onConflict: 'chat_id' });
 }
 
