@@ -243,6 +243,7 @@ serve(async (req) => {
           max_age: maxAge,
           is_active: true, // Mark as automated profile
           profession: profession, // Temporarily here for prompt generation
+          block_threshold: Math.random() * 0.4 + 0.1, // Initial threshold between 0.1 and 0.5
         };
 
         // Generate personality prompt using the full profileMetadata
