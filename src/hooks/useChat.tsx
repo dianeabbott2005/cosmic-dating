@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, createContext, useContext, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { RealtimeChannel } from '@supabase/supabase-js';
@@ -29,11 +29,33 @@ export interface Chat {
   last_message?: Message;
 }
 
+interface ChatContextType {
+  messages: Message[];
+  chat: Chat | null;
+  chats: Chat[];
+  chatsLoading: boolean;
+  messagesLoading: boolean;
+  initializeChat: (otherUserId: string) => Promise<void>;
+  sendMessage: (content: string) => Promise<void>;
+  loadUserChats: () => void;
+}
+
+const ChatContext = createContext<ChatContextType | undefined>(undefined);
+
 export const useChat = () => {
+  const context = useContext(ChatContext);
+  if (!context) {
+    throw new Error('useChat must be used within a ChatProvider');
+  }
+  return context;
+};
+
+export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [chat, setChat] = useState<Chat | null>(null);
   const [chats, setChats] = useState<Chat[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [chatsLoading, setChatsLoading] = useState(false);
+  const [messagesLoading, setMessagesLoading] = useState(false);
   const { user } = useAuth();
   const { blockedUserIds, usersWhoBlockedMeIds } = useBlock();
   const isWindowFocused = useWindowFocus();
@@ -51,7 +73,7 @@ export const useChat = () => {
       setChats([]);
       return;
     }
-    setLoading(true);
+    setChatsLoading(true);
     const fetchChats = async () => {
       try {
         const { data: userChats, error } = await supabase
@@ -91,7 +113,7 @@ export const useChat = () => {
       } catch (error) {
         console.error('Error loading user chats:', error);
       } finally {
-        setLoading(false);
+        setChatsLoading(false);
       }
     };
     fetchChats();
@@ -105,7 +127,7 @@ export const useChat = () => {
 
   const initializeChat = useCallback(async (otherUserId: string) => {
     if (!userId) return;
-    setLoading(true);
+    setMessagesLoading(true);
     otherUserIdRef.current = otherUserId;
     try {
       const { data: existingChat } = await supabase.from('chats').select('*').or(`and(user1_id.eq.${userId},user2_id.eq.${otherUserId}),and(user1_id.eq.${otherUserId},user2_id.eq.${userId})`).maybeSingle();
@@ -119,7 +141,7 @@ export const useChat = () => {
     } catch (error) {
       console.error('Error initializing chat:', error);
     } finally {
-      setLoading(false);
+      setMessagesLoading(false);
     }
   }, [userId, loadMessages]);
 
@@ -137,7 +159,9 @@ export const useChat = () => {
       }
       const { data, error } = await supabase.from('messages').insert({ chat_id: currentChat.id, sender_id: userId, content: content.trim() }).select().single();
       if (error) throw error;
-      if (data) setMessages(prev => [...prev, data]);
+      if (data) {
+        setMessages(prev => [...prev, data]);
+      }
     } catch (error) {
       console.error('Unexpected error in sendMessage:', error);
     }
@@ -152,7 +176,6 @@ export const useChat = () => {
   useEffect(() => {
     if (!chat?.id || !userId) {
       if (realtimeChannelRef.current) {
-        console.log(`useChat: Cleaning up channel for chat ${realtimeChannelRef.current.topic.split('-')[1]} due to missing chat/user ID.`);
         supabase.removeChannel(realtimeChannelRef.current);
         realtimeChannelRef.current = null;
       }
@@ -160,40 +183,29 @@ export const useChat = () => {
     }
 
     if (realtimeChannelRef.current && realtimeChannelRef.current.topic === `chat-${chat.id}`) {
-      // Already subscribed to the correct channel, do nothing.
       return;
     }
 
-    // If a channel for a different chat exists, remove it before creating a new one.
     if (realtimeChannelRef.current) {
-      console.log(`useChat: Switching channels. Removing old channel for ${realtimeChannelRef.current.topic}.`);
       supabase.removeChannel(realtimeChannelRef.current);
-      realtimeChannelRef.current = null;
     }
 
-    console.log(`useChat: Attempting to subscribe to channel: chat-${chat.id}`);
     const channel = supabase.channel(`chat-${chat.id}`);
     
     channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `chat_id=eq.${chat.id}` }, (payload) => {
-      console.log('useChat: Real-time message received!', payload);
+      console.log('useChat (Provider): Real-time message received!', payload);
       const newMessage = payload.new as Message;
-      if (newMessage.sender_id !== userId) {
-        setMessages(prevMessages => {
-          if (prevMessages.some(msg => msg.id === newMessage.id)) {
-            return prevMessages;
-          }
-          return [...prevMessages, newMessage];
-        });
-      }
+      setMessages(prevMessages => {
+        if (prevMessages.some(msg => msg.id === newMessage.id)) {
+          return prevMessages;
+        }
+        return [...prevMessages, newMessage];
+      });
     }).subscribe((status, err) => {
       if (status === 'SUBSCRIBED') {
-        console.log(`useChat: Successfully subscribed to real-time channel chat-${chat.id}`);
-      }
-      if (status === 'CHANNEL_ERROR') {
-        console.error(`useChat: Real-time channel error for chat-${chat.id}:`, err);
-      }
-      if (status === 'TIMED_OUT') {
-        console.warn(`useChat: Real-time subscription timed out for chat-${chat.id}`);
+        console.log(`useChat (Provider): Successfully subscribed to real-time channel chat-${chat.id}`);
+      } else {
+        console.error(`useChat (Provider): Subscription status: ${status}`, err);
       }
     });
 
@@ -201,14 +213,26 @@ export const useChat = () => {
 
     return () => {
       if (channel) {
-        console.log(`useChat: Unsubscribing from channel chat-${chat.id} on cleanup.`);
         supabase.removeChannel(channel);
-        if (realtimeChannelRef.current === channel) {
-          realtimeChannelRef.current = null;
-        }
+        realtimeChannelRef.current = null;
       }
     };
   }, [chat?.id, userId]);
 
-  return { chat, chats, messages, loading, initializeChat, sendMessage, loadUserChats };
+  const value = useMemo(() => ({
+    messages,
+    chat,
+    chats,
+    chatsLoading,
+    messagesLoading,
+    initializeChat,
+    sendMessage,
+    loadUserChats,
+  }), [messages, chat, chats, chatsLoading, messagesLoading, initializeChat, sendMessage, loadUserChats]);
+
+  return (
+    <ChatContext.Provider value={value}>
+      {children}
+    </ChatContext.Provider>
+  );
 };

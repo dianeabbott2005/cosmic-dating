@@ -16,7 +16,7 @@ interface EnhancedChatViewProps {
 const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
   const [message, setMessage] = useState('');
   const { user } = useAuth();
-  const { messages, loading, initializeChat, sendMessage } = useChat();
+  const { messages, messagesLoading, initializeChat, sendMessage } = useChat();
   const { fetchBlockLists, blockedUserIds, usersWhoBlockedMeIds } = useBlock();
   const [isBlockDialogOpen, setIsBlockDialogOpen] = useState(false);
   const { toast } = useToast();
@@ -63,7 +63,7 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
     return new Date(dateString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  if (loading) {
+  if (messagesLoading) {
     return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full"></div></div>;
   }
 

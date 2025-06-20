@@ -15,7 +15,7 @@ const Dashboard = ({ user }: DashboardProps) => {
   const [activeTab, setActiveTab] = useState<'matches' | 'chats'>('matches');
   const [selectedMatch, setSelectedMatch] = useState<any | null>(null);
   const { matches, loading: matchesLoading, refreshMatches } = useMatches();
-  const { chats, loading: chatsLoading, loadUserChats } = useChat();
+  const { chats, chatsLoading, loadUserChats } = useChat();
   const navigate = useNavigate();
 
   useEffect(() => {
