@@ -74,21 +74,21 @@ async function getConversationContext(supabaseClient: SupabaseClient, chatId: st
   return context;
 }
 
-function buildSummaryFromHistoryPrompt(detailedHistory: string): string {
-    return `You are a conversation analyst. The following is a detailed chat history. Your task is to create a concise, one-sentence summary of the current state of the conversation.
+function buildSummaryFromHistoryPrompt(detailedHistory: string, aiFirstName: string, humanFirstName: string): string {
+    return `You are a conversation analyst. The following is a detailed chat history between ${humanFirstName} and ${aiFirstName}. Your task is to create a concise, one-sentence summary of the current state of the conversation.
 
 **Chat History:**
 ${detailedHistory}
 
 **Your Task:**
-Provide ONLY the one-sentence summary. Do not add any other text or explanation.
+Provide ONLY the one-sentence summary. Do not add any other text or explanation. The summary MUST use the names "${humanFirstName}" and "${aiFirstName}" and MUST NOT use the words "AI", "bot", "user", or "automated".
 
 **Example Output:**
-The user is asking about the AI's hobbies after some initial pleasantries.`;
+${humanFirstName} is asking ${aiFirstName} about their hobbies after some initial pleasantries.`;
 }
 
-function buildAnalysisPrompt(existingSummary: string | null, detailedHistory: string | null, latestExchange: string) {
-  let prompt = `You are a conversation analyst. Your task is to update a conversation summary based on the latest exchange.
+function buildAnalysisPrompt(existingSummary: string | null, detailedHistory: string | null, latestExchange: string, aiFirstName: string, humanFirstName: string) {
+  let prompt = `You are a conversation analyst. Your task is to update a conversation summary between ${humanFirstName} and ${aiFirstName}.
 
 **Existing Summary:**
 ${existingSummary || "No summary yet."}
@@ -101,7 +101,7 @@ ${latestExchange}
 
 **Your Task & Output Format (CRITICAL):**
 Your final output MUST follow this structure exactly, with no extra text:
-1.  A **new, updated, one-sentence summary** of the entire conversation's state.
+1.  A **new, updated, one-sentence summary** of the entire conversation's state. This summary MUST use the names "${humanFirstName}" and "${aiFirstName}" and MUST NOT use the words "AI", "bot", "user", or "automated".
 2.  The analysis delimiter: "${ANALYSIS_DELIMITER}"
 3.  A sentiment adjustment value (a number between -0.2 and 0.2) based on the **latest exchange**.
 
@@ -112,7 +112,7 @@ Your final output MUST follow this structure exactly, with no extra text:
 - **Highly Negative (-0.2 to -0.1):** User is hostile, disrespectful, threatening, bullying.
 
 **Example Output:**
-The user is asking a thoughtful follow-up question, showing genuine interest.${ANALYSIS_DELIMITER}0.08`;
+${humanFirstName} is asking a thoughtful follow-up question to ${aiFirstName}, showing genuine interest.${ANALYSIS_DELIMITER}0.08`;
   return prompt;
 }
 
@@ -270,7 +270,7 @@ serve(async (req) => {
     if (!currentSummary && context?.detailed_chat) {
         console.log("Context summary is missing, generating from detailed chat history.");
         try {
-            const summaryPrompt = buildSummaryFromHistoryPrompt(context.detailed_chat);
+            const summaryPrompt = buildSummaryFromHistoryPrompt(context.detailed_chat, receiverProfile.first_name, senderProfile.first_name);
             currentSummary = await callAiApi(summaryPrompt, 50); // Generate a new summary
             console.log("Generated new summary:", currentSummary);
         } catch (summaryError) {
@@ -283,7 +283,7 @@ serve(async (req) => {
     const latestExchange = `${senderProfile.first_name}: "${message}"`;
     
     // --- First AI Call: Get Analysis ---
-    const analysisPrompt = buildAnalysisPrompt(currentSummary, context?.detailed_chat, latestExchange);
+    const analysisPrompt = buildAnalysisPrompt(currentSummary, context?.detailed_chat, latestExchange, receiverProfile.first_name, senderProfile.first_name);
     const analysisResponse = await callAiApi(analysisPrompt, 50);
 
     let updatedSummary = currentSummary || "Chat initiated.";

@@ -10,6 +10,7 @@ const corsHeaders = {
 };
 
 const MESSAGE_DELIMITER = "@@@MESSAGEBREAK@@@"; // Unique delimiter for splitting AI responses
+const ANALYSIS_DELIMITER = "@@@ANALYSISBREAK@@@";
 const MAX_TOKEN_LIMIT = 100; // Maximum tokens for the AI response
 const INITIATION_RATE = 0.03; // 3% chance for a dummy profile to initiate a chat with a human match
 const REENGAGEMENT_RATE = 0.1; // 10% chance for a dummy profile to re-engage in an existing chat if there's a gap
@@ -148,6 +149,35 @@ const NON_NATIVE_ENGLISH_REGIONS: { [key: string]: { languageIssue: string; dial
   'UAE': { languageIssue: 'formal yet friendly, occasional Arabic loanwords', dialect: 'common Arabic expressions (e.g., "mashallah", "khalas")' },
 };
 
+function buildAnalysisPrompt(existingSummary: string | null, detailedHistory: string | null, latestExchange: string, aiFirstName: string, humanFirstName: string) {
+  let prompt = `You are a conversation analyst. Your task is to update a conversation summary between ${humanFirstName} and ${aiFirstName}.
+
+**Existing Summary:**
+${existingSummary || "No summary yet."}
+
+**Full Conversation History (for reference):**
+${detailedHistory || "No history yet."}
+
+**Latest Exchange:**
+${latestExchange}
+
+**Your Task & Output Format (CRITICAL):**
+Your final output MUST follow this structure exactly, with no extra text:
+1.  A **new, updated, one-sentence summary** of the entire conversation's state. This summary MUST use the names "${humanFirstName}" and "${aiFirstName}" and MUST NOT use the words "AI", "bot", "user", or "automated".
+2.  The analysis delimiter: "${ANALYSIS_DELIMITER}"
+3.  A sentiment adjustment value (a number between -0.2 and 0.2) based on the **latest exchange**.
+
+**Sentiment Adjustment Rules:**
+- **Highly Positive (+0.1 to +0.2):** User is admiring, reassuring, good flirting, respectful.
+- **Neutral/Positive (-0.05 to +0.05):** Normal, friendly chat.
+- **Negative (-0.1 to -0.05):** User is boring, dismissive, or slightly rude.
+- **Highly Negative (-0.2 to -0.1):** User is hostile, disrespectful, threatening, bullying.
+
+**Example Output:**
+${humanFirstName} is asking a thoughtful follow-up question to ${aiFirstName}, showing genuine interest.${ANALYSIS_DELIMITER}0.08`;
+  return prompt;
+}
+
 /**
  * Constructs the full prompt for the AI API, handling both initial and re-engagement scenarios.
  */
@@ -272,21 +302,22 @@ async function scheduleDelayedMessage(supabaseClient: SupabaseClient, chatId: st
  */
 async function updateConversationContext(supabaseClient: SupabaseClient, chatId: string, aiFirstName: string, humanFirstName: string, lastHumanMessage: string | null, aiResponse: string, existingContext: any) {
     const latestExchange = lastHumanMessage 
-      ? `${humanFirstName}: "${lastHumanMessage}"\n${aiFirstName}: "${aiResponse}"`
-      : `${aiFirstName}: "${aiResponse}"`;
+      ? `${humanFirstName}: "${lastHumanMessage}"\n${aiFirstName}: "${aiResponse.replace(new RegExp(MESSAGE_DELIMITER, 'g'), '\n')}"`
+      : `${aiFirstName}: "${aiResponse.replace(new RegExp(MESSAGE_DELIMITER, 'g'), '\n')}"`;
 
     const updatedDetailedChat = existingContext?.detailed_chat
       ? `${existingContext.detailed_chat}\n${latestExchange}`
       : latestExchange;
 
-    // Since this function doesn't do analysis, we create a simple summary update.
-    let newSummary;
-    if (isInitialChat) {
-      newSummary = `Chat initiated by ${aiFirstName}.`;
-    } else if (lastHumanMessage) {
-      newSummary = `AI responded to ${humanFirstName}.`;
+    const analysisPrompt = buildAnalysisPrompt(existingContext?.context_summary, existingContext?.detailed_chat, latestExchange, aiFirstName, humanFirstName);
+    const analysisResponse = await callAiApi(analysisPrompt);
+
+    let newSummary = "Conversation is ongoing."; // Fallback
+    if (analysisResponse.includes(ANALYSIS_DELIMITER)) {
+        newSummary = analysisResponse.split(ANALYSIS_DELIMITER)[0].trim();
     } else {
-      newSummary = `AI re-engaged in conversation.`;
+        newSummary = analysisResponse.trim();
+        console.warn("Analysis delimiter not found in initiate-dummy-chats, using full response as summary.");
     }
 
     await supabaseClient
