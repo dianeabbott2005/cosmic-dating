@@ -80,23 +80,23 @@ export type Database = {
       }
       conversation_contexts: {
         Row: {
-          block_threshold: number
           chat_id: string
           context_summary: string | null
+          current_threshold: number
           detailed_chat: string | null
           last_updated: string
         }
         Insert: {
-          block_threshold?: number
           chat_id: string
           context_summary?: string | null
+          current_threshold?: number
           detailed_chat?: string | null
           last_updated?: string
         }
         Update: {
-          block_threshold?: number
           chat_id?: string
           context_summary?: string | null
+          current_threshold?: number
           detailed_chat?: string | null
           last_updated?: string
         }
@@ -241,6 +241,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          block_threshold: number
           created_at: string
           date_of_birth: string
           email: string
@@ -263,6 +264,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          block_threshold?: number
           created_at?: string
           date_of_birth: string
           email: string
@@ -285,6 +287,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          block_threshold?: number
           created_at?: string
           date_of_birth?: string
           email?: string

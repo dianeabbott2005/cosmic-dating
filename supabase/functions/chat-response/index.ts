@@ -67,7 +67,7 @@ async function getProfile(supabaseClient: SupabaseClient, userId: string) {
 async function getConversationContext(supabaseClient: SupabaseClient, chatId: string) {
   const { data: context } = await supabaseClient
     .from('conversation_contexts')
-    .select('context_summary, detailed_chat, block_threshold')
+    .select('context_summary, detailed_chat, current_threshold')
     .eq('chat_id', chatId)
     .single();
   return context;
@@ -183,7 +183,7 @@ async function scheduleMessage(supabaseClient: SupabaseClient, chatId: string, s
   });
 }
 
-async function updateContext(supabaseClient: SupabaseClient, chatId: string, newSummary: string, existingDetailedChat: string | null, latestExchange: string, newThreshold: number) {
+async function updateContext(supabaseClient: SupabaseClient, chatId: string, newSummary: string, existingDetailedChat: string | null, latestExchange: string, newCurrentThreshold: number) {
   const updatedDetailedChat = existingDetailedChat 
     ? `${existingDetailedChat}\n${latestExchange}` 
     : latestExchange;
@@ -194,7 +194,7 @@ async function updateContext(supabaseClient: SupabaseClient, chatId: string, new
       chat_id: chatId,
       context_summary: newSummary,
       detailed_chat: updatedDetailedChat,
-      block_threshold: newThreshold,
+      current_threshold: newCurrentThreshold,
       last_updated: new Date().toISOString(),
     }, { onConflict: 'chat_id' });
 }
@@ -242,13 +242,13 @@ serve(async (req) => {
     const chatResponse = await callAiApi(chatPrompt, MAX_TOKEN_LIMIT);
 
     // --- Update Database and Schedule Messages ---
-    const currentThreshold = context?.block_threshold ?? 0.2;
-    const newThreshold = Math.max(0.0, Math.min(1.0, currentThreshold - sentimentAdjustment));
+    const currentThreshold = context?.current_threshold ?? 0.2;
+    const newCurrentThreshold = Math.max(0.0, currentThreshold - sentimentAdjustment);
     
     const fullLatestExchange = `${latestExchange}\n${receiverProfile.first_name}: "${chatResponse.replace(new RegExp(MESSAGE_DELIMITER, 'g'), '\n')}"`;
-    await updateContext(supabaseClient, chatId, newSummary, context?.detailed_chat, fullLatestExchange, newThreshold);
+    await updateContext(supabaseClient, chatId, newSummary, context?.detailed_chat, fullLatestExchange, newCurrentThreshold);
 
-    if (newThreshold >= 1.0) {
+    if (newCurrentThreshold >= receiverProfile.block_threshold) {
       const blockMessage = "I don't think we're a good match. I'm ending this conversation.";
       await scheduleMessage(supabaseClient, chatId, receiverId, blockMessage, 1000);
       await supabaseClient.from('blocked_users').insert({ blocker_id: receiverId, blocked_id: senderId });
