@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext, useContext, useCallback } from 'react';
+import { useState, useEffect, createContext, useContext, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -60,17 +60,16 @@ export const BlockProvider = ({ children }: { children: React.ReactNode }) => {
     }
   }, [userId, fetchBlockLists]);
 
-  const blockUser = async (userIdToBlock: string) => {
+  const blockUser = useCallback(async (userIdToBlock: string) => {
     if (!userId) throw new Error('User must be logged in to block.');
     const { error } = await supabase
       .from('blocked_users')
       .insert({ blocker_id: userId, blocked_id: userIdToBlock });
     if (error) throw error;
-    // Refresh lists
     await fetchBlockLists();
-  };
+  }, [userId, fetchBlockLists]);
 
-  const unblockUser = async (userIdToUnblock: string) => {
+  const unblockUser = useCallback(async (userIdToUnblock: string) => {
     if (!userId) throw new Error('User must be logged in to unblock.');
     const { error } = await supabase
       .from('blocked_users')
@@ -78,15 +77,24 @@ export const BlockProvider = ({ children }: { children: React.ReactNode }) => {
       .eq('blocker_id', userId)
       .eq('blocked_id', userIdToUnblock);
     if (error) throw error;
-    // Refresh lists
     await fetchBlockLists();
-  };
+  }, [userId, fetchBlockLists]);
 
-  const isBlockedBy = (userId: string) => usersWhoBlockedMeIds.includes(userId);
-  const amIBlocking = (userId: string) => blockedUserIds.includes(userId);
+  const isBlockedBy = useCallback((userIdToCheck: string) => usersWhoBlockedMeIds.includes(userIdToCheck), [usersWhoBlockedMeIds]);
+  const amIBlocking = useCallback((userIdToCheck: string) => blockedUserIds.includes(userIdToCheck), [blockedUserIds]);
+
+  const value = useMemo(() => ({
+    blockedUserIds,
+    usersWhoBlockedMeIds,
+    blockUser,
+    unblockUser,
+    isBlockedBy,
+    amIBlocking,
+    fetchBlockLists
+  }), [blockedUserIds, usersWhoBlockedMeIds, blockUser, unblockUser, isBlockedBy, amIBlocking, fetchBlockLists]);
 
   return (
-    <BlockContext.Provider value={{ blockedUserIds, usersWhoBlockedMeIds, blockUser, unblockUser, isBlockedBy, amIBlocking, fetchBlockLists }}>
+    <BlockContext.Provider value={value}>
       {children}
     </BlockContext.Provider>
   );

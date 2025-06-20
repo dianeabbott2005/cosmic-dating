@@ -109,20 +109,18 @@ export const useMatches = () => {
     if (!userId) return;
 
     const handleBlockUpdate = () => {
-      fetchBlockLists().then(() => {
-        refreshMatches();
-      });
+      fetchBlockLists();
     };
 
-    const profileChannel = supabase.channel('profile-updates-for-matches')
+    const profileChannel = supabase.channel(`profile-updates-for-matches-${userId}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `user_id=eq.${userId}` }, refreshMatches)
       .subscribe();
 
-    const matchesChannel = supabase.channel('matches-listener')
+    const matchesChannel = supabase.channel(`matches-listener-${userId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'matches', filter: `or(user_id.eq.${userId},matched_user_id.eq.${userId})` }, refreshMatches)
       .subscribe();
       
-    const blocksChannel = supabase.channel('block-updates-listener')
+    const blocksChannel = supabase.channel(`block-updates-listener-${userId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'blocked_users', filter: `or(blocker_id.eq.${userId},blocked_id.eq.${userId})` }, handleBlockUpdate)
       .subscribe();
 
