@@ -132,15 +132,21 @@ export const useChat = () => {
   };
 
   useEffect(() => {
-    if (user) loadUserChats();
-  }, [user, loadUserChats]);
+    if (user) {
+      loadUserChats();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   useEffect(() => {
     if (isWindowFocused && user) {
       loadUserChats();
-      if (chat?.id) loadMessages(chat.id);
+      if (chat?.id) {
+        loadMessages(chat.id);
+      }
     }
-  }, [isWindowFocused, user, chat?.id, loadUserChats]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isWindowFocused, user, chat?.id]);
 
   useEffect(() => {
     if (!chat?.id || !user?.id) {

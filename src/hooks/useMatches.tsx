@@ -121,7 +121,8 @@ export const useMatches = () => {
     if (user) {
       triggerMatchGeneration();
     }
-  }, [user, triggerMatchGeneration]); // Keep triggerMatchGeneration here for initial load
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   useEffect(() => {
     if (isWindowFocused && user) {
