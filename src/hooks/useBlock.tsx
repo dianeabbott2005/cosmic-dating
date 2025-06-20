@@ -7,8 +7,6 @@ interface BlockContextType {
   usersWhoBlockedMeIds: string[];
   blockUser: (userIdToBlock: string) => Promise<void>;
   unblockUser: (userIdToUnblock: string) => Promise<void>;
-  isBlockedBy: (userId: string) => boolean;
-  amIBlocking: (userId: string) => boolean;
   fetchBlockLists: () => Promise<void>;
 }
 
@@ -64,7 +62,6 @@ export const BlockProvider = ({ children }: { children: React.ReactNode }) => {
     fetchBlockLists();
 
     const handleInsert = (payload: any) => {
-      console.log('Real-time [INSERT] event received:', payload);
       const newRecord = payload.new;
       if (newRecord.blocker_id === userId) {
         setBlockedUserIds(prev => prev.includes(newRecord.blocked_id) ? prev : [...prev, newRecord.blocked_id]);
@@ -74,9 +71,7 @@ export const BlockProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     const handleDelete = (payload: any) => {
-      console.log('Real-time [DELETE] event received:', payload);
       const oldRecord = payload.old;
-      // The 'old' record might not contain all columns, but it will contain the primary key.
       if (oldRecord.blocker_id === userId) {
         setBlockedUserIds(prev => prev.filter(id => id !== oldRecord.blocked_id));
       } else if (oldRecord.blocked_id === userId) {
@@ -123,18 +118,13 @@ export const BlockProvider = ({ children }: { children: React.ReactNode }) => {
     if (error) throw error;
   }, [userId]);
 
-  const isBlockedBy = useCallback((userIdToCheck: string) => usersWhoBlockedMeIds.includes(userIdToCheck), [usersWhoBlockedMeIds]);
-  const amIBlocking = useCallback((userIdToCheck: string) => blockedUserIds.includes(userIdToCheck), [blockedUserIds]);
-
   const value = useMemo(() => ({
     blockedUserIds,
     usersWhoBlockedMeIds,
     blockUser,
     unblockUser,
-    isBlockedBy,
-    amIBlocking,
     fetchBlockLists,
-  }), [blockedUserIds, usersWhoBlockedMeIds, blockUser, unblockUser, isBlockedBy, amIBlocking, fetchBlockLists]);
+  }), [blockedUserIds, usersWhoBlockedMeIds, blockUser, unblockUser, fetchBlockLists]);
 
   return (
     <BlockContext.Provider value={value}>

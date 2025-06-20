@@ -17,21 +17,13 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
   const [message, setMessage] = useState('');
   const { user } = useAuth();
   const { messages, loading, initializeChat, sendMessage } = useChat();
-  const { isBlockedBy, amIBlocking, fetchBlockLists, blockedUserIds, usersWhoBlockedMeIds } = useBlock();
+  const { fetchBlockLists, blockedUserIds, usersWhoBlockedMeIds } = useBlock();
   const [isBlockDialogOpen, setIsBlockDialogOpen] = useState(false);
   const { toast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const hasBeenBlocked = isBlockedBy(match.user_id);
-  const haveIBlocked = amIBlocking(match.user_id);
-
-  useEffect(() => {
-    console.log(`EnhancedChatView.useEffect[blockStatus] for match ${match.first_name} (${match.user_id}):`);
-    console.log(`- Raw usersWhoBlockedMeIds from hook:`, usersWhoBlockedMeIds);
-    console.log(`- Raw blockedUserIds from hook:`, blockedUserIds);
-    console.log(`- Checking if ${match.user_id} is in usersWhoBlockedMeIds: ${hasBeenBlocked}`);
-    console.log(`- Checking if ${match.user_id} is in blockedUserIds: ${haveIBlocked}`);
-  }, [hasBeenBlocked, haveIBlocked, match.first_name, match.user_id, blockedUserIds, usersWhoBlockedMeIds]);
+  const hasBeenBlocked = usersWhoBlockedMeIds.includes(match.user_id);
+  const haveIBlocked = blockedUserIds.includes(match.user_id);
 
   const sunSign = match.date_of_birth ? getSunSign(match.date_of_birth) : null;
 
@@ -42,7 +34,6 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
 
   useEffect(() => {
     if (match?.user_id) {
-      console.log("EnhancedChatView: Chat partner changed or view opened. Forcing block list refresh.");
       fetchBlockLists();
       initializeChat(match.user_id);
     }
@@ -50,11 +41,11 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, hasBeenBlocked, haveIBlocked]);
+  }, [messages, blockedUserIds, usersWhoBlockedMeIds]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (message.trim() && !isBlockedBy(match.user_id) && !amIBlocking(match.user_id)) {
+    if (message.trim() && !hasBeenBlocked && !haveIBlocked) {
       await sendMessage(message);
       setMessage('');
     } else {
