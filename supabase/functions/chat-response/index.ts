@@ -154,6 +154,37 @@ Now, respond as ${aiProfile.first_name}:`;
     return promptInstructions;
 }
 
+function buildBlockPrompt(aiProfile: any, humanProfile: any, conversationHistory: string, userMessage: string): string {
+    const aiAge = calculateAge(aiProfile.date_of_birth);
+    let prompt = `You are ${aiProfile.first_name}, a ${aiAge}-year-old ${aiProfile.gender}. You are in a conversation with ${humanProfile.first_name}.
+    
+    **Conversation History:**
+    ${conversationHistory}
+    
+    **User's Last Message:**
+    "${userMessage}"
+
+    **Your Decision:**
+    You have decided to block this user because the conversation has become unacceptable based on your standards. Your personality is defined as: "${aiProfile.personality_prompt}".
+
+    **Your Task (CRITICAL):**
+    Based on your personality and the final message from the user, you must decide on a final action. You have two choices:
+    1.  **Send a final message:** Generate a short, final, context-appropriate message to send before blocking. This could be dismissive, direct, or cold, depending on your persona and the user's message.
+    2.  **Ghost them:** If the user's message was extremely offensive or warrants no reply, you should ghost them.
+
+    **Output Format (Follow EXACTLY):**
+    - If you choose to send a message, provide ONLY the message text.
+    - If you choose to ghost, respond with the single, exact word: GHOST
+
+    **RULES:**
+    - DO NOT add any explanation.
+    - DO NOT use markdown or emojis.
+    - Your response must be either the final message OR the word "GHOST".
+
+    Now, provide your final action.`;
+    return prompt;
+}
+
 async function callAiApi(prompt: string, maxTokens: number) {
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${Deno.env.get('GEMINI_API_KEY')}`,
@@ -220,6 +251,7 @@ serve(async (req) => {
     ]);
 
     const latestExchange = `${senderProfile.first_name}: "${message}"`;
+    const conversationHistory = context?.detailed_chat ? `${context.detailed_chat}\n${latestExchange}` : latestExchange;
 
     // --- First AI Call: Get Analysis ---
     const analysisPrompt = buildAnalysisPrompt(context?.context_summary, context?.detailed_chat, latestExchange);
@@ -236,23 +268,29 @@ serve(async (req) => {
       console.warn("Failed to parse analysis response, using defaults.", { analysisResponse });
     }
 
-    // --- Second AI Call: Get Chat Response ---
-    const conversationHistory = context?.detailed_chat ? `${context.detailed_chat}\n${latestExchange}` : latestExchange;
-    const chatPrompt = buildChatPrompt(receiverProfile, senderProfile, conversationHistory, message, newSummary, sentimentAdjustment);
-    const chatResponse = await callAiApi(chatPrompt, MAX_TOKEN_LIMIT);
+    // --- Calculate new threshold and check block condition ---
+    const currentThreshold = context?.current_threshold ?? 0.5;
+    const newCurrentThreshold = currentThreshold + sentimentAdjustment;
 
-    // --- Update Database and Schedule Messages ---
-    const currentThreshold = context?.current_threshold ?? 0.2;
-    const newCurrentThreshold = Math.max(0.0, currentThreshold - sentimentAdjustment);
-    
-    const fullLatestExchange = `${latestExchange}\n${receiverProfile.first_name}: "${chatResponse.replace(new RegExp(MESSAGE_DELIMITER, 'g'), '\n')}"`;
-    await updateContext(supabaseClient, chatId, newSummary, context?.detailed_chat, fullLatestExchange, newCurrentThreshold);
+    if (newCurrentThreshold <= receiverProfile.block_threshold) {
+      // --- BLOCKING LOGIC ---
+      const blockPrompt = buildBlockPrompt(receiverProfile, senderProfile, conversationHistory, message);
+      const blockActionResponse = await callAiApi(blockPrompt, 50);
 
-    if (newCurrentThreshold >= receiverProfile.block_threshold) {
-      const blockMessage = "I don't think we're a good match. I'm ending this conversation.";
-      await scheduleMessage(supabaseClient, chatId, receiverId, blockMessage, 1000);
+      if (blockActionResponse.trim().toUpperCase() !== 'GHOST') {
+        await scheduleMessage(supabaseClient, chatId, receiverId, blockActionResponse, 1000);
+      }
+
       await supabaseClient.from('blocked_users').insert({ blocker_id: receiverId, blocked_id: senderId });
+      
     } else {
+      // --- NORMAL RESPONSE LOGIC ---
+      const chatPrompt = buildChatPrompt(receiverProfile, senderProfile, conversationHistory, message, newSummary, newCurrentThreshold);
+      const chatResponse = await callAiApi(chatPrompt, MAX_TOKEN_LIMIT);
+      
+      const fullLatestExchange = `${latestExchange}\n${receiverProfile.first_name}: "${chatResponse.replace(new RegExp(MESSAGE_DELIMITER, 'g'), '\n')}"`;
+      await updateContext(supabaseClient, chatId, newSummary, context?.detailed_chat, fullLatestExchange, newCurrentThreshold);
+
       const messagesToSend = chatResponse.split(MESSAGE_DELIMITER).filter(m => m.trim());
       if (messagesToSend.length > 0) {
         let cumulativeDelay = calculateResponseDelay();
