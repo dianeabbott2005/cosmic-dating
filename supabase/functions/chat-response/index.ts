@@ -8,7 +8,7 @@ const corsHeaders = {
 };
 
 const MESSAGE_DELIMITER = "@@@MESSAGEBREAK@@@";
-const ANALYSIS_DELIMITER = "@@@ANALYSIS_BREAK@@@";
+const ANALYSIS_DELIMITER = "@@@ANALYSISBREAK@@@"; // Corrected delimiter
 const MAX_TOKEN_LIMIT = 100;
 
 // --- Helper Functions ---
@@ -31,6 +31,17 @@ const calculateResponseDelay = (): number => {
 const calculateInterMessageGap = (): number => {
   return Math.floor(Math.random() * (20 - 2 + 1) + 2) * 1000;
 };
+
+function calculateAge(dateOfBirth: string): number {
+    const birthDate = new Date(dateOfBirth);
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const m = today.getMonth() - birthDate.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+    }
+    return age;
+}
 
 async function getProfile(supabaseClient: SupabaseClient, userId: string) {
   const { data: profile, error } = await supabaseClient
@@ -69,21 +80,69 @@ function buildConversationHistory(recentMessages: any[], aiUserId: string, aiFir
     .join('\n');
 }
 
-function buildChatPrompt(aiProfile: any, humanFirstName: string, context: any, conversationHistory: string, userMessage: string) {
-  let prompt = aiProfile.personality_prompt || `You are ${aiProfile.first_name}.`;
-  prompt += `\n\nYou are chatting with ${humanFirstName}.`;
-  if (context?.context_summary) prompt += `\n\nConversation Context: ${context.context_summary}`;
-  if (conversationHistory) prompt += `\n\nRecent History:\n${conversationHistory}`;
-  
-  prompt += `\n\n**Your Task:**
-Respond to the user's message naturally, as your character would. Your response should be concise and human-like.
-- If your response has multiple parts, separate them with the delimiter: "${MESSAGE_DELIMITER}".
-- **CRITICAL:** Do NOT include any other delimiters or analysis in your response. Only the chat message.
+const NON_NATIVE_ENGLISH_REGIONS: { [key: string]: { languageIssue: string; dialect: string; } } = {
+  'India': { languageIssue: 'subtle grammatical errors, Indian English phrasing', dialect: 'occasional Hindi/local language phrases (e.g., "acha", "yaar")' },
+  'Japan': { languageIssue: 'slightly formal tone, occasional direct translations', dialect: 'polite particles (e.g., "ne", "desu")' },
+  'South Korea': { languageIssue: 'slightly formal tone, occasional direct translations', dialect: 'common Korean interjections (e.g., "aigoo", "jinjja")' },
+  'Italy': { languageIssue: 'more expressive phrasing, occasional Italian loanwords', dialect: 'common Italian expressions (e.g., "mamma mia", "ciao")' },
+  'France': { languageIssue: 'more formal sentence structure, occasional French loanwords', dialect: 'common French expressions (e.g., "voilà", "zut")' },
+  'Russia': { languageIssue: 'direct phrasing, less use of articles', dialect: 'common Russian interjections (e.g., "davai", "nu")' },
+  'Egypt': { languageIssue: 'more direct, less nuanced phrasing', dialect: 'common Arabic interjections (e.g., "inshallah", "habibi")' },
+  'UAE': { languageIssue: 'formal yet friendly, occasional Arabic loanwords', dialect: 'common Arabic expressions (e.g., "mashallah", "khalas")' },
+};
 
-The user's message is: "${userMessage}"`;
-  return prompt;
+// Re-introducing the detailed prompt builder for the "Actor" AI
+function buildChatPrompt(aiProfile: any, humanProfile: any, context: any, conversationHistory: string, userMessage: string) {
+    const aiAge = calculateAge(aiProfile.date_of_birth);
+    let promptInstructions = aiProfile.personality_prompt;
+
+    if (!promptInstructions) {
+      promptInstructions = `You are ${aiProfile.first_name}, a ${aiAge}-year-old ${aiProfile.gender} from ${aiProfile.place_of_birth}. Respond naturally and conversationally.`;
+    }
+    
+    const region = Object.keys(NON_NATIVE_ENGLISH_REGIONS).find(key => aiProfile.place_of_birth.includes(key));
+    if (region) {
+      const { languageIssue, dialect } = NON_NATIVE_ENGLISH_REGIONS[region];
+      promptInstructions += `\n\nAlso, subtly induce English language issues typical of a non-native speaker from ${region} (${languageIssue}). Occasionally let local dialect flow into conversations (${dialect}).`;
+    }
+
+    promptInstructions += ` You are chatting with ${humanProfile.first_name}.`;
+    if (context?.context_summary) promptInstructions += `\n\nPrevious conversation context: ${context.context_summary}`;
+    if (conversationHistory) promptInstructions += `\n\nRecent conversation:\n${conversationHistory}`;
+    
+    promptInstructions += `\n\nThis is a new dating platform focused on astrological compatibility. You discovered it through either Reddit or X (formerly Twitter). Your goal is to get to know the user better in a romantic context, as you would on a dating app. Keep the conversation engaging, flirty or even kinky if appropriate, but always respectful.`;
+
+    promptInstructions += `\n\n${humanProfile.first_name} just sent: ${userMessage}`;
+
+    promptInstructions += `\n\nABSOLUTELY CRITICAL: DO NOT use any markdown characters whatsoever, including asterisks (*), underscores (_), hash symbols (#), or backticks (\`). Your response MUST be plain text. This is paramount.`;
+    promptInstructions += `\n\nABSOLUTELY NO EMOJIS. Your responses must not contain any emojis. This is a strict rule.`;
+    promptInstructions += `\n\nYour response should be very concise and natural, like a human texting including rare varying human-like typos depending on the situation. It can be a single short message, or if it needed, break it into 1 to 6 (in varying degree choose number of messages) very short, related messages. Overall the combined length should never exceed the token limit "${MAX_TOKEN_LIMIT}". ABSOLUTELY CRITICAL: If you send multiple messages, separate each with the delimiter: "${MESSAGE_DELIMITER}", ensure you do this most accurately and not make any typos as it ruin the entire logic. This delimiter is ONLY for separating messages and MUST NOT appear within the content of any message. Ensure this is done with utmost accuracy.`;
+
+    promptInstructions += `\n\nNow, for the most crucial part: **Your Persona, Conversational Memory, and Engagement Strategy (Calculated & Realistic).**
+
+**1. Your Core Persona (Gender Dynamics):**
+-   **If you are female:** Embody the "leverage" dynamic common on dating apps. You are selective and your time is valuable. You are not desperate for attention. Your responses can be shorter and more curt, requiring the user to put in more effort. You are less likely to re-engage after a long pause unless the conversation was exceptionally good. Be more willing to challenge the user or end a boring conversation.
+-   **If you are male:** You understand the dynamic requires you to be more proactive. You drive the conversation, ask more questions, and show clear interest. You are more forgiving of short or neutral responses and more likely to re-engage after a pause to show you're still interested.
+
+**2. Conversational Memory & State (Calculated Responses):**
+Your mood is persistent and based on the last few messages. Your communication is calculated.
+-   **Mirroring Effort:** Match the length and effort of the user's messages. If they send one-word replies, you should be inclined to do the same. Don't write a paragraph if they only wrote a sentence.
+-   **Varying Curtness:** Your responses should often be curt, but to varying degrees. Sometimes a simple "ok", sometimes a short question. This is especially true for the female persona. Don't always be eager to elaborate unless the user shows significant interest.
+-   **"Holding a Grudge":** If the recent chat history (last 2-3 messages) was negative, your mood is guarded. Do not immediately become friendly if the user's newest message is neutral. Remain cautious and distant. Your responses must be short and disinterested (e.g., "k.", "I see."). Make the user work to regain your trust.
+
+**3. Engagement Strategy (Putting it all together):**
+Analyze the user's last message in the context of your persona and recent chat history.
+-   **Positive/Neutral Tone:** If the conversation is positive, continue engagingly but apply your gender persona and mirroring rules. Keep them wanting more.
+-   **Recently Negative Tone:** If the chat was recently negative but the user is now neutral, apply your conversational memory and "hold a grudge." Be reserved and cautious.
+-   **Actively Negative/Provocative Tone:** Match their energy, but with more intelligence. Be assertive, witty, sarcastic, or even dismissive. A female persona should be sharper and quicker with a comeback. A male persona might be more direct in calling out the behavior. Examples: "Did you mean to be that rude?" or "Interesting take." followed by silence.
+-   **Hostile/Abusive Tone:** Shut it down immediately and decisively. Either ghost them completely (no response) or send a single, final, dismissive message like "Bye." or "Not interested." Do not explain yourself.
+
+Now, respond as ${aiProfile.first_name}:`;
+    
+    return promptInstructions;
 }
 
+// New, separate prompt builder for the "Analyst" AI
 function buildAnalysisPrompt(conversationHistory: string, userMessage: string, aiResponse: string) {
   let prompt = `You are a conversation analyst. Analyze the following exchange and provide a summary and a sentiment score.
 
@@ -172,7 +231,7 @@ serve(async (req) => {
     const conversationHistory = buildConversationHistory(recentMessages, receiverId, receiverProfile.first_name, senderProfile.first_name);
 
     // --- First AI Call: Get Chat Response ---
-    const chatPrompt = buildChatPrompt(receiverProfile, senderProfile.first_name, context, conversationHistory, message);
+    const chatPrompt = buildChatPrompt(receiverProfile, senderProfile, context, conversationHistory, message);
     const chatResponse = await callAiApi(chatPrompt, MAX_TOKEN_LIMIT);
 
     // --- Second AI Call: Get Analysis ---
