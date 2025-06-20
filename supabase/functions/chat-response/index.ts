@@ -74,6 +74,19 @@ async function getConversationContext(supabaseClient: SupabaseClient, chatId: st
   return context;
 }
 
+function buildSummaryFromHistoryPrompt(detailedHistory: string): string {
+    return `You are a conversation analyst. The following is a detailed chat history. Your task is to create a concise, one-sentence summary of the current state of the conversation.
+
+**Chat History:**
+${detailedHistory}
+
+**Your Task:**
+Provide ONLY the one-sentence summary. Do not add any other text or explanation.
+
+**Example Output:**
+The user is asking about the AI's hobbies after some initial pleasantries.`;
+}
+
 function buildAnalysisPrompt(existingSummary: string | null, detailedHistory: string | null, latestExchange: string) {
   let prompt = `You are a conversation analyst. Your task is to update a conversation summary based on the latest exchange.
 
@@ -252,19 +265,33 @@ serve(async (req) => {
       getConversationContext(supabaseClient, chatId),
     ]);
 
+    // --- NEW LOGIC: Generate summary if missing ---
+    let currentSummary = context?.context_summary;
+    if (!currentSummary && context?.detailed_chat) {
+        console.log("Context summary is missing, generating from detailed chat history.");
+        try {
+            const summaryPrompt = buildSummaryFromHistoryPrompt(context.detailed_chat);
+            currentSummary = await callAiApi(summaryPrompt, 50); // Generate a new summary
+            console.log("Generated new summary:", currentSummary);
+        } catch (summaryError) {
+            console.error("Failed to generate summary from history:", summaryError);
+            currentSummary = "Summary could not be generated."; // Fallback
+        }
+    }
+    // --- END NEW LOGIC ---
+
     const latestExchange = `${senderProfile.first_name}: "${message}"`;
     
     // --- First AI Call: Get Analysis ---
-    const analysisPrompt = buildAnalysisPrompt(context?.context_summary, context?.detailed_chat, latestExchange);
+    const analysisPrompt = buildAnalysisPrompt(currentSummary, context?.detailed_chat, latestExchange);
     const analysisResponse = await callAiApi(analysisPrompt, 50);
 
-    // FIX: Initialize newSummary with the existing context summary to prevent data loss.
-    let newSummary = context?.context_summary || "Chat initiated.";
+    let updatedSummary = currentSummary || "Chat initiated.";
     let sentimentAdjustment = 0.0;
 
     if (analysisResponse.includes(ANALYSIS_DELIMITER)) {
       const parts = analysisResponse.split(ANALYSIS_DELIMITER);
-      newSummary = parts[0].trim(); // Only update if parsing is successful
+      updatedSummary = parts[0].trim();
       const parsedSentiment = parseFloat(parts[1].trim());
       if (!isNaN(parsedSentiment)) {
         sentimentAdjustment = parsedSentiment;
@@ -305,17 +332,17 @@ serve(async (req) => {
         finalExchangeForContext += `\n${receiverProfile.first_name}: "${blockActionResponse}"`;
       }
 
-      await updateContext(supabaseClient, chatId, newSummary, context?.detailed_chat, finalExchangeForContext, newCurrentThreshold, newConsecutiveNegativeCount);
+      await updateContext(supabaseClient, chatId, updatedSummary, context?.detailed_chat, finalExchangeForContext, newCurrentThreshold, newConsecutiveNegativeCount);
       await supabaseClient.from('blocked_users').insert({ blocker_id: receiverId, blocked_id: senderId });
       
     } else {
       // --- NORMAL RESPONSE LOGIC ---
       const conversationHistory = context?.detailed_chat ? `${context.detailed_chat}\n${latestExchange}` : latestExchange;
-      const chatPrompt = buildChatPrompt(receiverProfile, senderProfile, conversationHistory, message, newSummary, newCurrentThreshold);
+      const chatPrompt = buildChatPrompt(receiverProfile, senderProfile, conversationHistory, message, updatedSummary, newCurrentThreshold);
       const chatResponse = await callAiApi(chatPrompt, MAX_TOKEN_LIMIT);
       
       const fullLatestExchange = `${latestExchange}\n${receiverProfile.first_name}: "${chatResponse.replace(new RegExp(MESSAGE_DELIMITER, 'g'), '\n')}"`;
-      await updateContext(supabaseClient, chatId, newSummary, context?.detailed_chat, fullLatestExchange, newCurrentThreshold, newConsecutiveNegativeCount);
+      await updateContext(supabaseClient, chatId, updatedSummary, context?.detailed_chat, fullLatestExchange, newCurrentThreshold, newConsecutiveNegativeCount);
 
       const messagesToSend = chatResponse.split(MESSAGE_DELIMITER).filter(m => m.trim());
       if (messagesToSend.length > 0) {
