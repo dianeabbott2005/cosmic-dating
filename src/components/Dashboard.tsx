@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Heart, User, MessageSquare, RefreshCw, Settings } from 'lucide-react';
+import { Heart, MessageSquare, RefreshCw, Settings } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import EnhancedMatchCard from '@/components/EnhancedMatchCard';
 import EnhancedChatView from '@/components/EnhancedChatView';
 import { useMatches } from '@/hooks/useMatches';
 import { useChat } from '@/hooks/useChat';
 import type { Database } from '@/integrations/supabase/types';
-import { calculateAge } from '@/utils/dateCalculations'; // Import calculateAge
 
 interface DashboardProps {
   user: Database['public']['Tables']['profiles']['Row'];
@@ -15,18 +14,15 @@ interface DashboardProps {
 const Dashboard = ({ user }: DashboardProps) => {
   const [activeTab, setActiveTab] = useState<'matches' | 'chats'>('matches');
   const [selectedMatch, setSelectedMatch] = useState<any | null>(null);
-  const { matches, loading, refreshMatches } = useMatches();
-  const { chats, loadUserChats } = useChat(); // useChat now handles its own initial loading
+  const { matches, loading: matchesLoading, refreshMatches } = useMatches();
+  const { chats, loading: chatsLoading, loadUserChats } = useChat();
   const navigate = useNavigate();
 
-  // No longer need specific useEffects here for initial chat loading,
-  // as useChat handles it when the user object becomes available.
-  // The loadUserChats call on tab switch is still useful for refreshing.
   useEffect(() => {
-    if (activeTab === 'chats' && user) {
+    if (activeTab === 'chats') {
       loadUserChats();
     }
-  }, [activeTab, user]);
+  }, [activeTab, loadUserChats]);
 
   const handleMatchClick = (match: any) => {
     setSelectedMatch(match);
@@ -34,14 +30,12 @@ const Dashboard = ({ user }: DashboardProps) => {
   };
 
   const handleChatClick = (chat: any) => {
-    // Convert chat to match-like object for EnhancedChatView
-    // Now, chat.other_user should have date_of_birth and age
     const matchFromChat = {
       user_id: chat.other_user?.user_id,
       first_name: chat.other_user?.first_name,
-      age: chat.other_user?.age, // Use the actual age from chat.other_user
+      age: chat.other_user?.age,
       place_of_birth: chat.other_user?.place_of_birth,
-      date_of_birth: chat.other_user?.date_of_birth, // Pass date_of_birth for sun sign calculation
+      date_of_birth: chat.other_user?.date_of_birth,
     };
     setSelectedMatch(matchFromChat);
   };
@@ -49,7 +43,7 @@ const Dashboard = ({ user }: DashboardProps) => {
   if (selectedMatch && activeTab === 'chats') {
     return (
       <EnhancedChatView 
-        key={selectedMatch.user_id} // Add key to force remount when selectedMatch changes
+        key={selectedMatch.user_id}
         match={selectedMatch} 
         onBack={() => {
           setSelectedMatch(null);
@@ -62,7 +56,6 @@ const Dashboard = ({ user }: DashboardProps) => {
   return (
     <div className="min-h-screen p-4">
       <div className="max-w-6xl mx-auto">
-        {/* Header */}
         <div className="flex items-center justify-between mb-8 pt-8">
           <div className="text-center flex-1">
             <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent mb-2">
@@ -81,7 +74,6 @@ const Dashboard = ({ user }: DashboardProps) => {
           </button>
         </div>
 
-        {/* Navigation */}
         <div className="flex justify-center mb-8">
           <div className="bg-slate-800/50 rounded-2xl p-1 flex">
             <button
@@ -109,22 +101,21 @@ const Dashboard = ({ user }: DashboardProps) => {
           </div>
         </div>
 
-        {/* Content */}
         {activeTab === 'matches' && (
           <div>
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-semibold text-white">Your Cosmic Matches</h2>
               <button
                 onClick={refreshMatches}
-                disabled={loading}
+                disabled={matchesLoading}
                 className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-xl hover:bg-purple-700 transition-all disabled:opacity-50"
               >
-                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`w-4 h-4 ${matchesLoading ? 'animate-spin' : ''}`} />
                 Refresh
               </button>
             </div>
 
-            {loading ? (
+            {matchesLoading ? (
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {[...Array(6)].map((_, i) => (
                   <div key={i} className="card-cosmic animate-pulse">
@@ -142,10 +133,7 @@ const Dashboard = ({ user }: DashboardProps) => {
                 {matches.map((match) => (
                   <EnhancedMatchCard 
                     key={match.user_id} 
-                    match={{
-                      ...match,
-                      age: match.age // Use the calculated age from useMatches
-                    }} 
+                    match={match} 
                     onStartChat={() => handleMatchClick(match)}
                   />
                 ))}
@@ -155,7 +143,7 @@ const Dashboard = ({ user }: DashboardProps) => {
                 <Heart className="w-16 h-16 text-gray-600 mx-auto mb-4" />
                 <h3 className="text-xl text-gray-400 mb-2">No Cosmic Matches Yet</h3>
                 <p className="text-gray-500 mb-4">
-                  The universe is working its magic to find connections based on your unique astral signature. Check back soon!
+                  The universe is working its magic. Check back soon!
                 </p>
                 <button
                   onClick={refreshMatches}
@@ -174,14 +162,17 @@ const Dashboard = ({ user }: DashboardProps) => {
               <h2 className="text-xl font-semibold text-white">Your Conversations</h2>
               <button
                 onClick={loadUserChats}
-                className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-xl hover:bg-purple-700 transition-all"
+                disabled={chatsLoading}
+                className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-xl hover:bg-purple-700 transition-all disabled:opacity-50"
               >
-                <RefreshCw className="w-4 h-4" />
+                <RefreshCw className={`w-4 h-4 ${chatsLoading ? 'animate-spin' : ''}`} />
                 Refresh
               </button>
             </div>
 
-            {chats.length > 0 ? (
+            {chatsLoading ? (
+               <div className="text-center py-16"><div className="animate-spin w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full mx-auto"></div></div>
+            ) : chats.length > 0 ? (
               <div className="space-y-4">
                 {chats.map((chat) => (
                   <div
@@ -196,7 +187,7 @@ const Dashboard = ({ user }: DashboardProps) => {
                         </span>
                       </div>
                       
-                      <div className="flex-1 min-w-0"> {/* Added min-w-0 to ensure truncation works */}
+                      <div className="flex-1 min-w-0">
                         <h3 className="text-lg font-semibold text-white">
                           {chat.other_user?.first_name}
                         </h3>
@@ -220,7 +211,7 @@ const Dashboard = ({ user }: DashboardProps) => {
                 <MessageSquare className="w-16 h-16 text-gray-600 mx-auto mb-4" />
                 <h3 className="text-xl text-gray-400 mb-2">No Conversations Started</h3>
                 <p className="text-gray-500">
-                  Found a compelling cosmic connection? Break the ice and let your personalities align!
+                  Find a compelling cosmic connection and break the ice!
                 </p>
               </div>
             )}

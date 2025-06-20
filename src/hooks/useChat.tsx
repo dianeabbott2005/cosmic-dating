@@ -40,51 +40,62 @@ export const useChat = () => {
   const realtimeChannelRef = useRef<RealtimeChannel | null>(null);
   const otherUserIdRef = useRef<string | null>(null);
   const userId = user?.id;
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-  const loadUserChats = useCallback(async () => {
-    if (!userId) return;
-    setLoading(true);
-    try {
-      const { data: userChats, error } = await supabase
-        .from('chats')
-        .select(`*, messages (id, content, sender_id, created_at, chat_id)`)
-        .or(`user1_id.eq.${userId},user2_id.eq.${userId}`);
+  const loadUserChats = useCallback(() => {
+    setRefreshTrigger(count => count + 1);
+  }, []);
 
-      if (error) throw error;
-
-      const allBlockedIds = new Set([...blockedUserIds, ...usersWhoBlockedMeIds]);
-
-      const chatPromises = (userChats || []).map(async (chat) => {
-        const otherUserId = chat.user1_id === userId ? chat.user2_id : chat.user1_id;
-        if (allBlockedIds.has(otherUserId)) return null;
-
-        const { data: profile } = await supabase.from('profiles').select('first_name, user_id, date_of_birth, place_of_birth').eq('user_id', otherUserId).single();
-        const lastMessage = chat.messages?.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0] || null;
-        
-        if (!lastMessage) return null;
-
-        return {
-          ...chat,
-          other_user: profile ? { ...profile, age: profile.date_of_birth ? calculateAge(profile.date_of_birth) : undefined } : undefined,
-          last_message: lastMessage ? { ...lastMessage } : undefined
-        };
-      });
-
-      const resolvedChats = (await Promise.all(chatPromises)).filter(Boolean) as Chat[];
-      
-      const sortedChats = resolvedChats.sort((a, b) => {
-        const dateA = a.last_message?.created_at ? new Date(a.last_message.created_at).getTime() : 0;
-        const dateB = b.last_message?.created_at ? new Date(b.last_message.created_at).getTime() : 0;
-        return dateB - dateA;
-      });
-
-      setChats(sortedChats);
-    } catch (error) {
-      console.error('Error loading user chats:', error);
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    if (!userId) {
+      setChats([]);
+      return;
     }
-  }, [userId, blockedUserIds, usersWhoBlockedMeIds]);
+    setLoading(true);
+    const fetchChats = async () => {
+      try {
+        const { data: userChats, error } = await supabase
+          .from('chats')
+          .select(`*, messages (id, content, sender_id, created_at, chat_id)`)
+          .or(`user1_id.eq.${userId},user2_id.eq.${userId}`);
+
+        if (error) throw error;
+
+        const allBlockedIds = new Set([...blockedUserIds, ...usersWhoBlockedMeIds]);
+
+        const chatPromises = (userChats || []).map(async (chat) => {
+          const otherUserId = chat.user1_id === userId ? chat.user2_id : chat.user1_id;
+          if (allBlockedIds.has(otherUserId)) return null;
+
+          const { data: profile } = await supabase.from('profiles').select('first_name, user_id, date_of_birth, place_of_birth').eq('user_id', otherUserId).single();
+          const lastMessage = chat.messages?.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0] || null;
+          
+          if (!lastMessage) return null;
+
+          return {
+            ...chat,
+            other_user: profile ? { ...profile, age: profile.date_of_birth ? calculateAge(profile.date_of_birth) : undefined } : undefined,
+            last_message: lastMessage ? { ...lastMessage } : undefined
+          };
+        });
+
+        const resolvedChats = (await Promise.all(chatPromises)).filter(Boolean) as Chat[];
+        
+        const sortedChats = resolvedChats.sort((a, b) => {
+          const dateA = a.last_message?.created_at ? new Date(a.last_message.created_at).getTime() : 0;
+          const dateB = b.last_message?.created_at ? new Date(b.last_message.created_at).getTime() : 0;
+          return dateB - dateA;
+        });
+
+        setChats(sortedChats);
+      } catch (error) {
+        console.error('Error loading user chats:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchChats();
+  }, [userId, blockedUserIds, usersWhoBlockedMeIds, refreshTrigger]);
 
   const loadMessages = useCallback(async (chatId: string) => {
     const { data, error } = await supabase.from('messages').select('*').eq('chat_id', chatId).order('created_at', { ascending: true });
@@ -132,28 +143,11 @@ export const useChat = () => {
     }
   };
 
-  const savedLoadUserChats = useRef(loadUserChats);
-  const savedLoadMessages = useRef(loadMessages);
-
   useEffect(() => {
-    savedLoadUserChats.current = loadUserChats;
-    savedLoadMessages.current = loadMessages;
-  });
-
-  useEffect(() => {
-    if (userId) {
-      savedLoadUserChats.current();
+    if (isWindowFocused) {
+      loadUserChats();
     }
-  }, [userId]);
-
-  useEffect(() => {
-    if (isWindowFocused && userId) {
-      savedLoadUserChats.current();
-      if (chat?.id) {
-        savedLoadMessages.current(chat.id);
-      }
-    }
-  }, [isWindowFocused, userId, chat?.id]);
+  }, [isWindowFocused, loadUserChats]);
 
   useEffect(() => {
     if (!chat?.id || !userId) {

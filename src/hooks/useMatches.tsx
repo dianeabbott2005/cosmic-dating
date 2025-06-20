@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { calculateAge } from '@/utils/dateCalculations';
@@ -28,120 +28,98 @@ export interface MatchProfile {
 
 export const useMatches = () => {
   const [matches, setMatches] = useState<MatchProfile[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const { user } = useAuth();
   const { blockedUserIds, usersWhoBlockedMeIds, fetchBlockLists } = useBlock();
   const isWindowFocused = useWindowFocus();
   const userId = user?.id;
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-  const getExistingMatches = useCallback(async () => {
+  const refreshMatches = useCallback(() => {
+    setRefreshTrigger(count => count + 1);
+  }, []);
+
+  useEffect(() => {
     if (!userId) {
       setMatches([]);
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const { data: existingMatches, error } = await supabase
-        .from('matches')
-        .select(`
-          id,
-          user_id,
-          matched_user_id,
-          compatibility_score,
-          user1_profile:profiles!matches_user_id_fkey(user_id, first_name, date_of_birth, time_of_birth, place_of_birth, gender),
-          user2_profile:profiles!matches_matched_user_id_fkey(user_id, first_name, date_of_birth, time_of_birth, place_of_birth, gender)
-        `)
-        .or(`user_id.eq.${userId},matched_user_id.eq.${userId}`);
-
-      if (error) throw error;
-
-      const uniqueMatchesMap = new Map<string, MatchProfile>();
-      const allBlockedIds = new Set([...blockedUserIds, ...usersWhoBlockedMeIds]);
-
-      (existingMatches || []).forEach(match => {
-        const otherUserId = match.user_id === userId ? match.matched_user_id : match.user_id;
-        const otherUserProfile = match.user_id === userId ? match.user2_profile : match.user1_profile;
-
-        if (otherUserProfile && otherUserId !== userId && !uniqueMatchesMap.has(otherUserId) && !allBlockedIds.has(otherUserId)) {
-          const age = calculateAge(otherUserProfile.date_of_birth);
-          uniqueMatchesMap.set(otherUserId, {
-            ...otherUserProfile,
-            compatibility_score: match.compatibility_score,
-            age
-          });
-        }
-      });
-
-      setMatches(Array.from(uniqueMatchesMap.values()));
-    } catch (error: any) {
-      console.error('getExistingMatches: Error getting existing matches:', error.message);
-      setMatches([]);
-    } finally {
       setLoading(false);
-    }
-  }, [userId, blockedUserIds, usersWhoBlockedMeIds]);
-
-  const triggerMatchGeneration = useCallback(async () => {
-    if (!userId) {
-      console.log('triggerMatchGeneration: No user, cannot generate matches.');
       return;
     }
-    setLoading(true);
-    console.log('triggerMatchGeneration: Invoking generate-matches Edge Function for user:', userId);
-    try {
-      const { error } = await supabase.functions.invoke('generate-matches', {
-        body: { user_id: userId }
-      });
 
-      if (error) {
-        console.error('triggerMatchGeneration: Error invoking generate-matches function:', error.message);
+    const fetchAndGenerateMatches = async () => {
+      setLoading(true);
+      try {
+        // First, invoke generation to ensure backend has the latest.
+        await supabase.functions.invoke('generate-matches', {
+          body: { user_id: userId }
+        });
+
+        // Now, fetch the current state of matches.
+        const { data: existingMatches, error } = await supabase
+          .from('matches')
+          .select(`
+            id,
+            user_id,
+            matched_user_id,
+            compatibility_score,
+            user1_profile:profiles!matches_user_id_fkey(user_id, first_name, date_of_birth, time_of_birth, place_of_birth, gender),
+            user2_profile:profiles!matches_matched_user_id_fkey(user_id, first_name, date_of_birth, time_of_birth, place_of_birth, gender)
+          `)
+          .or(`user_id.eq.${userId},matched_user_id.eq.${userId}`);
+        
+        if (error) throw error;
+
+        const uniqueMatchesMap = new Map<string, MatchProfile>();
+        const allBlockedIds = new Set([...blockedUserIds, ...usersWhoBlockedMeIds]);
+
+        (existingMatches || []).forEach(match => {
+          const otherUserId = match.user_id === userId ? match.matched_user_id : match.user_id;
+          const otherUserProfile = match.user_id === userId ? match.user2_profile : match.user1_profile;
+
+          if (otherUserProfile && otherUserId !== userId && !uniqueMatchesMap.has(otherUserId) && !allBlockedIds.has(otherUserId)) {
+            const age = calculateAge(otherUserProfile.date_of_birth);
+            uniqueMatchesMap.set(otherUserId, {
+              ...otherUserProfile,
+              compatibility_score: match.compatibility_score,
+              age
+            });
+          }
+        });
+
+        setMatches(Array.from(uniqueMatchesMap.values()));
+
+      } catch (error: any) {
+        console.error('useMatches: Error fetching matches:', error.message);
+        setMatches([]);
+      } finally {
+        setLoading(false);
       }
-      // Rely on realtime subscription to call getExistingMatches
-    } catch (error: any) {
-      console.error('triggerMatchGeneration: Unexpected error:', error.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [userId]);
+    };
 
-  const savedGetExistingMatches = useRef(getExistingMatches);
-  const savedTriggerMatchGeneration = useRef(triggerMatchGeneration);
-  const savedFetchBlockLists = useRef(fetchBlockLists);
+    fetchAndGenerateMatches();
+  }, [userId, blockedUserIds, usersWhoBlockedMeIds, refreshTrigger]);
 
   useEffect(() => {
-    savedGetExistingMatches.current = getExistingMatches;
-    savedTriggerMatchGeneration.current = triggerMatchGeneration;
-    savedFetchBlockLists.current = fetchBlockLists;
-  });
-
-  useEffect(() => {
-    if (userId) {
-      savedTriggerMatchGeneration.current();
+    if (isWindowFocused) {
+      refreshMatches();
     }
-  }, [userId]);
-
-  useEffect(() => {
-    if (isWindowFocused && userId) {
-      savedGetExistingMatches.current();
-    }
-  }, [isWindowFocused, userId]);
+  }, [isWindowFocused, refreshMatches]);
 
   useEffect(() => {
     if (!userId) return;
 
     const handleBlockUpdate = () => {
-      savedFetchBlockLists.current().then(() => {
-        savedGetExistingMatches.current();
+      fetchBlockLists().then(() => {
+        refreshMatches();
       });
     };
 
     const profileChannel = supabase.channel('profile-updates-for-matches')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `user_id=eq.${userId}` }, () => savedTriggerMatchGeneration.current())
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `user_id=eq.${userId}` }, refreshMatches)
       .subscribe();
 
     const matchesChannel = supabase.channel('matches-listener')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'matches', filter: `or(user_id.eq.${userId},matched_user_id.eq.${userId})` }, () => savedGetExistingMatches.current())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'matches', filter: `or(user_id.eq.${userId},matched_user_id.eq.${userId})` }, refreshMatches)
       .subscribe();
       
     const blocksChannel = supabase.channel('block-updates-listener')
@@ -153,11 +131,7 @@ export const useMatches = () => {
       supabase.removeChannel(matchesChannel);
       supabase.removeChannel(blocksChannel);
     };
-  }, [userId]);
+  }, [userId, refreshMatches, fetchBlockLists]);
 
-  return {
-    matches,
-    loading,
-    refreshMatches: triggerMatchGeneration
-  };
+  return { matches, loading, refreshMatches };
 };
