@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { ArrowLeft, Send, MapPin, MoreVertical, ShieldOff } from 'lucide-react';
 import { useChat } from '@/hooks/useChat';
 import { useAuth } from '@/hooks/useAuth';
@@ -39,7 +39,7 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
     }
   }, [match?.user_id, initializeChat, fetchBlockLists]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, blockedUserIds, usersWhoBlockedMeIds]);
 
@@ -126,7 +126,13 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
         )}
       </div>
       {match.user_id && (
-        <BlockUserDialog open={isBlockDialogOpen} onOpenChange={setIsBlockDialogOpen} userIdToBlock={match.user_id} userName={match.first_name} onSuccess={onBack} />
+        <BlockUserDialog
+          open={isBlockDialogOpen}
+          onOpenChange={setIsBlockDialogOpen}
+          userIdToBlock={match.user_id}
+          userName={match.first_name}
+          onSuccess={fetchBlockLists}
+        />
       )}
     </>
   );
