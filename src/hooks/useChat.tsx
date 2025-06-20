@@ -151,17 +151,31 @@ export const useChat = () => {
 
   useEffect(() => {
     if (!chat?.id || !userId) {
+      if (realtimeChannelRef.current) {
+        console.log(`useChat: Cleaning up channel for chat ${realtimeChannelRef.current.topic.split('-')[1]} due to missing chat/user ID.`);
+        supabase.removeChannel(realtimeChannelRef.current);
+        realtimeChannelRef.current = null;
+      }
       return;
     }
 
+    if (realtimeChannelRef.current && realtimeChannelRef.current.topic === `chat-${chat.id}`) {
+      // Already subscribed to the correct channel, do nothing.
+      return;
+    }
+
+    // If a channel for a different chat exists, remove it before creating a new one.
     if (realtimeChannelRef.current) {
+      console.log(`useChat: Switching channels. Removing old channel for ${realtimeChannelRef.current.topic}.`);
       supabase.removeChannel(realtimeChannelRef.current);
       realtimeChannelRef.current = null;
     }
 
+    console.log(`useChat: Attempting to subscribe to channel: chat-${chat.id}`);
     const channel = supabase.channel(`chat-${chat.id}`);
     
     channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `chat_id=eq.${chat.id}` }, (payload) => {
+      console.log('useChat: Real-time message received!', payload);
       const newMessage = payload.new as Message;
       if (newMessage.sender_id !== userId) {
         setMessages(prevMessages => {
@@ -171,14 +185,27 @@ export const useChat = () => {
           return [...prevMessages, newMessage];
         });
       }
-    }).subscribe();
+    }).subscribe((status, err) => {
+      if (status === 'SUBSCRIBED') {
+        console.log(`useChat: Successfully subscribed to real-time channel chat-${chat.id}`);
+      }
+      if (status === 'CHANNEL_ERROR') {
+        console.error(`useChat: Real-time channel error for chat-${chat.id}:`, err);
+      }
+      if (status === 'TIMED_OUT') {
+        console.warn(`useChat: Real-time subscription timed out for chat-${chat.id}`);
+      }
+    });
 
     realtimeChannelRef.current = channel;
 
     return () => {
-      if (realtimeChannelRef.current) {
-        supabase.removeChannel(realtimeChannelRef.current);
-        realtimeChannelRef.current = null;
+      if (channel) {
+        console.log(`useChat: Unsubscribing from channel chat-${chat.id} on cleanup.`);
+        supabase.removeChannel(channel);
+        if (realtimeChannelRef.current === channel) {
+          realtimeChannelRef.current = null;
+        }
       }
     };
   }, [chat?.id, userId]);
