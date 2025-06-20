@@ -50,7 +50,7 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, hasBeenBlocked, haveIBlocked]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
