@@ -17,7 +17,7 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
   const [message, setMessage] = useState('');
   const { user } = useAuth();
   const { messages, loading, initializeChat, sendMessage } = useChat();
-  const { isBlockedBy, amIBlocking, blockedUserIds, usersWhoBlockedMeIds } = useBlock();
+  const { isBlockedBy, amIBlocking, fetchBlockLists, blockedUserIds, usersWhoBlockedMeIds } = useBlock();
   const [isBlockDialogOpen, setIsBlockDialogOpen] = useState(false);
   const { toast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -42,9 +42,11 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
 
   useEffect(() => {
     if (match?.user_id) {
+      console.log("EnhancedChatView: Chat partner changed or view opened. Forcing block list refresh.");
+      fetchBlockLists();
       initializeChat(match.user_id);
     }
-  }, [match?.user_id, initializeChat]);
+  }, [match?.user_id, initializeChat, fetchBlockLists]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });

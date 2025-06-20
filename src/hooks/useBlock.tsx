@@ -9,6 +9,7 @@ interface BlockContextType {
   unblockUser: (userIdToUnblock: string) => Promise<void>;
   isBlockedBy: (userId: string) => boolean;
   amIBlocking: (userId: string) => boolean;
+  fetchBlockLists: () => Promise<void>;
 }
 
 const BlockContext = createContext<BlockContextType | undefined>(undefined);
@@ -129,7 +130,8 @@ export const BlockProvider = ({ children }: { children: React.ReactNode }) => {
     unblockUser,
     isBlockedBy,
     amIBlocking,
-  }), [blockedUserIds, usersWhoBlockedMeIds, blockUser, unblockUser, isBlockedBy, amIBlocking]);
+    fetchBlockLists,
+  }), [blockedUserIds, usersWhoBlockedMeIds, blockUser, unblockUser, isBlockedBy, amIBlocking, fetchBlockLists]);
 
   return (
     <BlockContext.Provider value={value}>
