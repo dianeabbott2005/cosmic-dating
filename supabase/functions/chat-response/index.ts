@@ -2,7 +2,7 @@ import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.50.0';
 
-type Message = { content: string; sender_id: string; created_at: string; };
+type Message = { content: string; sender_id: string; created_at: string; id: string; }; // Added id to Message type
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -129,7 +129,7 @@ async function getConversationContext(supabaseClient: SupabaseClient, chatId: st
 async function getRecentMessages(supabaseClient: SupabaseClient, chatId: string): Promise<Message[]> {
     const { data: recentMessages } = await supabaseClient
       .from('messages')
-      .select('content, sender_id, created_at')
+      .select('id, content, sender_id, created_at') // Include id
       .eq('chat_id', chatId)
       .order('created_at', { ascending: false })
       .limit(10);
@@ -272,47 +272,6 @@ async function callAiApi(prompt: string): Promise<string> {
 }
 
 /**
- * Helper function to introduce random typos into a string.
- * Applies typos with a certain probability per word.
- */
-function introduceTypos(text: string, typoProbabilityPerWord: number = 0.05): string { // Reduced typo probability
-  const words = text.split(' ');
-  const typedWords = words.map(word => {
-    // Skip very short words or if random chance doesn't hit
-    if (word.length < 3 || Math.random() > typoProbabilityPerWord) {
-      return word;
-    }
-
-    const typoType = Math.floor(Math.random() * 3); // 0: swap, 1: omit, 2: insert
-    let typedWordChars = Array.from(word); // Convert to array for easier manipulation
-
-    switch (typoType) {
-      case 0: // Swap adjacent characters
-        if (typedWordChars.length > 1) {
-          const idx = Math.floor(Math.random() * (typedWordChars.length - 1));
-          [typedWordChars[idx], typedWordChars[idx + 1]] = [typedWordChars[idx + 1], typedWordChars[idx]];
-        }
-        break;
-      case 1: // Omit a character
-        if (typedWordChars.length > 1) { // Ensure word doesn't become empty
-          const omitIdx = Math.floor(Math.random() * typedWordChars.length);
-          typedWordChars.splice(omitIdx, 1);
-        }
-        break;
-      case 2: // Insert a common character
-        const insertIdx = Math.floor(Math.random() * (typedWordChars.length + 1));
-        const commonChars = 'aeioulnrst'; // Common English letters for realistic insertions
-        const charToInsert = commonChars[Math.floor(Math.random() * commonChars.length)];
-        typedWordChars.splice(insertIdx, 0, charToInsert);
-        break;
-    }
-    return typedWordChars.join('');
-  });
-  return typedWords.join(' ');
-}
-
-
-/**
  * Stores the AI-generated message in the database.
  */
 async function storeAiResponse(supabaseClient: SupabaseClient, chatId: string, receiverId: string, aiResponse: string) {
@@ -366,6 +325,22 @@ async function updateConversationContext(supabaseClient: SupabaseClient, chatId:
       }, { onConflict: 'chat_id' });
 }
 
+/**
+ * Marks a message as processed.
+ */
+async function markMessageAsProcessed(supabaseClient: SupabaseClient, messageId: string) {
+  const { error } = await supabaseClient
+    .from('messages')
+    .update({ is_processed: true })
+    .eq('id', messageId);
+
+  if (error) {
+    console.error(`Error marking message ${messageId} as processed:`, error);
+  } else {
+    console.log(`Message ${messageId} marked as processed.`);
+  }
+}
+
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -373,12 +348,35 @@ serve(async (req) => {
   }
 
   try {
-    const { chatId, senderId, message, receiverId } = await req.json();
+    const { chatId, senderId, message, receiverId, messageId } = await req.json(); // Get messageId
     
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
+
+    // Check if the message that triggered this is already processed
+    const { data: triggeringMessage, error: fetchMessageError } = await supabaseClient
+      .from('messages')
+      .select('is_processed')
+      .eq('id', messageId)
+      .single();
+
+    if (fetchMessageError) {
+      console.error(`Error fetching triggering message ${messageId}:`, fetchMessageError);
+      return new Response(
+        JSON.stringify({ error: `Failed to fetch triggering message: ${fetchMessageError.message}`, success: false }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (triggeringMessage?.is_processed) {
+      console.log(`Message ${messageId} already processed. Skipping AI response.`);
+      return new Response(
+        JSON.stringify({ success: true, status: 'skipped', message: 'Message already processed.' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     const responseDelay = calculateResponseDelay();
 
@@ -447,6 +445,7 @@ serve(async (req) => {
       }
       // Update context immediately for the user's message + the *intended* AI response
       await updateConversationContext(supabaseClient, chatId, receiverProfile.first_name, senderProfile?.first_name, message, fullAiResponse, context);
+      await markMessageAsProcessed(supabaseClient, messageId); // Mark the triggering message as processed
 
       return new Response(
         JSON.stringify({ success: true, status: 'scheduled', aiResponse: fullAiResponse, messagesScheduled: individualMessages.length }),
@@ -473,6 +472,7 @@ serve(async (req) => {
 
       // Update conversation context with the full AI response (concatenated messages)
       await updateConversationContext(supabaseClient, chatId, receiverProfile.first_name, senderProfile?.first_name, message, fullAiResponse, context);
+      await markMessageAsProcessed(supabaseClient, messageId); // Mark the triggering message as processed
 
       return new Response(
         JSON.stringify({ success: true, status: 'sent_immediately', message: lastMessageSent, aiResponse: fullAiResponse, messagesSent: individualMessages.length }),
