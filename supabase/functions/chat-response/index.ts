@@ -10,6 +10,7 @@ const corsHeaders = {
 const MESSAGE_DELIMITER = "@@@MESSAGEBREAK@@@";
 const ANALYSIS_DELIMITER = "@@@ANALYSISBREAK@@@";
 const MAX_TOKEN_LIMIT = 100;
+const NEGATIVE_SENTIMENT_THRESHOLD = -0.05; // Threshold to consider a message "negative"
 
 const NON_NATIVE_ENGLISH_REGIONS: { [key: string]: { languageIssue: string; dialect: string; } } = {
   'India': { languageIssue: 'subtle grammatical errors, Indian English phrasing', dialect: 'occasional Hindi/local language phrases (e.g., "acha", "yaar")' },
@@ -67,7 +68,7 @@ async function getProfile(supabaseClient: SupabaseClient, userId: string) {
 async function getConversationContext(supabaseClient: SupabaseClient, chatId: string) {
   const { data: context } = await supabaseClient
     .from('conversation_contexts')
-    .select('context_summary, detailed_chat, current_threshold')
+    .select('context_summary, detailed_chat, current_threshold, consecutive_negative_count')
     .eq('chat_id', chatId)
     .single();
   return context;
@@ -214,7 +215,7 @@ async function scheduleMessage(supabaseClient: SupabaseClient, chatId: string, s
   });
 }
 
-async function updateContext(supabaseClient: SupabaseClient, chatId: string, newSummary: string, existingDetailedChat: string | null, latestExchange: string, newCurrentThreshold: number) {
+async function updateContext(supabaseClient: SupabaseClient, chatId: string, newSummary: string, existingDetailedChat: string | null, latestExchange: string, newCurrentThreshold: number, newConsecutiveNegativeCount: number) {
   const updatedDetailedChat = existingDetailedChat 
     ? `${existingDetailedChat}\n${latestExchange}` 
     : latestExchange;
@@ -227,6 +228,7 @@ async function updateContext(supabaseClient: SupabaseClient, chatId: string, new
       detailed_chat: updatedDetailedChat,
       current_threshold: newCurrentThreshold,
       last_updated: new Date().toISOString(),
+      consecutive_negative_count: newConsecutiveNegativeCount,
     }, { onConflict: 'chat_id' });
 }
 
@@ -251,8 +253,7 @@ serve(async (req) => {
     ]);
 
     const latestExchange = `${senderProfile.first_name}: "${message}"`;
-    const conversationHistory = context?.detailed_chat ? `${context.detailed_chat}\n${latestExchange}` : latestExchange;
-
+    
     // --- First AI Call: Get Analysis ---
     const analysisPrompt = buildAnalysisPrompt(context?.context_summary, context?.detailed_chat, latestExchange);
     const analysisResponse = await callAiApi(analysisPrompt, 50);
@@ -268,28 +269,49 @@ serve(async (req) => {
       console.warn("Failed to parse analysis response, using defaults.", { analysisResponse });
     }
 
-    // --- Calculate new threshold and check block condition ---
+    // --- Consecutive Negativity Logic ---
+    const consecutiveNegativeCount = context?.consecutive_negative_count ?? 0;
+    let finalSentimentAdjustment = sentimentAdjustment;
+    let newConsecutiveNegativeCount = 0;
+
+    if (sentimentAdjustment < NEGATIVE_SENTIMENT_THRESHOLD) {
+      newConsecutiveNegativeCount = consecutiveNegativeCount + 1;
+      if (newConsecutiveNegativeCount > 1) {
+        const multiplier = 1 + (0.1 * (newConsecutiveNegativeCount - 1));
+        finalSentimentAdjustment *= Math.min(multiplier, 1.5); // Cap multiplier at 1.5x
+        console.log(`Applying negativity penalty. Original: ${sentimentAdjustment.toFixed(3)}, Multiplier: ${multiplier.toFixed(2)}, Final: ${finalSentimentAdjustment.toFixed(3)}`);
+      }
+    } else {
+      newConsecutiveNegativeCount = 0; // Reset on neutral or positive interaction
+    }
+
+    // --- Calculate new threshold ---
     const currentThreshold = context?.current_threshold ?? 0.5;
-    const newCurrentThreshold = currentThreshold + sentimentAdjustment;
+    const newCurrentThreshold = currentThreshold + finalSentimentAdjustment;
 
     if (newCurrentThreshold <= receiverProfile.block_threshold) {
       // --- BLOCKING LOGIC ---
+      const conversationHistory = context?.detailed_chat ? `${context.detailed_chat}\n${latestExchange}` : latestExchange;
       const blockPrompt = buildBlockPrompt(receiverProfile, senderProfile, conversationHistory, message);
       const blockActionResponse = await callAiApi(blockPrompt, 50);
 
+      let finalExchangeForContext = latestExchange;
       if (blockActionResponse.trim().toUpperCase() !== 'GHOST') {
         await scheduleMessage(supabaseClient, chatId, receiverId, blockActionResponse, 1000);
+        finalExchangeForContext += `\n${receiverProfile.first_name}: "${blockActionResponse}"`;
       }
 
+      await updateContext(supabaseClient, chatId, newSummary, context?.detailed_chat, finalExchangeForContext, newCurrentThreshold, newConsecutiveNegativeCount);
       await supabaseClient.from('blocked_users').insert({ blocker_id: receiverId, blocked_id: senderId });
       
     } else {
       // --- NORMAL RESPONSE LOGIC ---
+      const conversationHistory = context?.detailed_chat ? `${context.detailed_chat}\n${latestExchange}` : latestExchange;
       const chatPrompt = buildChatPrompt(receiverProfile, senderProfile, conversationHistory, message, newSummary, newCurrentThreshold);
       const chatResponse = await callAiApi(chatPrompt, MAX_TOKEN_LIMIT);
       
       const fullLatestExchange = `${latestExchange}\n${receiverProfile.first_name}: "${chatResponse.replace(new RegExp(MESSAGE_DELIMITER, 'g'), '\n')}"`;
-      await updateContext(supabaseClient, chatId, newSummary, context?.detailed_chat, fullLatestExchange, newCurrentThreshold);
+      await updateContext(supabaseClient, chatId, newSummary, context?.detailed_chat, fullLatestExchange, newCurrentThreshold, newConsecutiveNegativeCount);
 
       const messagesToSend = chatResponse.split(MESSAGE_DELIMITER).filter(m => m.trim());
       if (messagesToSend.length > 0) {
