@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Send, MapPin, MoreVertical, ShieldOff } from 'lucide-react';
 import { useChat } from '@/hooks/useChat';
 import { useAuth } from '@/hooks/useAuth';
@@ -39,8 +39,13 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
     }
   }, [match?.user_id, initializeChat, fetchBlockLists]);
 
-  useLayoutEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  useEffect(() => {
+    // Use a short timeout to ensure the DOM has updated before scrolling
+    const timer = setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 50); // 50ms delay
+
+    return () => clearTimeout(timer); // Cleanup the timer
   }, [messages, blockedUserIds, usersWhoBlockedMeIds]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
