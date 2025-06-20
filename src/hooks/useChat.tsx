@@ -131,26 +131,18 @@ export const useChat = () => {
     }
   };
 
-  const savedLoadUserChats = useRef(loadUserChats);
-  const savedLoadMessages = useRef(loadMessages);
-
-  useEffect(() => {
-    savedLoadUserChats.current = loadUserChats;
-    savedLoadMessages.current = loadMessages;
-  });
-
   useEffect(() => {
     if (user) {
-      savedLoadUserChats.current();
+      loadUserChats();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   useEffect(() => {
     if (isWindowFocused && user) {
-      savedLoadUserChats.current();
+      loadUserChats();
       if (chat?.id) {
-        savedLoadMessages.current(chat.id);
+        loadMessages(chat.id);
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps

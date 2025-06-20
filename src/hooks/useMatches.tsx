@@ -104,7 +104,8 @@ export const useMatches = () => {
     } finally {
       setLoading(false);
     }
-  }, [user, getExistingMatches]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   const savedGetExistingMatches = useRef(getExistingMatches);
   const savedTriggerMatchGeneration = useRef(triggerMatchGeneration);
