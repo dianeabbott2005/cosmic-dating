@@ -17,7 +17,7 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
   const [message, setMessage] = useState('');
   const { user } = useAuth();
   const { messages, loading, initializeChat, sendMessage } = useChat();
-  const { isBlockedBy, blockUser, amIBlocking } = useBlock();
+  const { isBlockedBy, amIBlocking } = useBlock();
   const [isBlockDialogOpen, setIsBlockDialogOpen] = useState(false);
   const { toast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -44,19 +44,12 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (message.trim() && !hasBeenBlocked && !haveIBlocked) {
+    if (message.trim() && !isBlockedBy(match.user_id) && !amIBlocking(match.user_id)) {
       await sendMessage(message);
       setMessage('');
-    }
-  };
-
-  const handleBlockBack = async () => {
-    try {
-      await blockUser(match.user_id);
-      toast({ title: "User Blocked", description: `You have blocked ${match.first_name}.` });
-      onBack();
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Cannot send message", description: "Your block status with this user has changed.", variant: "destructive" });
+      setMessage('');
     }
   };
 
@@ -80,14 +73,19 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
               {match.place_of_birth && <p className="text-sm text-gray-400 flex items-center gap-1"><MapPin className="w-3 h-3" />{match.place_of_birth}</p>}
               {sunSign && <p className="text-sm text-purple-300 font-medium mt-1">☀️ {formatSignName(sunSign)}</p>}
             </div>
-            {!haveIBlocked && !hasBeenBlocked && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild><button className="text-gray-400 hover:text-white p-1 rounded-full"><MoreVertical className="w-5 h-5" /></button></DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onSelect={() => setIsBlockDialogOpen(true)} className="text-red-400 focus:text-red-400 focus:bg-red-500/10"><ShieldOff className="mr-2 h-4 w-4" /><span>Block {match.first_name}</span></DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button disabled={haveIBlocked || hasBeenBlocked} className="text-gray-400 hover:text-white p-1 rounded-full disabled:opacity-50 disabled:cursor-not-allowed">
+                  <MoreVertical className="w-5 h-5" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => setIsBlockDialogOpen(true)} className="text-red-400 focus:text-red-400 focus:bg-red-500/10">
+                  <ShieldOff className="mr-2 h-4 w-4" />
+                  <span>Block {match.first_name}</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 
@@ -108,8 +106,7 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
         {hasBeenBlocked ? (
           <div className="bg-slate-900/50 backdrop-blur-sm border-t border-red-500/30 p-4">
             <div className="max-w-2xl mx-auto text-center">
-              <p className="text-red-300 mb-4">{match.first_name} has blocked you. You can no longer send messages in this chat.</p>
-              <button onClick={handleBlockBack} className="px-4 py-2 border border-red-500 text-red-400 rounded-xl hover:bg-red-500/10 transition-all">Block {match.first_name}</button>
+              <p className="text-red-300">{match.first_name} has blocked you. You can no longer send messages in this chat.</p>
             </div>
           </div>
         ) : haveIBlocked ? (

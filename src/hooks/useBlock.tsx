@@ -9,7 +9,6 @@ interface BlockContextType {
   unblockUser: (userIdToUnblock: string) => Promise<void>;
   isBlockedBy: (userId: string) => boolean;
   amIBlocking: (userId: string) => boolean;
-  fetchBlockLists: () => Promise<void>;
 }
 
 const BlockContext = createContext<BlockContextType | undefined>(undefined);
@@ -28,44 +27,50 @@ export const BlockProvider = ({ children }: { children: React.ReactNode }) => {
   const [usersWhoBlockedMeIds, setUsersWhoBlockedMeIds] = useState<string[]>([]);
   const userId = user?.id;
 
-  const fetchBlockLists = useCallback(async () => {
-    if (!userId) return;
-
-    console.log('useBlock: Fetching block lists...');
-    // Fetch users I have blocked
-    const { data: myBlocks, error: myBlocksError } = await supabase
-      .from('blocked_users')
-      .select('blocked_id')
-      .eq('blocker_id', userId);
-
-    if (myBlocksError) console.error('Error fetching my blocks:', myBlocksError);
-    else setBlockedUserIds(myBlocks.map(b => b.blocked_id));
-
-    // Fetch users who have blocked me
-    const { data: blocksOnMe, error: blocksOnMeError } = await supabase
-      .from('blocked_users')
-      .select('blocker_id')
-      .eq('blocked_id', userId);
-
-    if (blocksOnMeError) console.error('Error fetching blocks on me:', blocksOnMeError);
-    else setUsersWhoBlockedMeIds(blocksOnMe.map(b => b.blocker_id));
-    console.log('useBlock: Block lists updated.');
-  }, [userId]);
-
+  // This single useEffect now handles initial fetch and real-time updates.
   useEffect(() => {
-    if (userId) {
-      fetchBlockLists();
-    } else {
+    if (!userId) {
       // Clear lists on sign out
       setBlockedUserIds([]);
       setUsersWhoBlockedMeIds([]);
+      return;
     }
-  }, [userId, fetchBlockLists]);
 
-  // Real-time subscription for block changes
-  useEffect(() => {
-    if (!userId) return;
+    const fetchBlockLists = async () => {
+      console.log('useBlock: Fetching block lists for user:', userId);
+      
+      // Fetch users I have blocked
+      const { data: myBlocks, error: myBlocksError } = await supabase
+        .from('blocked_users')
+        .select('blocked_id')
+        .eq('blocker_id', userId);
 
+      if (myBlocksError) {
+        console.error('Error fetching my blocks:', myBlocksError);
+        setBlockedUserIds([]);
+      } else {
+        setBlockedUserIds(myBlocks.map(b => b.blocked_id));
+      }
+
+      // Fetch users who have blocked me
+      const { data: blocksOnMe, error: blocksOnMeError } = await supabase
+        .from('blocked_users')
+        .select('blocker_id')
+        .eq('blocked_id', userId);
+
+      if (blocksOnMeError) {
+        console.error('Error fetching blocks on me:', blocksOnMeError);
+        setUsersWhoBlockedMeIds([]);
+      } else {
+        setUsersWhoBlockedMeIds(blocksOnMe.map(b => b.blocker_id));
+      }
+      console.log('useBlock: Block lists updated.');
+    };
+
+    // Initial fetch
+    fetchBlockLists();
+
+    // Set up real-time subscription
     const channel = supabase
       .channel(`blocked-users-changes-for-${userId}`)
       .on(
@@ -78,6 +83,7 @@ export const BlockProvider = ({ children }: { children: React.ReactNode }) => {
         },
         (payload) => {
           console.log('useBlock: Real-time block change received, refetching lists.', payload);
+          // Refetch lists when a change is detected
           fetchBlockLists();
         }
       )
@@ -87,16 +93,18 @@ export const BlockProvider = ({ children }: { children: React.ReactNode }) => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [userId, fetchBlockLists]);
+  }, [userId]); // This effect runs only when userId changes.
 
   const blockUser = useCallback(async (userIdToBlock: string) => {
     if (!userId) throw new Error('User must be logged in to block.');
+    if (usersWhoBlockedMeIds.includes(userIdToBlock)) {
+      throw new Error("Cannot block a user who has already blocked you.");
+    }
     const { error } = await supabase
       .from('blocked_users')
       .insert({ blocker_id: userId, blocked_id: userIdToBlock });
     if (error) throw error;
-    // No need to call fetchBlockLists here, the real-time listener will handle it.
-  }, [userId]);
+  }, [userId, usersWhoBlockedMeIds]);
 
   const unblockUser = useCallback(async (userIdToUnblock: string) => {
     if (!userId) throw new Error('User must be logged in to unblock.');
@@ -106,7 +114,6 @@ export const BlockProvider = ({ children }: { children: React.ReactNode }) => {
       .eq('blocker_id', userId)
       .eq('blocked_id', userIdToUnblock);
     if (error) throw error;
-    // No need to call fetchBlockLists here, the real-time listener will handle it.
   }, [userId]);
 
   const isBlockedBy = useCallback((userIdToCheck: string) => usersWhoBlockedMeIds.includes(userIdToCheck), [usersWhoBlockedMeIds]);
@@ -119,8 +126,7 @@ export const BlockProvider = ({ children }: { children: React.ReactNode }) => {
     unblockUser,
     isBlockedBy,
     amIBlocking,
-    fetchBlockLists
-  }), [blockedUserIds, usersWhoBlockedMeIds, blockUser, unblockUser, isBlockedBy, amIBlocking, fetchBlockLists]);
+  }), [blockedUserIds, usersWhoBlockedMeIds, blockUser, unblockUser, isBlockedBy, amIBlocking]);
 
   return (
     <BlockContext.Provider value={value}>
