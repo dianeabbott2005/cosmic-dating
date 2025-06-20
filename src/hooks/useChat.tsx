@@ -85,6 +85,12 @@ export const useChat = () => {
     }
   }, [user, blockedUserIds, usersWhoBlockedMeIds]);
 
+  const loadMessages = useCallback(async (chatId: string) => {
+    const { data, error } = await supabase.from('messages').select('*').eq('chat_id', chatId).order('created_at', { ascending: true });
+    if (error) console.error('Error loading messages:', error);
+    else setMessages(data || []);
+  }, []);
+
   const initializeChat = useCallback(async (otherUserId: string) => {
     if (!user) return;
     setLoading(true);
@@ -103,13 +109,7 @@ export const useChat = () => {
     } finally {
       setLoading(false);
     }
-  }, [user]);
-
-  const loadMessages = async (chatId: string) => {
-    const { data, error } = await supabase.from('messages').select('*').eq('chat_id', chatId).order('created_at', { ascending: true });
-    if (error) console.error('Error loading messages:', error);
-    else setMessages(data || []);
-  };
+  }, [user, loadMessages]);
 
   const sendMessage = async (content: string) => {
     if (!user || !content.trim()) return;
@@ -131,21 +131,29 @@ export const useChat = () => {
     }
   };
 
+  const savedLoadUserChats = useRef(loadUserChats);
+  const savedLoadMessages = useRef(loadMessages);
+
+  useEffect(() => {
+    savedLoadUserChats.current = loadUserChats;
+    savedLoadMessages.current = loadMessages;
+  });
+
   useEffect(() => {
     if (user) {
-      loadUserChats();
+      savedLoadUserChats.current();
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   useEffect(() => {
     if (isWindowFocused && user) {
-      loadUserChats();
+      savedLoadUserChats.current();
       if (chat?.id) {
-        loadMessages(chat.id);
+        savedLoadMessages.current(chat.id);
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isWindowFocused, user, chat?.id]);
 
   useEffect(() => {

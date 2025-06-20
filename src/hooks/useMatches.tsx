@@ -89,22 +89,19 @@ export const useMatches = () => {
     setLoading(true);
     console.log('triggerMatchGeneration: Invoking generate-matches Edge Function for user:', user.id);
     try {
-      const { data, error } = await supabase.functions.invoke('generate-matches', {
+      const { error } = await supabase.functions.invoke('generate-matches', {
         body: { user_id: user.id }
       });
 
       if (error) {
         console.error('triggerMatchGeneration: Error invoking generate-matches function:', error.message);
-      } else {
-        console.log('triggerMatchGeneration: generate-matches function invoked successfully:', data);
-        await getExistingMatches();
       }
+      // We no longer call getExistingMatches here; the realtime subscription will handle it.
     } catch (error: any) {
       console.error('triggerMatchGeneration: Unexpected error:', error.message);
     } finally {
       setLoading(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   const savedGetExistingMatches = useRef(getExistingMatches);
@@ -121,14 +118,14 @@ export const useMatches = () => {
     if (user) {
       savedTriggerMatchGeneration.current();
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   useEffect(() => {
     if (isWindowFocused && user) {
       savedGetExistingMatches.current();
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isWindowFocused, user]);
 
   useEffect(() => {
