@@ -8,7 +8,7 @@ const corsHeaders = {
 };
 
 const MESSAGE_DELIMITER = "@@@MESSAGEBREAK@@@";
-const ANALYSIS_DELIMITER = "@@@ANALYSISBREAK@@@"; // Corrected delimiter
+const ANALYSIS_DELIMITER = "@@@ANALYSISBREAK@@@";
 const MAX_TOKEN_LIMIT = 100;
 
 // --- Helper Functions ---
@@ -53,15 +53,6 @@ async function getProfile(supabaseClient: SupabaseClient, userId: string) {
   return profile;
 }
 
-async function getConversationContext(supabaseClient: SupabaseClient, chatId: string) {
-  const { data: context } = await supabaseClient
-    .from('conversation_contexts')
-    .select('context_summary')
-    .eq('chat_id', chatId)
-    .single();
-  return context;
-}
-
 async function getRecentMessages(supabaseClient: SupabaseClient, chatId: string) {
   const { data: recentMessages } = await supabaseClient
     .from('messages')
@@ -91,8 +82,33 @@ const NON_NATIVE_ENGLISH_REGIONS: { [key: string]: { languageIssue: string; dial
   'UAE': { languageIssue: 'formal yet friendly, occasional Arabic loanwords', dialect: 'common Arabic expressions (e.g., "mashallah", "khalas")' },
 };
 
-// Re-introducing the detailed prompt builder for the "Actor" AI
-function buildChatPrompt(aiProfile: any, humanProfile: any, context: any, conversationHistory: string, userMessage: string) {
+function buildAnalysisPrompt(conversationHistory: string, userMessage: string, aiFirstName: string, humanFirstName: string) {
+  let prompt = `You are a conversation analyst. Your task is to understand the emotional state and intent of a user in a dating app conversation.
+
+**Conversation History:**
+${conversationHistory}
+
+**The user, ${humanFirstName}, just sent this message to ${aiFirstName}:**
+"${userMessage}"
+
+**Your Task & Output Format (CRITICAL):**
+Your final output MUST follow this structure exactly, with no extra text:
+1.  A new, one-sentence summary of the user's current emotional state and intent (e.g., "The user is flirting playfully," or "The user seems bored and is giving a short, dismissive reply.").
+2.  The analysis delimiter: "${ANALYSIS_DELIMITER}"
+3.  A sentiment adjustment value (a number between -0.2 and 0.2).
+
+**Sentiment Adjustment Rules:**
+- **Highly Positive (+0.1 to +0.2):** User is admiring, reassuring, good flirting, respectful.
+- **Neutral/Positive (-0.05 to +0.05):** Normal, friendly chat.
+- **Negative (-0.1 to -0.05):** User is boring, dismissive, or slightly rude.
+- **Highly Negative (-0.2 to -0.1):** User is hostile, disrespectful, threatening, bullying.
+
+**Example Output:**
+The user is asking a thoughtful follow-up question, showing genuine interest.${ANALYSIS_DELIMITER}0.08`;
+  return prompt;
+}
+
+function buildChatPrompt(aiProfile: any, humanProfile: any, conversationHistory: string, userMessage: string, analysisSummary: string, sentimentScore: number) {
     const aiAge = calculateAge(aiProfile.date_of_birth);
     let promptInstructions = aiProfile.personality_prompt;
 
@@ -107,7 +123,9 @@ function buildChatPrompt(aiProfile: any, humanProfile: any, context: any, conver
     }
 
     promptInstructions += ` You are chatting with ${humanProfile.first_name}.`;
-    if (context?.context_summary) promptInstructions += `\n\nPrevious conversation context: ${context.context_summary}`;
+    
+    promptInstructions += `\n\n**Conversation Analysis:** ${analysisSummary} (Sentiment Score: ${sentimentScore.toFixed(2)})`;
+
     if (conversationHistory) promptInstructions += `\n\nRecent conversation:\n${conversationHistory}`;
     
     promptInstructions += `\n\nThis is a new dating platform focused on astrological compatibility. You discovered it through either Reddit or X (formerly Twitter). Your goal is to get to know the user better in a romantic context, as you would on a dating app. Keep the conversation engaging, flirty or even kinky if appropriate, but always respectful.`;
@@ -140,34 +158,6 @@ Analyze the user's last message in the context of your persona and recent chat h
 Now, respond as ${aiProfile.first_name}:`;
     
     return promptInstructions;
-}
-
-// New, separate prompt builder for the "Analyst" AI
-function buildAnalysisPrompt(conversationHistory: string, userMessage: string, aiResponse: string) {
-  let prompt = `You are a conversation analyst. Analyze the following exchange and provide a summary and a sentiment score.
-
-**Conversation History:**
-${conversationHistory}
-
-**Recent Exchange:**
-- User: "${userMessage}"
-- AI: "${aiResponse}"
-
-**Your Task & Output Format (CRITICAL):**
-Your final output MUST follow this structure exactly, with no extra text:
-1.  A new, one-sentence summary of the conversation state.
-2.  The analysis delimiter: "${ANALYSIS_DELIMITER}"
-3.  A sentiment adjustment value (a number between -0.2 and 0.2).
-
-**Sentiment Adjustment Rules:**
-- **Highly Positive (+0.1 to +0.2):** User is admiring, reassuring, good flirting, respectful.
-- **Neutral/Positive (-0.05 to +0.05):** Normal, friendly chat.
-- **Negative (-0.1 to -0.05):** User is boring, dismissive, or slightly rude.
-- **Highly Negative (-0.2 to -0.1):** User is hostile, disrespectful, threatening, bullying.
-
-**Example Output:**
-The user gave a nice compliment, and the mood is very positive.${ANALYSIS_DELIMITER}0.15`;
-  return prompt;
 }
 
 async function callAiApi(prompt: string, maxTokens: number) {
@@ -221,25 +211,19 @@ serve(async (req) => {
     const { data: msg } = await supabaseClient.from('messages').select('is_processed').eq('id', messageId).single();
     if (msg?.is_processed) return new Response(JSON.stringify({ status: 'skipped' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
-    const [receiverProfile, senderProfile, context, recentMessages] = await Promise.all([
+    const [receiverProfile, senderProfile, recentMessages] = await Promise.all([
       getProfile(supabaseClient, receiverId),
       getProfile(supabaseClient, senderId),
-      getConversationContext(supabaseClient, chatId),
       getRecentMessages(supabaseClient, chatId),
     ]);
 
     const conversationHistory = buildConversationHistory(recentMessages, receiverId, receiverProfile.first_name, senderProfile.first_name);
 
-    // --- First AI Call: Get Chat Response ---
-    const chatPrompt = buildChatPrompt(receiverProfile, senderProfile, context, conversationHistory, message);
-    const chatResponse = await callAiApi(chatPrompt, MAX_TOKEN_LIMIT);
+    // --- First AI Call: Get Analysis ---
+    const analysisPrompt = buildAnalysisPrompt(conversationHistory, message, receiverProfile.first_name, senderProfile.first_name);
+    const analysisResponse = await callAiApi(analysisPrompt, 50);
 
-    // --- Second AI Call: Get Analysis ---
-    const analysisPrompt = buildAnalysisPrompt(conversationHistory, message, chatResponse);
-    const analysisResponse = await callAiApi(analysisPrompt, 50); // Smaller token limit for analysis
-
-    // --- Parse Analysis Response ---
-    let newSummary = null;
+    let newSummary = "Context updated."; // Default summary
     let sentimentAdjustment = 0.0;
     if (analysisResponse.includes(ANALYSIS_DELIMITER)) {
       const parts = analysisResponse.split(ANALYSIS_DELIMITER);
@@ -250,15 +234,18 @@ serve(async (req) => {
       }
     } else {
       console.warn("Failed to parse analysis response, using defaults.", { analysisResponse });
-      newSummary = "Context updated."; // Default summary
     }
+
+    // --- Second AI Call: Get Chat Response ---
+    const chatPrompt = buildChatPrompt(receiverProfile, senderProfile, conversationHistory, message, newSummary, sentimentAdjustment);
+    const chatResponse = await callAiApi(chatPrompt, MAX_TOKEN_LIMIT);
 
     // --- Update Database and Schedule Messages ---
     const currentThreshold = receiverProfile.block_threshold || 0.0;
     const newThreshold = Math.max(0.0, Math.min(1.0, currentThreshold - sentimentAdjustment));
 
     await supabaseClient.from('profiles').update({ block_threshold: newThreshold }).eq('user_id', receiverId);
-    if (newSummary) await updateContext(supabaseClient, chatId, newSummary);
+    await updateContext(supabaseClient, chatId, newSummary);
 
     if (newThreshold >= 1.0) {
       const blockMessage = "I don't think we're a good match. I'm ending this conversation.";
