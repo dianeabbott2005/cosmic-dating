@@ -117,6 +117,7 @@ export type Database = {
           created_at: string
           id: string
           sender_id: string
+          is_processed: boolean | null // New column
         }
         Insert: {
           chat_id: string
@@ -124,6 +125,7 @@ export type Database = {
           created_at?: string
           id?: string
           sender_id: string
+          is_processed?: boolean | null // New column
         }
         Update: {
           chat_id?: string
@@ -131,6 +133,7 @@ export type Database = {
           created_at?: string
           id?: string
           sender_id?: string
+          is_processed?: boolean | null // New column
         }
         Relationships: [
           {
@@ -170,7 +173,7 @@ export type Database = {
           updated_at: string
           user_id: string
           timezone: string | null
-          has_agreed_to_terms: boolean | null // New column
+          has_agreed_to_terms: boolean | null
         }
         Insert: {
           created_at?: string
@@ -192,7 +195,7 @@ export type Database = {
           updated_at?: string
           user_id: string
           timezone?: string | null
-          has_agreed_to_terms?: boolean | null // New column
+          has_agreed_to_terms?: boolean | null
         }
         Update: {
           created_at?: string
@@ -214,7 +217,7 @@ export type Database = {
           updated_at?: string
           user_id?: string
           timezone?: string | null
-          has_agreed_to_terms?: boolean | null // New column
+          has_agreed_to_terms?: boolean | null
         }
         Relationships: []
       }
