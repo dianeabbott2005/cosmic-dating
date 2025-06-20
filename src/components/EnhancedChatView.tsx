@@ -40,9 +40,13 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
   }, [match?.user_id, initializeChat, fetchBlockLists]);
 
   useEffect(() => {
-    // Automatically scroll to the bottom whenever messages are loaded or a new one is added.
-    messagesEndRef.current?.scrollIntoView();
-  }, [messages]);
+    // Use a short timeout to ensure the DOM has updated before scrolling
+    const timer = setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 50); // 50ms delay
+
+    return () => clearTimeout(timer); // Cleanup the timer
+  }, [messages, blockedUserIds, usersWhoBlockedMeIds]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
