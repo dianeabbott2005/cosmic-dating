@@ -60,7 +60,6 @@ export const useChat = () => {
         const { data: profile } = await supabase.from('profiles').select('first_name, user_id, date_of_birth, place_of_birth').eq('user_id', otherUserId).single();
         const lastMessage = chat.messages?.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0] || null;
         
-        // A chat is only valid if it has at least one message
         if (!lastMessage) return null;
 
         return {
@@ -144,19 +143,39 @@ export const useChat = () => {
   }, [isWindowFocused, user, chat?.id, loadUserChats]);
 
   useEffect(() => {
-    if (!chat?.id || !user?.id) return;
+    if (!chat?.id || !user?.id) {
+      return;
+    }
+
+    // Clean up existing channel if it exists before creating a new one
+    if (realtimeChannelRef.current) {
+      supabase.removeChannel(realtimeChannelRef.current);
+      realtimeChannelRef.current = null;
+    }
+
     const channel = supabase.channel(`chat-${chat.id}`);
-    const subscription = channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `chat_id=eq.${chat.id}` }, (payload) => {
+    
+    channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `chat_id=eq.${chat.id}` }, (payload) => {
       const newMessage = payload.new as Message;
-      if (newMessage.sender_id !== user.id && !messages.some(msg => msg.id === newMessage.id)) {
-        setMessages(prev => [...prev, newMessage]);
+      if (newMessage.sender_id !== user.id) {
+        setMessages(prevMessages => {
+          if (prevMessages.some(msg => msg.id === newMessage.id)) {
+            return prevMessages;
+          }
+          return [...prevMessages, newMessage];
+        });
       }
     }).subscribe();
+
     realtimeChannelRef.current = channel;
+
     return () => {
-      if (realtimeChannelRef.current) realtimeChannelRef.current.unsubscribe();
+      if (realtimeChannelRef.current) {
+        supabase.removeChannel(realtimeChannelRef.current);
+        realtimeChannelRef.current = null;
+      }
     };
-  }, [chat?.id, user?.id, messages]);
+  }, [chat?.id, user?.id]); // Dependency array is now stable and correct
 
   return { chat, chats, messages, loading, initializeChat, sendMessage, loadUserChats };
 };

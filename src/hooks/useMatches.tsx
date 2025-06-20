@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { calculateAge } from '@/utils/dateCalculations';
 import { useWindowFocus } from '@/hooks/useWindowFocus';
-import { useBlock } from '@/hooks/useBlock'; // Import useBlock
+import { useBlock } from '@/hooks/useBlock';
 
 export interface MatchProfile {
   id: string;
@@ -30,33 +30,8 @@ export const useMatches = () => {
   const [matches, setMatches] = useState<MatchProfile[]>([]);
   const [loading, setLoading] = useState(false);
   const { user } = useAuth();
-  const { blockedUserIds, usersWhoBlockedMeIds } = useBlock(); // Use the block hook
+  const { blockedUserIds, usersWhoBlockedMeIds, fetchBlockLists } = useBlock();
   const isWindowFocused = useWindowFocus();
-
-  const triggerMatchGeneration = useCallback(async () => {
-    if (!user) {
-      console.log('triggerMatchGeneration: No user, cannot generate matches.');
-      return;
-    }
-    setLoading(true);
-    console.log('triggerMatchGeneration: Invoking generate-matches Edge Function for user:', user.id);
-    try {
-      const { data, error } = await supabase.functions.invoke('generate-matches', {
-        body: { user_id: user.id }
-      });
-
-      if (error) {
-        console.error('triggerMatchGeneration: Error invoking generate-matches function:', error.message);
-      } else {
-        console.log('triggerMatchGeneration: generate-matches function invoked successfully:', data);
-        await getExistingMatches();
-      }
-    } catch (error: any) {
-      console.error('triggerMatchGeneration: Unexpected error:', error.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [user]);
 
   const getExistingMatches = useCallback(async () => {
     if (!user) {
@@ -106,11 +81,47 @@ export const useMatches = () => {
     }
   }, [user, blockedUserIds, usersWhoBlockedMeIds]);
 
+  const triggerMatchGeneration = useCallback(async () => {
+    if (!user) {
+      console.log('triggerMatchGeneration: No user, cannot generate matches.');
+      return;
+    }
+    setLoading(true);
+    console.log('triggerMatchGeneration: Invoking generate-matches Edge Function for user:', user.id);
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-matches', {
+        body: { user_id: user.id }
+      });
+
+      if (error) {
+        console.error('triggerMatchGeneration: Error invoking generate-matches function:', error.message);
+      } else {
+        console.log('triggerMatchGeneration: generate-matches function invoked successfully:', data);
+        await getExistingMatches();
+      }
+    } catch (error: any) {
+      console.error('triggerMatchGeneration: Unexpected error:', error.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [user, getExistingMatches]);
+
+  // Use refs to hold the latest callbacks to prevent re-subscribing on every render
+  const savedGetExistingMatches = useRef(getExistingMatches);
+  const savedTriggerMatchGeneration = useRef(triggerMatchGeneration);
+  const savedFetchBlockLists = useRef(fetchBlockLists);
+
+  useEffect(() => {
+    savedGetExistingMatches.current = getExistingMatches;
+    savedTriggerMatchGeneration.current = triggerMatchGeneration;
+    savedFetchBlockLists.current = fetchBlockLists;
+  });
+
   useEffect(() => {
     if (user) {
       triggerMatchGeneration();
     }
-  }, [user]);
+  }, [user, triggerMatchGeneration]); // Keep triggerMatchGeneration here for initial load
 
   useEffect(() => {
     if (isWindowFocused && user) {
@@ -121,16 +132,31 @@ export const useMatches = () => {
   useEffect(() => {
     if (!user) return;
 
-    const profileChannel = supabase.channel('profile-updates-for-matches').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `user_id=eq.${user.id}` }, () => triggerMatchGeneration()).subscribe();
-    const matchesChannel = supabase.channel('new-matches-listener').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'matches', filter: `or(user_id.eq.${user.id},matched_user_id.eq.${user.id})` }, () => getExistingMatches()).subscribe();
-    const blocksChannel = supabase.channel('block-updates-listener').on('postgres_changes', { event: '*', schema: 'public', table: 'blocked_users', filter: `or(blocker_id.eq.${user.id},blocked_id.eq.${user.id})` }, () => getExistingMatches()).subscribe();
+    const handleBlockUpdate = () => {
+      console.log('Block update detected, fetching new block lists and then matches.');
+      savedFetchBlockLists.current().then(() => {
+        savedGetExistingMatches.current();
+      });
+    };
+
+    const profileChannel = supabase.channel('profile-updates-for-matches')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `user_id=eq.${user.id}` }, () => savedTriggerMatchGeneration.current())
+      .subscribe();
+
+    const matchesChannel = supabase.channel('new-matches-listener')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'matches', filter: `or(user_id.eq.${user.id},matched_user_id.eq.${user.id})` }, () => savedGetExistingMatches.current())
+      .subscribe();
+      
+    const blocksChannel = supabase.channel('block-updates-listener')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'blocked_users', filter: `or(blocker_id.eq.${user.id},blocked_id.eq.${user.id})` }, handleBlockUpdate)
+      .subscribe();
 
     return () => {
       supabase.removeChannel(profileChannel);
       supabase.removeChannel(matchesChannel);
       supabase.removeChannel(blocksChannel);
     };
-  }, [user, triggerMatchGeneration, getExistingMatches]);
+  }, [user]); // This effect now only depends on `user`, making it stable.
 
   return {
     matches,
