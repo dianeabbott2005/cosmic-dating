@@ -78,6 +78,21 @@ function calculateAge(dateOfBirth: string): number {
 }
 
 /**
+ * Builds a readable conversation history string for the AI prompt.
+ */
+function buildConversationHistory(messages: Message[], aiUserId: string, aiName: string, humanName: string): string {
+    if (!messages || messages.length === 0) {
+        return "No conversation history yet.";
+    }
+
+    // Messages are fetched in descending order, so we reverse to show chronological order for the prompt
+    return messages.slice().reverse().map(msg => {
+        const speaker = msg.sender_id === aiUserId ? aiName : humanName;
+        return `${speaker}: ${msg.content}`;
+    }).join('\n');
+}
+
+/**
  * Fetches the conversation context summary and detailed chat.
  */
 async function getConversationContext(supabaseClient: SupabaseClient, chatId: string) {
