@@ -70,32 +70,48 @@ export const BlockProvider = ({ children }: { children: React.ReactNode }) => {
 
     fetchBlockLists();
 
-    const channel = supabase
-      .channel(`blocked-users-changes-for-${userId}`)
-      .on(
-        'postgres_changes',
-        {
+    // Channel 1: Listens for when I block or unblock someone
+    const myBlocksChannel = supabase
+      .channel(`my-blocks-changes-for-${userId}`)
+      .on('postgres_changes', {
           event: '*',
           schema: 'public',
           table: 'blocked_users',
-          filter: `or(blocker_id.eq.${userId},blocked_id.eq.${userId})`,
+          filter: `blocker_id=eq.${userId}`,
         },
         (payload) => {
-          console.log('useBlock.subscription: Real-time block change RECEIVED. Payload:', payload);
+          console.log('Real-time [My Blocks]: Event received. Refetching lists. Payload:', payload);
           fetchBlockLists();
         }
       )
       .subscribe((status, err) => {
-        if (status === 'SUBSCRIBED') {
-          console.log('useBlock.subscription: Successfully SUBSCRIBED to real-time block changes.');
-        } else {
-          console.error(`useBlock.subscription: Real-time subscription status: ${status}`, err);
+        if (status === 'SUBSCRIBED') console.log(`Real-time [My Blocks]: Successfully subscribed for user ${userId}.`);
+        else console.error(`Real-time [My Blocks]: Subscription status: ${status}`, err);
+      });
+
+    // Channel 2: Listens for when someone else blocks or unblocks me
+    const blocksOnMeChannel = supabase
+      .channel(`blocks-on-me-changes-for-${userId}`)
+      .on('postgres_changes', {
+          event: '*',
+          schema: 'public',
+          table: 'blocked_users',
+          filter: `blocked_id=eq.${userId}`,
+        },
+        (payload) => {
+          console.log('Real-time [Blocks On Me]: Event received. Refetching lists. Payload:', payload);
+          fetchBlockLists();
         }
+      )
+      .subscribe((status, err) => {
+        if (status === 'SUBSCRIBED') console.log(`Real-time [Blocks On Me]: Successfully subscribed for user ${userId}.`);
+        else console.error(`Real-time [Blocks On Me]: Subscription status: ${status}`, err);
       });
 
     return () => {
-      console.log('useBlock.subscription: Cleaning up and removing channel subscription.');
-      supabase.removeChannel(channel);
+      console.log('useBlock.subscription: Cleaning up and removing channel subscriptions.');
+      supabase.removeChannel(myBlocksChannel);
+      supabase.removeChannel(blocksOnMeChannel);
     };
   }, [userId, fetchBlockLists]);
 
