@@ -27,57 +27,50 @@ export const BlockProvider = ({ children }: { children: React.ReactNode }) => {
   const [usersWhoBlockedMeIds, setUsersWhoBlockedMeIds] = useState<string[]>([]);
   const userId = user?.id;
 
-  const fetchBlockLists = useCallback(async () => {
+  useEffect(() => {
     if (!userId) {
       setBlockedUserIds([]);
       setUsersWhoBlockedMeIds([]);
       return;
     }
-    console.log('useBlock.fetchBlockLists: Fetching block lists for user:', userId);
 
-    const { data: myBlocks, error: myBlocksError } = await supabase
-      .from('blocked_users')
-      .select('blocked_id')
-      .eq('blocker_id', userId);
+    const fetchBlockLists = async () => {
+      console.log('useBlock.useEffect.fetchBlockLists: Fetching block lists for user:', userId);
+      
+      const { data: myBlocks, error: myBlocksError } = await supabase
+        .from('blocked_users')
+        .select('blocked_id')
+        .eq('blocker_id', userId);
 
-    if (myBlocksError) {
-      console.error('useBlock.fetchBlockLists: Error fetching my blocks:', myBlocksError);
-    } else {
-      const newBlockedIds = myBlocks.map(b => b.blocked_id);
-      console.log('useBlock.fetchBlockLists: Fetched users I have blocked:', newBlockedIds);
-      setBlockedUserIds(newBlockedIds);
-    }
+      if (myBlocksError) console.error('useBlock.useEffect.fetchBlockLists: Error fetching my blocks:', myBlocksError);
+      else setBlockedUserIds(myBlocks.map(b => b.blocked_id));
 
-    const { data: blocksOnMe, error: blocksOnMeError } = await supabase
-      .from('blocked_users')
-      .select('blocker_id')
-      .eq('blocked_id', userId);
+      const { data: blocksOnMe, error: blocksOnMeError } = await supabase
+        .from('blocked_users')
+        .select('blocker_id')
+        .eq('blocked_id', userId);
 
-    if (blocksOnMeError) {
-      console.error('useBlock.fetchBlockLists: Error fetching blocks on me:', blocksOnMeError);
-    } else {
-      const newBlockedByMeIds = blocksOnMe.map(b => b.blocker_id);
-      console.log('useBlock.fetchBlockLists: Fetched users who have blocked me:', newBlockedByMeIds);
-      setUsersWhoBlockedMeIds(newBlockedByMeIds);
-    }
-    
-    console.log('useBlock.fetchBlockLists: Finished updating block lists.');
-  }, [userId]);
-
-  useEffect(() => {
-    if (!userId) return;
+      if (blocksOnMeError) console.error('useBlock.useEffect.fetchBlockLists: Error fetching blocks on me:', blocksOnMeError);
+      else setUsersWhoBlockedMeIds(blocksOnMe.map(b => b.blocker_id));
+      
+      console.log('useBlock.useEffect.fetchBlockLists: Finished updating block lists.');
+    };
 
     fetchBlockLists();
 
+    const channelName = `blocked-users-changes-for-${userId}`;
+    const filterString = `or(blocker_id.eq.${userId},blocked_id.eq.${userId})`;
+    console.log(`useBlock.useEffect: Setting up subscription on channel "${channelName}" with filter "${filterString}"`);
+
     const channel = supabase
-      .channel(`blocked-users-changes-for-${userId}`)
+      .channel(channelName)
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
           table: 'blocked_users',
-          filter: `or(blocker_id.eq.${userId},blocked_id.eq.${userId})`,
+          filter: filterString,
         },
         (payload) => {
           console.log('useBlock.subscription: Real-time block change RECEIVED. Payload:', payload);
@@ -86,17 +79,19 @@ export const BlockProvider = ({ children }: { children: React.ReactNode }) => {
       )
       .subscribe((status, err) => {
         if (status === 'SUBSCRIBED') {
-          console.log('useBlock.subscription: Successfully SUBSCRIBED to real-time block changes.');
+          console.log(`useBlock.subscription: Successfully SUBSCRIBED to channel "${channelName}".`);
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error(`useBlock.subscription: CHANNEL_ERROR on "${channelName}".`, err);
         } else {
-          console.error(`useBlock.subscription: Real-time subscription status: ${status}`, err);
+          console.warn(`useBlock.subscription: Status is "${status}" on channel "${channelName}".`, err || '');
         }
       });
 
     return () => {
-      console.log('useBlock.subscription: Cleaning up and removing channel subscription.');
+      console.log(`useBlock.useEffect: Cleaning up and removing subscription on channel "${channelName}".`);
       supabase.removeChannel(channel);
     };
-  }, [userId, fetchBlockLists]);
+  }, [userId]);
 
   const blockUser = useCallback(async (userIdToBlock: string) => {
     if (!userId) throw new Error('User must be logged in to block.');

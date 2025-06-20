@@ -17,7 +17,7 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
   const [message, setMessage] = useState('');
   const { user } = useAuth();
   const { messages, loading, initializeChat, sendMessage } = useChat();
-  const { isBlockedBy, amIBlocking } = useBlock();
+  const { isBlockedBy, amIBlocking, blockedUserIds, usersWhoBlockedMeIds } = useBlock();
   const [isBlockDialogOpen, setIsBlockDialogOpen] = useState(false);
   const { toast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -26,10 +26,12 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
   const haveIBlocked = amIBlocking(match.user_id);
 
   useEffect(() => {
-    console.log(`EnhancedChatView.useEffect[blockStatus]: Block status for match ${match.first_name} (${match.user_id}):`);
-    console.log(`- hasBeenBlocked (they blocked me): ${hasBeenBlocked}`);
-    console.log(`- haveIBlocked (I blocked them): ${haveIBlocked}`);
-  }, [hasBeenBlocked, haveIBlocked, match.first_name, match.user_id]);
+    console.log(`EnhancedChatView.useEffect[blockStatus] for match ${match.first_name} (${match.user_id}):`);
+    console.log(`- Raw usersWhoBlockedMeIds from hook:`, usersWhoBlockedMeIds);
+    console.log(`- Raw blockedUserIds from hook:`, blockedUserIds);
+    console.log(`- Checking if ${match.user_id} is in usersWhoBlockedMeIds: ${hasBeenBlocked}`);
+    console.log(`- Checking if ${match.user_id} is in blockedUserIds: ${haveIBlocked}`);
+  }, [hasBeenBlocked, haveIBlocked, match.first_name, match.user_id, blockedUserIds, usersWhoBlockedMeIds]);
 
   const sunSign = match.date_of_birth ? getSunSign(match.date_of_birth) : null;
 
