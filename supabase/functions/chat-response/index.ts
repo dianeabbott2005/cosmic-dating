@@ -67,7 +67,7 @@ async function getProfile(supabaseClient: SupabaseClient, userId: string) {
 async function getConversationContext(supabaseClient: SupabaseClient, chatId: string) {
   const { data: context } = await supabaseClient
     .from('conversation_contexts')
-    .select('context_summary, detailed_chat') // Select both columns
+    .select('context_summary, detailed_chat, block_threshold')
     .eq('chat_id', chatId)
     .single();
   return context;
@@ -183,7 +183,7 @@ async function scheduleMessage(supabaseClient: SupabaseClient, chatId: string, s
   });
 }
 
-async function updateContext(supabaseClient: SupabaseClient, chatId: string, newSummary: string, existingDetailedChat: string | null, latestExchange: string) {
+async function updateContext(supabaseClient: SupabaseClient, chatId: string, newSummary: string, existingDetailedChat: string | null, latestExchange: string, newThreshold: number) {
   const updatedDetailedChat = existingDetailedChat 
     ? `${existingDetailedChat}\n${latestExchange}` 
     : latestExchange;
@@ -194,6 +194,7 @@ async function updateContext(supabaseClient: SupabaseClient, chatId: string, new
       chat_id: chatId,
       context_summary: newSummary,
       detailed_chat: updatedDetailedChat,
+      block_threshold: newThreshold,
       last_updated: new Date().toISOString(),
     }, { onConflict: 'chat_id' });
 }
@@ -241,13 +242,11 @@ serve(async (req) => {
     const chatResponse = await callAiApi(chatPrompt, MAX_TOKEN_LIMIT);
 
     // --- Update Database and Schedule Messages ---
-    const currentThreshold = receiverProfile.block_threshold || 0.0;
+    const currentThreshold = context?.block_threshold ?? 0.2;
     const newThreshold = Math.max(0.0, Math.min(1.0, currentThreshold - sentimentAdjustment));
-
-    await supabaseClient.from('profiles').update({ block_threshold: newThreshold }).eq('user_id', receiverId);
     
     const fullLatestExchange = `${latestExchange}\n${receiverProfile.first_name}: "${chatResponse.replace(new RegExp(MESSAGE_DELIMITER, 'g'), '\n')}"`;
-    await updateContext(supabaseClient, chatId, newSummary, context?.detailed_chat, fullLatestExchange);
+    await updateContext(supabaseClient, chatId, newSummary, context?.detailed_chat, fullLatestExchange, newThreshold);
 
     if (newThreshold >= 1.0) {
       const blockMessage = "I don't think we're a good match. I'm ending this conversation.";
