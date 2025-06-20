@@ -25,6 +25,27 @@ const NON_NATIVE_ENGLISH_REGIONS: { [key: string]: { languageIssue: string; dial
 // Define a threshold for immediate vs. delayed sending
 const IMMEDIATE_SEND_THRESHOLD_MS = 50 * 1000; // 50 seconds
 
+// --- New: Disrespectful/Bot Detection and Responses ---
+const DISRESPECT_KEYWORDS = ['bot', 'ai', 'robot', 'fake', 'machine', 'algorithm', 'program', 'script', 'computer', 'unreal', 'not real', 'pathetic', 'stupid', 'idiot', 'dumb', 'loser', 'boring', 'annoying', 'useless', 'shut up', 'fuck you', 'asshole', 'bitch', 'cunt', 'dick', 'moron', 'retard', 'ugly', 'loser', 'weirdo', 'creepy', 'freak', 'go away', 'leave me alone', 'stop talking', 'i hate you'];
+
+const FIRM_RESPONSES = [
+  "I'm not comfortable with that kind of language. Please keep our conversation respectful.",
+  "I'm here for a genuine connection. If the tone becomes disrespectful, I won't be able to continue.",
+  "That's not a very kind thing to say. I prefer to keep our interactions positive.",
+  "I'm a real person looking for real connections. Disrespectful comments are not welcome.",
+  "I'm not going to engage with that. Let's keep things friendly.",
+  "I'm not a bot, and I don't appreciate being called one. Let's focus on getting to know each other respectfully.",
+  "I'm here to chat with people who are genuinely interested in connecting. If you're not, that's okay, but please be respectful.",
+];
+
+/**
+ * Checks if a message contains disrespectful language or "bot" accusations.
+ */
+function isDisrespectful(message: string): boolean {
+  const lowerCaseMessage = message.toLowerCase();
+  return DISRESPECT_KEYWORDS.some(keyword => lowerCaseMessage.includes(keyword));
+}
+
 /**
  * Calculates a human-like typing delay for a single message part.
  * This is used to determine the time it takes to "type" a message.
@@ -234,7 +255,7 @@ Analyze the sentiment of the user's last message and the overall tone of the rec
 
 -   **If the sentiment is positive or neutral:** Continue the conversation as described above, maintaining an engaging and friendly tone.
 -   **If the sentiment is slightly negative, critical, or challenging:** Respond cautiously. You might ask for clarification, acknowledge their feeling without necessarily agreeing, or gently try to steer the conversation to a more neutral topic. Do NOT be overly accommodating or apologetic if it's not warranted. Your goal is to maintain a realistic human interaction, which includes not always being "nice" if the other person is being difficult.
--   **If the sentiment is strongly negative, hostile, or abusive:** Respond briefly and firmly. State that you are not comfortable with the tone and will not engage further if it continues. Do NOT engage in arguments or reciprocate negativity. Prioritize your well-being and the platform's safety guidelines. Your response should aim to de-escalate or politely end the interaction if the negative tone persists. You can choose to ghost the user if they are being abusive or hostile or boring.
+-   **If the sentiment is strongly negative, hostile, or abusive:** Respond briefly and firmly. State that you are not comfortable with the tone and will not engage further if it continues. Do NOT engage in arguments or reciprocate negativity. Prioritize your well-being and the platform's safety guidelines. You can choose to ghost the user if they are being abusive or hostile or boring.
 
 ${senderProfile?.first_name || 'The user'} just sent: ${message}
 
@@ -378,6 +399,36 @@ serve(async (req) => {
       );
     }
 
+    // --- NEW: Disrespectful/Bot Detection Logic ---
+    if (isDisrespectful(message)) {
+      console.log(`Detected disrespectful/bot accusation in message ${messageId}.`);
+      await markMessageAsProcessed(supabaseClient, messageId); // Mark as processed immediately
+
+      // Randomly decide to ghost or send a firm response
+      if (Math.random() < 0.5) { // 50% chance to ghost
+        console.log(`AI is ghosting in response to disrespectful message ${messageId}.`);
+        return new Response(
+          JSON.stringify({ success: true, status: 'ghosted', message: 'AI decided to ghost due to disrespectful input.' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      } else { // 50% chance to send a firm response
+        const firmResponse = FIRM_RESPONSES[Math.floor(Math.random() * FIRM_RESPONSES.length)];
+        console.log(`AI sending firm response to disrespectful message ${messageId}: "${firmResponse}"`);
+        
+        const responseDelay = calculateResponseDelay();
+        await new Promise(resolve => setTimeout(resolve, responseDelay));
+        
+        await storeAiResponse(supabaseClient, chatId, receiverId, firmResponse);
+        
+        return new Response(
+          JSON.stringify({ success: true, status: 'firm_response_sent', aiResponse: firmResponse }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+    // --- END NEW: Disrespectful/Bot Detection Logic ---
+
+
     const responseDelay = calculateResponseDelay();
 
     const [receiverProfile, senderProfile, context, recentMessages, lastAiMessageTimestamp] = await Promise.all([
@@ -405,28 +456,9 @@ serve(async (req) => {
     // 1. Remove all common markdown characters
     fullAiResponse = fullAiResponse.replace(/[\*_`#]/g, ''); 
     
-    // 2. Introduce typos (with reduced probability)
-    //fullAiResponse = introduceTypos(fullAiResponse);
-    console.info("fullAiResponse=" + fullAiResponse)
-    // 3. Remove the exact delimiter from the full response before splitting,
-    //    in case the AI accidentally included it in a non-splitting context.
-    //const exactDelimiterRegex = new RegExp(MESSAGE_DELIMITER.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'g');
-    //fullAiResponse = fullAiResponse.replace(exactDelimiterRegex, '').trim();
-
     const individualMessages = fullAiResponse.split(MESSAGE_DELIMITER).filter(part => part !== "");
     console.info("individualMessages=" + individualMessages)
-    // 4. Split by delimiter
-    /*const individualMessages = fullAiResponse.split(MESSAGE_DELIMITER)
-                                             .map(msg => msg.trim())
-                                             .filter(msg => msg.length > 0)
-                                             .map(msg => {
-                                                // 5. Apply a more general cleanup for any remaining delimiter-like partials
-                                                //    This regex targets common variations like "MESSAGEBREAK", "DYAD", "BREAK"
-                                                let cleanedMsg = msg.replace(/DYAD_?MESSAGE_?BREAK|MESSAGEBREAK|---?DYAD|MESSAGE_?BREAK---?/gi, '').trim();
-                                                return cleanedMsg;
-                                             });
-    // --- END Enhanced Post-processing ---
-    */
+    
     // If the total delay (initial response delay + sum of typing delays + sum of inter-message gaps) is too long, schedule it
     const totalTypingDelay = individualMessages.reduce((sum, msg) => sum + calculateTypingDelay(msg.length), 0);
     const totalInterMessageGaps = individualMessages.length > 1 ? (individualMessages.length - 1) * calculateInterMessageGap() : 0;
