@@ -431,9 +431,13 @@ serve(async (req)=>{
     const conversationHistory = buildConversationHistory(recentMessages, receiverId, receiverProfile.first_name, senderProfile?.first_name);
     const enhancedPrompt = buildEnhancedPrompt(receiverProfile, senderProfile, context, conversationHistory, message, timeSinceLastAiMessage);
     let fullAiResponse = await callAiApi(enhancedPrompt);
+    
     // --- START Enhanced Post-processing ---
-    // 1. Remove all common markdown characters
+    // 1. Programmatically strip all emojis as a failsafe
+    fullAiResponse = fullAiResponse.replace(/\p{Emoji}/gu, '').trim();
+    // 2. Remove all common markdown characters
     fullAiResponse = fullAiResponse.replace(/[\*_`#]/g, '');
+
     const individualMessages = fullAiResponse.split(MESSAGE_DELIMITER).filter((part)=>part !== "");
     console.info("individualMessages=" + individualMessages);
     // If the total delay (initial response delay + sum of typing delays + sum of inter-message gaps) is too long, schedule it

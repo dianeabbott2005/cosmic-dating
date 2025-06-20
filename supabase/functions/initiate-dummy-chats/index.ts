@@ -506,6 +506,8 @@ serve(async (req) => {
             const aiPrompt = buildAiPrompt(dummyProfile, humanProfile, context, conversationHistory, lastHumanMessage, timeSinceLastAiMessage, isInitialChat, wasAiLastSpeaker);
             let fullAiResponse = await callAiApi(aiPrompt);
             
+            // Programmatically strip all emojis as a failsafe
+            fullAiResponse = fullAiResponse.replace(/\p{Emoji}/gu, '').trim();
             // Remove all common markdown characters
             fullAiResponse = fullAiResponse.replace(/[\*_`#]/g, ''); 
             
