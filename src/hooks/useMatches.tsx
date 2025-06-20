@@ -30,7 +30,7 @@ export const useMatches = () => {
   const [matches, setMatches] = useState<MatchProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
-  const { blockedUserIds, usersWhoBlockedMeIds, fetchBlockLists } = useBlock();
+  const { blockedUserIds, usersWhoBlockedMeIds } = useBlock();
   const isWindowFocused = useWindowFocus();
   const userId = user?.id;
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -104,32 +104,6 @@ export const useMatches = () => {
       refreshMatches();
     }
   }, [isWindowFocused, refreshMatches]);
-
-  useEffect(() => {
-    if (!userId) return;
-
-    const handleBlockUpdate = () => {
-      fetchBlockLists();
-    };
-
-    const profileChannel = supabase.channel(`profile-updates-for-matches-${userId}`)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `user_id=eq.${userId}` }, refreshMatches)
-      .subscribe();
-
-    const matchesChannel = supabase.channel(`matches-listener-${userId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'matches', filter: `or(user_id.eq.${userId},matched_user_id.eq.${userId})` }, refreshMatches)
-      .subscribe();
-      
-    const blocksChannel = supabase.channel(`block-updates-listener-${userId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'blocked_users', filter: `or(blocker_id.eq.${userId},blocked_id.eq.${userId})` }, handleBlockUpdate)
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(profileChannel);
-      supabase.removeChannel(matchesChannel);
-      supabase.removeChannel(blocksChannel);
-    };
-  }, [userId, refreshMatches, fetchBlockLists]);
 
   return { matches, loading, refreshMatches };
 };
