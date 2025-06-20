@@ -258,15 +258,19 @@ serve(async (req) => {
     const analysisPrompt = buildAnalysisPrompt(context?.context_summary, context?.detailed_chat, latestExchange);
     const analysisResponse = await callAiApi(analysisPrompt, 50);
 
-    let newSummary = "Context updated.";
+    // FIX: Initialize newSummary with the existing context summary to prevent data loss.
+    let newSummary = context?.context_summary || "Chat initiated.";
     let sentimentAdjustment = 0.0;
+
     if (analysisResponse.includes(ANALYSIS_DELIMITER)) {
       const parts = analysisResponse.split(ANALYSIS_DELIMITER);
-      newSummary = parts[0].trim();
+      newSummary = parts[0].trim(); // Only update if parsing is successful
       const parsedSentiment = parseFloat(parts[1].trim());
-      if (!isNaN(parsedSentiment)) sentimentAdjustment = parsedSentiment;
+      if (!isNaN(parsedSentiment)) {
+        sentimentAdjustment = parsedSentiment;
+      }
     } else {
-      console.warn("Failed to parse analysis response, using defaults.", { analysisResponse });
+      console.warn("Failed to parse analysis response, preserving old summary.", { analysisResponse });
     }
 
     // --- Consecutive Negativity Logic ---
