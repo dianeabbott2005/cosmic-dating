@@ -25,6 +25,12 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
   const hasBeenBlocked = isBlockedBy(match.user_id);
   const haveIBlocked = amIBlocking(match.user_id);
 
+  useEffect(() => {
+    console.log(`EnhancedChatView.useEffect[blockStatus]: Block status for match ${match.first_name} (${match.user_id}):`);
+    console.log(`- hasBeenBlocked (they blocked me): ${hasBeenBlocked}`);
+    console.log(`- haveIBlocked (I blocked them): ${haveIBlocked}`);
+  }, [hasBeenBlocked, haveIBlocked, match.first_name, match.user_id]);
+
   const sunSign = match.date_of_birth ? getSunSign(match.date_of_birth) : null;
 
   const formatSignName = (sign: string | null) => {

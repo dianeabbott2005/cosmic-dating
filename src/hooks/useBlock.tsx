@@ -33,25 +33,35 @@ export const BlockProvider = ({ children }: { children: React.ReactNode }) => {
       setUsersWhoBlockedMeIds([]);
       return;
     }
-    console.log('useBlock: Fetching block lists for user:', userId);
+    console.log('useBlock.fetchBlockLists: Fetching block lists for user:', userId);
 
     const { data: myBlocks, error: myBlocksError } = await supabase
       .from('blocked_users')
       .select('blocked_id')
       .eq('blocker_id', userId);
 
-    if (myBlocksError) console.error('Error fetching my blocks:', myBlocksError);
-    else setBlockedUserIds(myBlocks.map(b => b.blocked_id));
+    if (myBlocksError) {
+      console.error('useBlock.fetchBlockLists: Error fetching my blocks:', myBlocksError);
+    } else {
+      const newBlockedIds = myBlocks.map(b => b.blocked_id);
+      console.log('useBlock.fetchBlockLists: Fetched users I have blocked:', newBlockedIds);
+      setBlockedUserIds(newBlockedIds);
+    }
 
     const { data: blocksOnMe, error: blocksOnMeError } = await supabase
       .from('blocked_users')
       .select('blocker_id')
       .eq('blocked_id', userId);
 
-    if (blocksOnMeError) console.error('Error fetching blocks on me:', blocksOnMeError);
-    else setUsersWhoBlockedMeIds(blocksOnMe.map(b => b.blocker_id));
+    if (blocksOnMeError) {
+      console.error('useBlock.fetchBlockLists: Error fetching blocks on me:', blocksOnMeError);
+    } else {
+      const newBlockedByMeIds = blocksOnMe.map(b => b.blocker_id);
+      console.log('useBlock.fetchBlockLists: Fetched users who have blocked me:', newBlockedByMeIds);
+      setUsersWhoBlockedMeIds(newBlockedByMeIds);
+    }
     
-    console.log('useBlock: Block lists updated.');
+    console.log('useBlock.fetchBlockLists: Finished updating block lists.');
   }, [userId]);
 
   useEffect(() => {
@@ -70,19 +80,20 @@ export const BlockProvider = ({ children }: { children: React.ReactNode }) => {
           filter: `or(blocker_id.eq.${userId},blocked_id.eq.${userId})`,
         },
         (payload) => {
-          console.log('useBlock: Real-time block change received, refetching lists.', payload);
+          console.log('useBlock.subscription: Real-time block change RECEIVED. Payload:', payload);
           fetchBlockLists();
         }
       )
-      .subscribe((status) => {
+      .subscribe((status, err) => {
         if (status === 'SUBSCRIBED') {
-          console.log('useBlock: Successfully subscribed to real-time block changes.');
+          console.log('useBlock.subscription: Successfully SUBSCRIBED to real-time block changes.');
         } else {
-          console.error(`useBlock: Real-time subscription status: ${status}`);
+          console.error(`useBlock.subscription: Real-time subscription status: ${status}`, err);
         }
       });
 
     return () => {
+      console.log('useBlock.subscription: Cleaning up and removing channel subscription.');
       supabase.removeChannel(channel);
     };
   }, [userId, fetchBlockLists]);
