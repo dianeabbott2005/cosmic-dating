@@ -7,7 +7,6 @@ import ConsentScreen from '@/components/ConsentScreen';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import type { Database } from '@/integrations/supabase/types';
-// Removed useMatches here as its refreshMatches is no longer explicitly called from Index.
 
 const Index = () => {
   const [currentView, setCurrentView] = useState<'welcome' | 'consent' | 'registration' | 'dashboard'>('welcome');
@@ -17,14 +16,15 @@ const Index = () => {
   const { user: authUser } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const authUserId = authUser?.id;
 
   useEffect(() => {
     const initializeView = async () => {
       setLoading(true);
       setError(null);
       
-      if (authUser) {
-        console.log('Index.tsx: Auth user found:', authUser.id);
+      if (authUserId) {
+        console.log('Index.tsx: Auth user found:', authUserId);
         await checkUserProfile();
       } else {
         console.log('Index.tsx: No auth user');
@@ -41,10 +41,11 @@ const Index = () => {
     };
 
     initializeView();
-  }, [authUser, searchParams]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authUserId, searchParams]);
 
   const checkUserProfile = async () => {
-    if (!authUser) return;
+    if (!authUserId) return;
 
     // Add a small initial delay to allow Supabase triggers to complete
     console.log('Index.tsx: Introducing initial delay before profile fetch...');
@@ -69,7 +70,7 @@ const Index = () => {
             place_of_birth, time_of_birth, updated_at, user_id, timezone, is_active,
             has_agreed_to_terms
           `)
-          .eq('user_id', authUser.id)
+          .eq('user_id', authUserId)
           .maybeSingle();
 
         if (dbError && dbError.code !== 'PGRST116') { // PGRST116 is "No rows found"
@@ -133,7 +134,7 @@ const Index = () => {
   };
 
   const handleGetStarted = () => {
-    if (authUser) {
+    if (authUserId) {
       console.log('Index.tsx: Get Started clicked with auth user, directing to consent screen.');
       setCurrentView('consent'); // Always go to consent if authenticated
     } else {
@@ -156,7 +157,7 @@ const Index = () => {
 
   const handleBackToWelcome = () => {
     console.log('Index.tsx: Back button clicked from registration flow.');
-    if (authUser) {
+    if (authUserId) {
       // If user is logged in, going back from registration means they might need to re-agree or complete profile
       checkUserProfile(); 
     } else {

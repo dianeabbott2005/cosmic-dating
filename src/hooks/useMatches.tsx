@@ -32,9 +32,10 @@ export const useMatches = () => {
   const { user } = useAuth();
   const { blockedUserIds, usersWhoBlockedMeIds, fetchBlockLists } = useBlock();
   const isWindowFocused = useWindowFocus();
+  const userId = user?.id;
 
   const getExistingMatches = useCallback(async () => {
-    if (!user) {
+    if (!userId) {
       setMatches([]);
       return;
     }
@@ -51,7 +52,7 @@ export const useMatches = () => {
           user1_profile:profiles!matches_user_id_fkey(user_id, first_name, date_of_birth, time_of_birth, place_of_birth, gender),
           user2_profile:profiles!matches_matched_user_id_fkey(user_id, first_name, date_of_birth, time_of_birth, place_of_birth, gender)
         `)
-        .or(`user_id.eq.${user.id},matched_user_id.eq.${user.id}`);
+        .or(`user_id.eq.${userId},matched_user_id.eq.${userId}`);
 
       if (error) throw error;
 
@@ -59,10 +60,10 @@ export const useMatches = () => {
       const allBlockedIds = new Set([...blockedUserIds, ...usersWhoBlockedMeIds]);
 
       (existingMatches || []).forEach(match => {
-        const otherUserId = match.user_id === user.id ? match.matched_user_id : match.user_id;
-        const otherUserProfile = match.user_id === user.id ? match.user2_profile : match.user1_profile;
+        const otherUserId = match.user_id === userId ? match.matched_user_id : match.user_id;
+        const otherUserProfile = match.user_id === userId ? match.user2_profile : match.user1_profile;
 
-        if (otherUserProfile && otherUserId !== user.id && !uniqueMatchesMap.has(otherUserId) && !allBlockedIds.has(otherUserId)) {
+        if (otherUserProfile && otherUserId !== userId && !uniqueMatchesMap.has(otherUserId) && !allBlockedIds.has(otherUserId)) {
           const age = calculateAge(otherUserProfile.date_of_birth);
           uniqueMatchesMap.set(otherUserId, {
             ...otherUserProfile,
@@ -79,30 +80,30 @@ export const useMatches = () => {
     } finally {
       setLoading(false);
     }
-  }, [user, blockedUserIds, usersWhoBlockedMeIds]);
+  }, [userId, blockedUserIds, usersWhoBlockedMeIds]);
 
   const triggerMatchGeneration = useCallback(async () => {
-    if (!user) {
+    if (!userId) {
       console.log('triggerMatchGeneration: No user, cannot generate matches.');
       return;
     }
     setLoading(true);
-    console.log('triggerMatchGeneration: Invoking generate-matches Edge Function for user:', user.id);
+    console.log('triggerMatchGeneration: Invoking generate-matches Edge Function for user:', userId);
     try {
       const { error } = await supabase.functions.invoke('generate-matches', {
-        body: { user_id: user.id }
+        body: { user_id: userId }
       });
 
       if (error) {
         console.error('triggerMatchGeneration: Error invoking generate-matches function:', error.message);
       }
-      // We no longer call getExistingMatches here; the realtime subscription will handle it.
+      // Rely on realtime subscription to call getExistingMatches
     } catch (error: any) {
       console.error('triggerMatchGeneration: Unexpected error:', error.message);
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [userId]);
 
   const savedGetExistingMatches = useRef(getExistingMatches);
   const savedTriggerMatchGeneration = useRef(triggerMatchGeneration);
@@ -115,21 +116,19 @@ export const useMatches = () => {
   });
 
   useEffect(() => {
-    if (user) {
+    if (userId) {
       savedTriggerMatchGeneration.current();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  }, [userId]);
 
   useEffect(() => {
-    if (isWindowFocused && user) {
+    if (isWindowFocused && userId) {
       savedGetExistingMatches.current();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isWindowFocused, user]);
+  }, [isWindowFocused, userId]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!userId) return;
 
     const handleBlockUpdate = () => {
       savedFetchBlockLists.current().then(() => {
@@ -138,15 +137,15 @@ export const useMatches = () => {
     };
 
     const profileChannel = supabase.channel('profile-updates-for-matches')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `user_id=eq.${user.id}` }, () => savedTriggerMatchGeneration.current())
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `user_id=eq.${userId}` }, () => savedTriggerMatchGeneration.current())
       .subscribe();
 
-    const matchesChannel = supabase.channel('new-matches-listener')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'matches', filter: `or(user_id.eq.${user.id},matched_user_id.eq.${user.id})` }, () => savedGetExistingMatches.current())
+    const matchesChannel = supabase.channel('matches-listener')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'matches', filter: `or(user_id.eq.${userId},matched_user_id.eq.${userId})` }, () => savedGetExistingMatches.current())
       .subscribe();
       
     const blocksChannel = supabase.channel('block-updates-listener')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'blocked_users', filter: `or(blocker_id.eq.${user.id},blocked_id.eq.${user.id})` }, handleBlockUpdate)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'blocked_users', filter: `or(blocker_id.eq.${userId},blocked_id.eq.${userId})` }, handleBlockUpdate)
       .subscribe();
 
     return () => {
@@ -154,7 +153,7 @@ export const useMatches = () => {
       supabase.removeChannel(matchesChannel);
       supabase.removeChannel(blocksChannel);
     };
-  }, [user]);
+  }, [userId]);
 
   return {
     matches,

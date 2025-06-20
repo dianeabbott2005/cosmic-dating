@@ -26,15 +26,16 @@ export const BlockProvider = ({ children }: { children: React.ReactNode }) => {
   const { user } = useAuth();
   const [blockedUserIds, setBlockedUserIds] = useState<string[]>([]);
   const [usersWhoBlockedMeIds, setUsersWhoBlockedMeIds] = useState<string[]>([]);
+  const userId = user?.id;
 
   const fetchBlockLists = useCallback(async () => {
-    if (!user) return;
+    if (!userId) return;
 
     // Fetch users I have blocked
     const { data: myBlocks, error: myBlocksError } = await supabase
       .from('blocked_users')
       .select('blocked_id')
-      .eq('blocker_id', user.id);
+      .eq('blocker_id', userId);
 
     if (myBlocksError) console.error('Error fetching my blocks:', myBlocksError);
     else setBlockedUserIds(myBlocks.map(b => b.blocked_id));
@@ -43,38 +44,38 @@ export const BlockProvider = ({ children }: { children: React.ReactNode }) => {
     const { data: blocksOnMe, error: blocksOnMeError } = await supabase
       .from('blocked_users')
       .select('blocker_id')
-      .eq('blocked_id', user.id);
+      .eq('blocked_id', userId);
 
     if (blocksOnMeError) console.error('Error fetching blocks on me:', blocksOnMeError);
     else setUsersWhoBlockedMeIds(blocksOnMe.map(b => b.blocker_id));
-  }, [user]);
+  }, [userId]);
 
   useEffect(() => {
-    if (user) {
+    if (userId) {
       fetchBlockLists();
     } else {
       // Clear lists on sign out
       setBlockedUserIds([]);
       setUsersWhoBlockedMeIds([]);
     }
-  }, [user, fetchBlockLists]);
+  }, [userId, fetchBlockLists]);
 
   const blockUser = async (userIdToBlock: string) => {
-    if (!user) throw new Error('User must be logged in to block.');
+    if (!userId) throw new Error('User must be logged in to block.');
     const { error } = await supabase
       .from('blocked_users')
-      .insert({ blocker_id: user.id, blocked_id: userIdToBlock });
+      .insert({ blocker_id: userId, blocked_id: userIdToBlock });
     if (error) throw error;
     // Refresh lists
     await fetchBlockLists();
   };
 
   const unblockUser = async (userIdToUnblock: string) => {
-    if (!user) throw new Error('User must be logged in to unblock.');
+    if (!userId) throw new Error('User must be logged in to unblock.');
     const { error } = await supabase
       .from('blocked_users')
       .delete()
-      .eq('blocker_id', user.id)
+      .eq('blocker_id', userId)
       .eq('blocked_id', userIdToUnblock);
     if (error) throw error;
     // Refresh lists

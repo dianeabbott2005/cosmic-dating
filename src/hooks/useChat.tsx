@@ -39,22 +39,23 @@ export const useChat = () => {
   const isWindowFocused = useWindowFocus();
   const realtimeChannelRef = useRef<RealtimeChannel | null>(null);
   const otherUserIdRef = useRef<string | null>(null);
+  const userId = user?.id;
 
   const loadUserChats = useCallback(async () => {
-    if (!user) return;
+    if (!userId) return;
     setLoading(true);
     try {
       const { data: userChats, error } = await supabase
         .from('chats')
         .select(`*, messages (id, content, sender_id, created_at, chat_id)`)
-        .or(`user1_id.eq.${user.id},user2_id.eq.${user.id}`);
+        .or(`user1_id.eq.${userId},user2_id.eq.${userId}`);
 
       if (error) throw error;
 
       const allBlockedIds = new Set([...blockedUserIds, ...usersWhoBlockedMeIds]);
 
       const chatPromises = (userChats || []).map(async (chat) => {
-        const otherUserId = chat.user1_id === user.id ? chat.user2_id : chat.user1_id;
+        const otherUserId = chat.user1_id === userId ? chat.user2_id : chat.user1_id;
         if (allBlockedIds.has(otherUserId)) return null;
 
         const { data: profile } = await supabase.from('profiles').select('first_name, user_id, date_of_birth, place_of_birth').eq('user_id', otherUserId).single();
@@ -83,7 +84,7 @@ export const useChat = () => {
     } finally {
       setLoading(false);
     }
-  }, [user, blockedUserIds, usersWhoBlockedMeIds]);
+  }, [userId, blockedUserIds, usersWhoBlockedMeIds]);
 
   const loadMessages = useCallback(async (chatId: string) => {
     const { data, error } = await supabase.from('messages').select('*').eq('chat_id', chatId).order('created_at', { ascending: true });
@@ -92,11 +93,11 @@ export const useChat = () => {
   }, []);
 
   const initializeChat = useCallback(async (otherUserId: string) => {
-    if (!user) return;
+    if (!userId) return;
     setLoading(true);
     otherUserIdRef.current = otherUserId;
     try {
-      const { data: existingChat } = await supabase.from('chats').select('*').or(`and(user1_id.eq.${user.id},user2_id.eq.${otherUserId}),and(user1_id.eq.${otherUserId},user2_id.eq.${user.id})`).maybeSingle();
+      const { data: existingChat } = await supabase.from('chats').select('*').or(`and(user1_id.eq.${userId},user2_id.eq.${otherUserId}),and(user1_id.eq.${otherUserId},user2_id.eq.${userId})`).maybeSingle();
       if (existingChat) {
         setChat(existingChat);
         await loadMessages(existingChat.id);
@@ -109,21 +110,21 @@ export const useChat = () => {
     } finally {
       setLoading(false);
     }
-  }, [user, loadMessages]);
+  }, [userId, loadMessages]);
 
   const sendMessage = async (content: string) => {
-    if (!user || !content.trim()) return;
+    if (!userId || !content.trim()) return;
     try {
       let currentChat = chat;
       if (!currentChat) {
         const otherUserId = otherUserIdRef.current;
         if (!otherUserId) throw new Error('Cannot create chat: other user ID is missing.');
-        const { data: newChat, error: createError } = await supabase.from('chats').insert({ user1_id: user.id, user2_id: otherUserId }).select().single();
+        const { data: newChat, error: createError } = await supabase.from('chats').insert({ user1_id: userId, user2_id: otherUserId }).select().single();
         if (createError) throw createError;
         setChat(newChat);
         currentChat = newChat;
       }
-      const { data, error } = await supabase.from('messages').insert({ chat_id: currentChat.id, sender_id: user.id, content: content.trim() }).select().single();
+      const { data, error } = await supabase.from('messages').insert({ chat_id: currentChat.id, sender_id: userId, content: content.trim() }).select().single();
       if (error) throw error;
       if (data) setMessages(prev => [...prev, data]);
     } catch (error) {
@@ -140,24 +141,22 @@ export const useChat = () => {
   });
 
   useEffect(() => {
-    if (user) {
+    if (userId) {
       savedLoadUserChats.current();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  }, [userId]);
 
   useEffect(() => {
-    if (isWindowFocused && user) {
+    if (isWindowFocused && userId) {
       savedLoadUserChats.current();
       if (chat?.id) {
         savedLoadMessages.current(chat.id);
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isWindowFocused, user, chat?.id]);
+  }, [isWindowFocused, userId, chat?.id]);
 
   useEffect(() => {
-    if (!chat?.id || !user?.id) {
+    if (!chat?.id || !userId) {
       return;
     }
 
@@ -170,7 +169,7 @@ export const useChat = () => {
     
     channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `chat_id=eq.${chat.id}` }, (payload) => {
       const newMessage = payload.new as Message;
-      if (newMessage.sender_id !== user.id) {
+      if (newMessage.sender_id !== userId) {
         setMessages(prevMessages => {
           if (prevMessages.some(msg => msg.id === newMessage.id)) {
             return prevMessages;
@@ -188,7 +187,7 @@ export const useChat = () => {
         realtimeChannelRef.current = null;
       }
     };
-  }, [chat?.id, user?.id]);
+  }, [chat?.id, userId]);
 
   return { chat, chats, messages, loading, initializeChat, sendMessage, loadUserChats };
 };
