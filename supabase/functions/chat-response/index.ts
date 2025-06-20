@@ -9,9 +9,8 @@ const corsHeaders = {
 
 const MESSAGE_DELIMITER = "@@@MESSAGEBREAK@@@";
 const SUMMARY_DELIMITER = "@@@SUMMARY_UPDATE@@@";
-const SENTIMENT_DELIMITER = "@@@SENTIMENT_ADJUST@@@"; // New delimiter
+const SENTIMENT_DELIMITER = "@@@SENTIMENT_ADJUST@@@";
 const MAX_TOKEN_LIMIT = 100;
-const IMMEDIATE_SEND_THRESHOLD_MS = 50 * 1000;
 
 // --- Helper Functions ---
 const calculateTypingDelay = (messageLength: number): number => {
@@ -171,34 +170,61 @@ serve(async (req) => {
       getRecentMessages(supabaseClient, chatId),
     ]);
 
-    const currentThreshold = receiverProfile.block_threshold || 0.0;
-
     const prompt = buildAiPrompt(receiverProfile, senderProfile, context, buildConversationHistory(recentMessages, receiverId, receiverProfile.first_name, senderProfile?.first_name), message);
     const rawAiResponse = await callAiApi(prompt);
 
-    const summaryParts = rawAiResponse.split(SUMMARY_DELIMITER);
-    const messagePart = summaryParts[0].trim();
-    const sentimentParts = (summaryParts[1] || '').split(SENTIMENT_DELIMITER);
-    const newSummary = sentimentParts[0].trim();
-    const sentimentAdjustStr = sentimentParts[1] ? sentimentParts[1].trim() : '0.0';
-    const sentimentAdjustment = parseFloat(sentimentAdjustStr) || 0.0;
+    // --- Defensive Parsing Logic ---
+    let messagePart = null;
+    let newSummary = null;
+    let sentimentAdjustment = null;
 
-    const newThreshold = Math.max(0.0, Math.min(1.0, currentThreshold - sentimentAdjustment)); // Positive sentiment DECREASES threshold
+    if (rawAiResponse.includes(SUMMARY_DELIMITER) && rawAiResponse.includes(SENTIMENT_DELIMITER)) {
+      const summaryParts = rawAiResponse.split(SUMMARY_DELIMITER);
+      const sentimentParts = (summaryParts[1] || '').split(SENTIMENT_DELIMITER);
+      
+      if (summaryParts.length >= 2 && sentimentParts.length >= 2) {
+        messagePart = summaryParts[0].trim();
+        newSummary = sentimentParts[0].trim();
+        const sentimentAdjustStr = sentimentParts[1] ? sentimentParts[1].trim() : '0.0';
+        const parsedSentiment = parseFloat(sentimentAdjustStr);
+
+        if (!isNaN(parsedSentiment)) {
+          sentimentAdjustment = parsedSentiment;
+        } else {
+          console.warn('Parsed sentiment was NaN. Defaulting to 0.0. Raw string:', sentimentParts[1]);
+          sentimentAdjustment = 0.0;
+        }
+      }
+    }
+
+    // If parsing failed, log it and exit gracefully without sending a message.
+    if (messagePart === null || newSummary === null || sentimentAdjustment === null) {
+      console.error('Failed to parse AI response. The AI did not follow the required format.', { rawAiResponse });
+      await markMessageProcessed(supabaseClient, messageId);
+      return new Response(JSON.stringify({ success: true, status: 'parsing_failed' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+    // --- End of Parsing Logic ---
+
+    const currentThreshold = receiverProfile.block_threshold || 0.0;
+    const newThreshold = Math.max(0.0, Math.min(1.0, currentThreshold - sentimentAdjustment));
 
     await supabaseClient.from('profiles').update({ block_threshold: newThreshold }).eq('user_id', receiverId);
-
-    if (newSummary) await updateContext(supabaseClient, chatId, newSummary);
+    await updateContext(supabaseClient, chatId, newSummary);
 
     if (newThreshold >= 1.0) {
       const blockMessage = "I don't think we're a good match. I'm ending this conversation.";
       await scheduleMessage(supabaseClient, chatId, receiverId, blockMessage, 1000);
       await supabaseClient.from('blocked_users').insert({ blocker_id: receiverId, blocked_id: senderId });
     } else {
-      const messagesToSend = messagePart.split(MESSAGE_DELIMITER).filter(m => m);
-      let cumulativeDelay = calculateResponseDelay();
-      for (const msgContent of messagesToSend) {
-        await scheduleMessage(supabaseClient, chatId, receiverId, msgContent, cumulativeDelay);
-        cumulativeDelay += calculateTypingDelay(msgContent.length) + calculateInterMessageGap();
+      const messagesToSend = messagePart.split(MESSAGE_DELIMITER).filter(m => m.trim());
+      if (messagesToSend.length > 0) {
+        let cumulativeDelay = calculateResponseDelay();
+        for (const msgContent of messagesToSend) {
+          await scheduleMessage(supabaseClient, chatId, receiverId, msgContent.trim(), cumulativeDelay);
+          cumulativeDelay += calculateTypingDelay(msgContent.length) + calculateInterMessageGap();
+        }
+      } else {
+        console.warn('Message part was empty after parsing. Nothing to send.', { rawAiResponse });
       }
     }
 
