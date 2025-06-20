@@ -53,49 +53,32 @@ async function getProfile(supabaseClient: SupabaseClient, userId: string) {
   return profile;
 }
 
-async function getRecentMessages(supabaseClient: SupabaseClient, chatId: string) {
-  const { data: recentMessages } = await supabaseClient
-    .from('messages')
-    .select('content, sender_id')
+async function getConversationContext(supabaseClient: SupabaseClient, chatId: string) {
+  const { data: context } = await supabaseClient
+    .from('conversation_contexts')
+    .select('context_summary, detailed_chat') // Select both columns
     .eq('chat_id', chatId)
-    .order('created_at', { ascending: false })
-    .limit(10);
-  return recentMessages || [];
+    .single();
+  return context;
 }
 
-function buildConversationHistory(recentMessages: any[], aiUserId: string, aiFirstName: string, humanFirstName: string) {
-  if (!recentMessages || recentMessages.length === 0) return '';
-  return recentMessages
-    .reverse()
-    .map(msg => `${msg.sender_id === aiUserId ? aiFirstName : humanFirstName}: ${msg.content}`)
-    .join('\n');
-}
+function buildAnalysisPrompt(existingSummary: string | null, detailedHistory: string | null, latestExchange: string) {
+  let prompt = `You are a conversation analyst. Your task is to update a conversation summary based on the latest exchange.
 
-const NON_NATIVE_ENGLISH_REGIONS: { [key: string]: { languageIssue: string; dialect: string; } } = {
-  'India': { languageIssue: 'subtle grammatical errors, Indian English phrasing', dialect: 'occasional Hindi/local language phrases (e.g., "acha", "yaar")' },
-  'Japan': { languageIssue: 'slightly formal tone, occasional direct translations', dialect: 'polite particles (e.g., "ne", "desu")' },
-  'South Korea': { languageIssue: 'slightly formal tone, occasional direct translations', dialect: 'common Korean interjections (e.g., "aigoo", "jinjja")' },
-  'Italy': { languageIssue: 'more expressive phrasing, occasional Italian loanwords', dialect: 'common Italian expressions (e.g., "mamma mia", "ciao")' },
-  'France': { languageIssue: 'more formal sentence structure, occasional French loanwords', dialect: 'common French expressions (e.g., "voilà", "zut")' },
-  'Russia': { languageIssue: 'direct phrasing, less use of articles', dialect: 'common Russian interjections (e.g., "davai", "nu")' },
-  'Egypt': { languageIssue: 'more direct, less nuanced phrasing', dialect: 'common Arabic interjections (e.g., "inshallah", "habibi")' },
-  'UAE': { languageIssue: 'formal yet friendly, occasional Arabic loanwords', dialect: 'common Arabic expressions (e.g., "mashallah", "khalas")' },
-};
+**Existing Summary:**
+${existingSummary || "No summary yet."}
 
-function buildAnalysisPrompt(conversationHistory: string, userMessage: string, aiFirstName: string, humanFirstName: string) {
-  let prompt = `You are a conversation analyst. Your task is to understand the emotional state and intent of a user in a dating app conversation.
+**Full Conversation History (for reference):**
+${detailedHistory || "No history yet."}
 
-**Conversation History:**
-${conversationHistory}
-
-**The user, ${humanFirstName}, just sent this message to ${aiFirstName}:**
-"${userMessage}"
+**Latest Exchange:**
+${latestExchange}
 
 **Your Task & Output Format (CRITICAL):**
 Your final output MUST follow this structure exactly, with no extra text:
-1.  A new, one-sentence summary of the user's current emotional state and intent (e.g., "The user is flirting playfully," or "The user seems bored and is giving a short, dismissive reply.").
+1.  A **new, updated, one-sentence summary** of the entire conversation's state.
 2.  The analysis delimiter: "${ANALYSIS_DELIMITER}"
-3.  A sentiment adjustment value (a number between -0.2 and 0.2).
+3.  A sentiment adjustment value (a number between -0.2 and 0.2) based on the **latest exchange**.
 
 **Sentiment Adjustment Rules:**
 - **Highly Positive (+0.1 to +0.2):** User is admiring, reassuring, good flirting, respectful.
@@ -189,12 +172,19 @@ async function scheduleMessage(supabaseClient: SupabaseClient, chatId: string, s
   });
 }
 
-async function updateContext(supabaseClient: SupabaseClient, chatId: string, summary: string) {
-  await supabaseClient.from('conversation_contexts').upsert({
-    chat_id: chatId,
-    context_summary: summary,
-    last_updated: new Date().toISOString(),
-  }, { onConflict: 'chat_id' });
+async function updateContext(supabaseClient: SupabaseClient, chatId: string, newSummary: string, existingDetailedChat: string | null, latestExchange: string) {
+  const updatedDetailedChat = existingDetailedChat 
+    ? `${existingDetailedChat}\n${latestExchange}` 
+    : latestExchange;
+
+  await supabaseClient
+    .from('conversation_contexts')
+    .upsert({
+      chat_id: chatId,
+      context_summary: newSummary,
+      detailed_chat: updatedDetailedChat,
+      last_updated: new Date().toISOString(),
+    }, { onConflict: 'chat_id' });
 }
 
 async function markMessageProcessed(supabaseClient: SupabaseClient, messageId: string) {
@@ -211,32 +201,31 @@ serve(async (req) => {
     const { data: msg } = await supabaseClient.from('messages').select('is_processed').eq('id', messageId).single();
     if (msg?.is_processed) return new Response(JSON.stringify({ status: 'skipped' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
-    const [receiverProfile, senderProfile, recentMessages] = await Promise.all([
+    const [receiverProfile, senderProfile, context] = await Promise.all([
       getProfile(supabaseClient, receiverId),
       getProfile(supabaseClient, senderId),
-      getRecentMessages(supabaseClient, chatId),
+      getConversationContext(supabaseClient, chatId),
     ]);
 
-    const conversationHistory = buildConversationHistory(recentMessages, receiverId, receiverProfile.first_name, senderProfile.first_name);
+    const latestExchange = `${senderProfile.first_name}: "${message}"`;
 
     // --- First AI Call: Get Analysis ---
-    const analysisPrompt = buildAnalysisPrompt(conversationHistory, message, receiverProfile.first_name, senderProfile.first_name);
+    const analysisPrompt = buildAnalysisPrompt(context?.context_summary, context?.detailed_chat, latestExchange);
     const analysisResponse = await callAiApi(analysisPrompt, 50);
 
-    let newSummary = "Context updated."; // Default summary
+    let newSummary = "Context updated.";
     let sentimentAdjustment = 0.0;
     if (analysisResponse.includes(ANALYSIS_DELIMITER)) {
       const parts = analysisResponse.split(ANALYSIS_DELIMITER);
       newSummary = parts[0].trim();
       const parsedSentiment = parseFloat(parts[1].trim());
-      if (!isNaN(parsedSentiment)) {
-        sentimentAdjustment = parsedSentiment;
-      }
+      if (!isNaN(parsedSentiment)) sentimentAdjustment = parsedSentiment;
     } else {
       console.warn("Failed to parse analysis response, using defaults.", { analysisResponse });
     }
 
     // --- Second AI Call: Get Chat Response ---
+    const conversationHistory = context?.detailed_chat ? `${context.detailed_chat}\n${latestExchange}` : latestExchange;
     const chatPrompt = buildChatPrompt(receiverProfile, senderProfile, conversationHistory, message, newSummary, sentimentAdjustment);
     const chatResponse = await callAiApi(chatPrompt, MAX_TOKEN_LIMIT);
 
@@ -245,7 +234,9 @@ serve(async (req) => {
     const newThreshold = Math.max(0.0, Math.min(1.0, currentThreshold - sentimentAdjustment));
 
     await supabaseClient.from('profiles').update({ block_threshold: newThreshold }).eq('user_id', receiverId);
-    await updateContext(supabaseClient, chatId, newSummary);
+    
+    const fullLatestExchange = `${latestExchange}\n${receiverProfile.first_name}: "${chatResponse.replace(new RegExp(MESSAGE_DELIMITER, 'g'), '\n')}"`;
+    await updateContext(supabaseClient, chatId, newSummary, context?.detailed_chat, fullLatestExchange);
 
     if (newThreshold >= 1.0) {
       const blockMessage = "I don't think we're a good match. I'm ending this conversation.";

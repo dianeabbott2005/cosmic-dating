@@ -78,28 +78,12 @@ function calculateAge(dateOfBirth: string): number {
 }
 
 /**
- * Fetches the full profile of a user.
- */
-async function getProfile(supabaseClient: SupabaseClient, userId: string) {
-    const { data: profile, error } = await supabaseClient
-      .from('profiles')
-      .select('*')
-      .eq('user_id', userId)
-      .single();
-
-    if (error || !profile) {
-      throw new Error(`Profile not found for ID: ${userId}`);
-    }
-    return profile;
-}
-
-/**
- * Fetches the conversation context summary.
+ * Fetches the conversation context summary and detailed chat.
  */
 async function getConversationContext(supabaseClient: SupabaseClient, chatId: string) {
     const { data: context } = await supabaseClient
       .from('conversation_contexts')
-      .select('context_summary')
+      .select('context_summary, detailed_chat')
       .eq('chat_id', chatId)
       .single();
     return context;
@@ -138,19 +122,6 @@ async function getLastMessageTimestamp(supabaseClient: SupabaseClient, chatId: s
   return data?.created_at || null;
 }
 
-/**
- * Builds a string of recent conversation history.
- */
-function buildConversationHistory(recentMessages: Message[], aiProfileId: string, aiFirstName: string, humanFirstName: string | undefined) {
-    if (!recentMessages || recentMessages.length === 0) {
-        return '';
-    }
-    return recentMessages
-        .reverse()
-        .map(msg => `${msg.sender_id === aiProfileId ? aiFirstName : (humanFirstName || 'User')}: ${msg.content}`)
-        .join('\n');
-}
-
 const NON_NATIVE_ENGLISH_REGIONS: { [key: string]: { languageIssue: string; dialect: string; } } = {
   'India': { languageIssue: 'subtle grammatical errors, Indian English phrasing', dialect: 'occasional Hindi/local language phrases (e.g., "acha", "yaar")' },
   'Japan': { languageIssue: 'slightly formal tone, occasional direct translations', dialect: 'polite particles (e.g., "ne", "desu")' },
@@ -173,7 +144,6 @@ function buildAiPrompt(aiProfile: any, humanProfile: any, context: any, conversa
       promptInstructions = `You are ${aiProfile.first_name}, a ${aiAge}-year-old ${aiProfile.gender} from ${aiProfile.place_of_birth}. Respond naturally and conversationally.`;
     }
     
-    // Add language issues and dialect instruction
     const region = Object.keys(NON_NATIVE_ENGLISH_REGIONS).find(key => aiProfile.place_of_birth.includes(key));
     if (region) {
       const { languageIssue, dialect } = NON_NATIVE_ENGLISH_REGIONS[region];
@@ -189,11 +159,9 @@ function buildAiPrompt(aiProfile: any, humanProfile: any, context: any, conversa
     if (isInitialChat) {
       promptInstructions += `\n\nYour response should be a single, very concise message to initiate a new conversation.`;
     } else {
-      // Add gap awareness instruction for re-engagement
       if (timeSinceLastAiMessage !== null && timeSinceLastAiMessage >= MIN_GAP_FOR_REENGAGEMENT_HOURS) {
           promptInstructions += `\n\nIt has been approximately ${Math.round(timeSinceLastAiMessage)} hours since your last message in this chat.`;
           if (wasAiLastSpeaker) {
-            // Updated instruction: Do not apologize, inquire about user's absence or pick up conversation
             promptInstructions += ` Do NOT apologize for the gap. Instead, inquire if everything is alright, or gently pick up from the last topic you discussed, showing concern or continued interest. Vary the way you do this.`;
           } else {
             promptInstructions += ` Acknowledge this gap naturally, perhaps with a friendly re-initiation or by expressing a slight curiosity about the delay, without being accusatory.`;
@@ -211,7 +179,6 @@ function buildAiPrompt(aiProfile: any, humanProfile: any, context: any, conversa
     promptInstructions += `\n\nABSOLUTELY NO EMOJIS. Your responses must not contain any emojis. This is a strict rule.`;
     promptInstructions += `\n\nYour response should be very concise and natural, like a human texting including rare varying human-like typos depending on the situation. It can be a single short message, or if it needed, break it into 1 to 6 (in varying degree choose number of messages) very short, related messages. Overall the combined length should never exceed the token limit "${MAX_TOKEN_LIMIT}". ABSOLUTELY CRITICAL: If you send multiple messages, separate each with the delimiter: "${MESSAGE_DELIMITER}", ensure you do this most accurately and not make any typos as it ruin the entire logic. This delimiter is ONLY for separating messages and MUST NOT appear within the content of any message. Ensure this is done with utmost accuracy.`;
 
-    // New Conversational Persona and Strategy
     promptInstructions += `\n\nNow, for the most crucial part: **Your Persona, Conversational Memory, and Engagement Strategy (Calculated & Realistic).**
 
 **1. Your Core Persona (Gender Dynamics):**
@@ -265,23 +232,6 @@ async function callAiApi(prompt: string): Promise<string> {
 }
 
 /**
- * Stores the AI-generated message in the database.
- */
-async function storeAiResponse(supabaseClient: SupabaseClient, chatId: string, senderId: string, content: string) {
-    const { data: newMessage, error } = await supabaseClient
-      .from('messages')
-      .insert({ chat_id: chatId, sender_id: senderId, content: content })
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Error storing message:', error);
-      throw error;
-    }
-    return newMessage;
-}
-
-/**
  * Schedules a message to be sent later.
  */
 async function scheduleDelayedMessage(supabaseClient: SupabaseClient, chatId: string, senderId: string, content: string, delayMs: number) {
@@ -303,23 +253,38 @@ async function scheduleDelayedMessage(supabaseClient: SupabaseClient, chatId: st
 }
 
 /**
- * Updates the conversation context summary.
+ * Updates the conversation context summary and detailed chat log.
  */
 async function updateConversationContext(supabaseClient: SupabaseClient, chatId: string, aiFirstName: string, humanFirstName: string, lastHumanMessage: string | null, aiResponse: string, existingContext: any) {
-    const contextUpdate = lastHumanMessage 
-      ? `${humanFirstName} said: "${lastHumanMessage}". ${aiFirstName} responded: "${aiResponse}".`
-      : `${aiFirstName} initiated with: "${aiResponse}".`;
+    const latestExchange = lastHumanMessage 
+      ? `${humanFirstName}: "${lastHumanMessage}"\n${aiFirstName}: "${aiResponse}"`
+      : `${aiFirstName}: "${aiResponse}"`;
+
+    const updatedDetailedChat = existingContext?.detailed_chat
+      ? `${existingContext.detailed_chat}\n${latestExchange}`
+      : latestExchange;
+
+    // Since this function doesn't do analysis, we create a simple summary update.
+    let newSummary;
+    if (isInitialChat) {
+      newSummary = `Chat initiated by ${aiFirstName}.`;
+    } else if (lastHumanMessage) {
+      newSummary = `AI responded to ${humanFirstName}.`;
+    } else {
+      newSummary = `AI re-engaged in conversation.`;
+    }
 
     await supabaseClient
       .from('conversation_contexts')
       .upsert({
         chat_id: chatId,
-        context_summary: existingContext?.context_summary 
-          ? `${existingContext.context_summary} ${contextUpdate}` 
-          : contextUpdate,
+        context_summary: newSummary,
+        detailed_chat: updatedDetailedChat,
         last_updated: new Date().toISOString()
       }, { onConflict: 'chat_id' });
 }
+
+let isInitialChat = false; // Define at a scope accessible by updateConversationContext
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -328,44 +293,34 @@ serve(async (req) => {
 
   const supabaseClient = createClient(
     Deno.env.get('SUPABASE_URL') ?? '',
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '' // Use service role key for admin operations
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
   );
 
   try {
     console.log('initiate-dummy-chats (Edge): Starting dummy chat initiation/re-engagement process...');
 
-    // 1. Fetch all human profiles (is_active: false)
     const { data: humanProfiles, error: humanProfilesError } = await supabaseClient
       .from('profiles')
       .select('*')
       .eq('is_active', false)
-      .not('date_of_birth', 'is', null) // Ensure human profile is complete enough
+      .not('date_of_birth', 'is', null)
       .not('time_of_birth', 'is', null)
       .not('place_of_birth', 'is', null)
       .not('gender', 'is', null)
       .not('looking_for', 'is', null);
 
-    if (humanProfilesError) {
-      console.error('initiate-dummy-chats (Edge): Error fetching human profiles:', humanProfilesError.message);
-      throw humanProfilesError;
-    }
+    if (humanProfilesError) throw humanProfilesError;
 
     if (!humanProfiles || humanProfiles.length === 0) {
-      console.log('initiate-dummy-chats (Edge): No human profiles found to initiate/re-engage chats for.');
       return new Response(JSON.stringify({ success: true, message: 'No human profiles to initiate chats for.' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    console.log(`initiate-dummy-chats (Edge): Found ${humanProfiles.length} human profiles.`);
-
     let chatsProcessedCount = 0;
     const errors: string[] = [];
 
     for (const humanProfile of humanProfiles) {
-      console.log(`initiate-dummy-chats (Edge): Processing human user: ${humanProfile.first_name} (${humanProfile.user_id})`);
-
-      // Fetch matches for this human profile where the matched user is an active (dummy) profile
       const { data: matches, error: matchesError } = await supabaseClient
         .from('matches')
         .select(`
@@ -377,43 +332,32 @@ serve(async (req) => {
         .eq('user_id', humanProfile.user_id);
 
       if (matchesError) {
-        console.error(`initiate-dummy-chats (Edge): Error fetching matches for ${humanProfile.first_name}:`, matchesError.message);
         errors.push(`Failed to fetch matches for ${humanProfile.first_name}: ${matchesError.message}`);
         continue;
       }
 
       const potentialDummyPartners = (matches || [])
-        .filter(match => match.matched_profile?.is_active === true) // Ensure it's a dummy profile
+        .filter(match => match.matched_profile?.is_active === true)
         .map(match => match.matched_profile);
 
-      if (potentialDummyPartners.length === 0) {
-        console.log(`initiate-dummy-chats (Edge): No dummy matches found for ${humanProfile.first_name}.`);
-        continue;
-      }
-
-      console.log(`initiate-dummy-chats (Edge): Found ${potentialDummyPartners.length} potential dummy partners for ${humanProfile.first_name}.`);
+      if (potentialDummyPartners.length === 0) continue;
 
       for (const dummyProfile of potentialDummyPartners) {
-        if (!dummyProfile) {
-          console.log(`initiate-dummy-chats (Edge): Skipping invalid dummy profile.`);
-          continue;
-        }
+        if (!dummyProfile) continue;
 
-        // Check if a chat already exists between these two users
         const { data: existingChat, error: chatLookupError } = await supabaseClient
           .from('chats')
           .select('*')
           .or(`and(user1_id.eq.${dummyProfile.user_id},user2_id.eq.${humanProfile.user_id}),and(user1_id.eq.${humanProfile.user_id},user2_id.eq.${dummyProfile.user_id})`)
           .maybeSingle();
 
-        if (chatLookupError && chatLookupError.code !== 'PGRST116') { // PGRST116 is "No rows found"
-          console.error(`initiate-dummy-chats (Edge): Error looking up chat between ${dummyProfile.first_name} and ${humanProfile.first_name}:`, chatLookupError.message);
+        if (chatLookupError && chatLookupError.code !== 'PGRST116') {
           errors.push(`Failed to lookup chat for ${dummyProfile.first_name} and ${humanProfile.first_name}: ${chatLookupError.message}`);
           continue;
         }
 
         let currentChatId: string | undefined;
-        let isInitialChat = false;
+        isInitialChat = false;
         let lastHumanMessage: string | null = null;
         let timeSinceLastAiMessage: number | null = null;
         let context: any = null;
@@ -423,9 +367,6 @@ serve(async (req) => {
 
         if (existingChat) {
           currentChatId = existingChat.id;
-          console.log(`initiate-dummy-chats (Edge): Chat already exists (${currentChatId}) between ${dummyProfile.first_name} and ${humanProfile.first_name}.`);
-
-          // Fetch context and recent messages for existing chat
           const [fetchedContext, recentMsgs] = await Promise.all([
               getConversationContext(supabaseClient, currentChatId),
               getRecentMessages(supabaseClient, currentChatId),
@@ -437,67 +378,37 @@ serve(async (req) => {
           const lastMessageOverall = recentMsgs.length > 0 ? recentMsgs[0] : null;
           let timeSinceLastMessageOverall: number | null = null;
           if (lastMessageOverall) {
-            const lastMessageDate = new Date(lastMessageOverall.created_at);
-            const now = new Date();
-            timeSinceLastMessageOverall = (now.getTime() - lastMessageDate.getTime()) / (1000 * 60); // in minutes
+            timeSinceLastMessageOverall = (new Date().getTime() - new Date(lastMessageOverall.created_at).getTime()) / (1000 * 60);
             wasAiLastSpeaker = lastMessageOverall.sender_id === dummyProfile.user_id;
           }
 
-          // Determine last human message if available
           const lastHumanMessageObj = recentMsgs.find(msg => msg.sender_id === humanProfile.user_id);
           lastHumanMessage = lastHumanMessageObj ? lastHumanMessageObj.content : null;
 
-          // Calculate time since AI last spoke (for re-engagement)
           const lastAiMsgTimestamp = await getLastMessageTimestamp(supabaseClient, currentChatId, dummyProfile.user_id);
           if (lastAiMsgTimestamp) {
-            const lastAiDate = new Date(lastAiMsgTimestamp);
-            const now = new Date();
-            timeSinceLastAiMessage = (now.getTime() - lastAiDate.getTime()) / (1000 * 60 * 60); // in hours
+            timeSinceLastAiMessage = (new Date().getTime() - new Date(lastAiMsgTimestamp).getTime()) / (1000 * 60 * 60);
           }
 
-          // Case 1: Human was the last speaker AND there's a significant delay in AI response
           if (!wasAiLastSpeaker && lastMessageOverall && timeSinceLastMessageOverall !== null && timeSinceLastMessageOverall >= UNRESPONDED_MESSAGE_THRESHOLD_MINUTES) {
             shouldProcess = true;
-            console.log(`initiate-dummy-chats (Edge): Human was last speaker for ${humanProfile.first_name}. Triggering AI response due to unresponded message gap (${timeSinceLastMessageOverall.toFixed(1)} minutes).`);
-          } 
-          // Case 2: AI was the last speaker AND there's a significant gap for re-engagement
-          else if (wasAiLastSpeaker && timeSinceLastAiMessage !== null && timeSinceLastAiMessage >= MIN_GAP_FOR_REENGAGEMENT_HOURS) {
-            if (Math.random() < REENGAGEMENT_RATE) {
-              shouldProcess = true;
-              console.log(`initiate-dummy-chats (Edge): Re-engaging with ${humanProfile.first_name} (gap: ${timeSinceLastAiMessage.toFixed(1)} hours, AI was last speaker).`);
-            } else {
-              console.log(`initiate-dummy-chats (Edge): Skipping re-engagement for ${humanProfile.first_name} (random chance).`);
-            }
-          } else {
-            console.log(`initiate-dummy-chats (Edge): No action needed for ${humanProfile.first_name} (chat is active or no re-engagement criteria met).`);
+          } else if (wasAiLastSpeaker && timeSinceLastAiMessage !== null && timeSinceLastAiMessage >= MIN_GAP_FOR_REENGAGEMENT_HOURS) {
+            if (Math.random() < REENGAGEMENT_RATE) shouldProcess = true;
           }
-
         } else {
-          // No existing chat, consider initiating a new one
           if (Math.random() < INITIATION_RATE) {
             isInitialChat = true;
             shouldProcess = true;
-            console.log(`initiate-dummy-chats (Edge): Attempting to initiate NEW chat between ${dummyProfile.first_name} (dummy) and ${humanProfile.first_name} (human).`);
-
-            // Create new chat
             const { data: newChat, error: chatCreateError } = await supabaseClient
               .from('chats')
-              .insert({
-                user1_id: dummyProfile.user_id, // Dummy initiates
-                user2_id: humanProfile.user_id // Human receives
-              })
-              .select()
-              .single();
-
+              .insert({ user1_id: dummyProfile.user_id, user2_id: humanProfile.user_id })
+              .select().single();
             if (chatCreateError) {
-              console.error(`initiate-dummy-chats (Edge): Error creating chat for ${dummyProfile.first_name} and ${humanProfile.first_name}:`, chatCreateError.message);
-              errors.push(`Failed to create chat for ${dummyProfile.first_name} and ${humanProfile.first_name}: ${chatCreateError.message}`);
-              shouldProcess = false; // Don't proceed if chat creation failed
+              errors.push(`Failed to create chat for ${dummyProfile.first_name}: ${chatCreateError.message}`);
+              shouldProcess = false;
             } else {
               currentChatId = newChat.id;
             }
-          } else {
-            console.log(`initiate-dummy-chats (Edge): Skipping NEW chat initiation for ${dummyProfile.first_name} (random chance).`);
           }
         }
 
@@ -506,86 +417,50 @@ serve(async (req) => {
             const aiPrompt = buildAiPrompt(dummyProfile, humanProfile, context, conversationHistory, lastHumanMessage, timeSinceLastAiMessage, isInitialChat, wasAiLastSpeaker);
             let fullAiResponse = await callAiApi(aiPrompt);
             
-            // Programmatically strip all emojis as a failsafe
             fullAiResponse = fullAiResponse.replace(/\p{Emoji}/gu, '').trim();
-            // Remove all common markdown characters
             fullAiResponse = fullAiResponse.replace(/[\*_`#]/g, ''); 
             
             const individualMessages = fullAiResponse.split(MESSAGE_DELIMITER).filter(part => part !== "");
 
-            // If the total delay (initial response delay + sum of typing delays + sum of inter-message gaps) is too long, schedule it
             const responseDelay = calculateResponseDelay();
             const totalTypingDelay = individualMessages.reduce((sum, msg) => sum + calculateTypingDelay(msg.length), 0);
             const totalInterMessageGaps = individualMessages.length > 1 ? (individualMessages.length - 1) * calculateInterMessageGap() : 0;
             const overallDelay = responseDelay + totalTypingDelay + totalInterMessageGaps;
 
             if (overallDelay > IMMEDIATE_SEND_THRESHOLD_MS) {
-              // Schedule each message with its cumulative delay
               let cumulativeDelay = responseDelay;
               for (let i = 0; i < individualMessages.length; i++) {
                 const msgContent = individualMessages[i];
                 await scheduleDelayedMessage(supabaseClient, currentChatId, dummyProfile.user_id, msgContent, cumulativeDelay);
                 cumulativeDelay += calculateTypingDelay(msgContent.length);
-                if (i < individualMessages.length - 1) {
-                  cumulativeDelay += calculateInterMessageGap(); // Add gap between messages
-                }
+                if (i < individualMessages.length - 1) cumulativeDelay += calculateInterMessageGap();
               }
-              // Update context immediately for the user's message + the *intended* AI response
-              await updateConversationContext(supabaseClient, currentChatId, dummyProfile.first_name, humanProfile.first_name, lastHumanMessage, fullAiResponse, context);
-
-              console.log(`initiate-dummy-chats (Edge): Scheduled ${individualMessages.length} messages from ${dummyProfile.first_name} to ${humanProfile.first_name}.`);
-
             } else {
-              // Proceed with immediate sending
-              await new Promise(resolve => setTimeout(resolve, responseDelay)); // Initial response delay
-
+              await new Promise(resolve => setTimeout(resolve, responseDelay));
               for (let i = 0; i < individualMessages.length; i++) {
                 const msgContent = individualMessages[i];
-                const typingDelay = calculateTypingDelay(msgContent.length);
-                await new Promise(resolve => setTimeout(resolve, typingDelay));
-
-                await storeAiResponse(supabaseClient, currentChatId, dummyProfile.user_id, msgContent);
-
-                if (i < individualMessages.length - 1) {
-                  const interMessageGap = calculateInterMessageGap();
-                  await new Promise(resolve => setTimeout(resolve, interMessageGap));
-                }
+                await new Promise(resolve => setTimeout(resolve, calculateTypingDelay(msgContent.length)));
+                await supabaseClient.from('messages').insert({ chat_id: currentChatId, sender_id: dummyProfile.user_id, content: msgContent });
+                if (i < individualMessages.length - 1) await new Promise(resolve => setTimeout(resolve, calculateInterMessageGap()));
               }
-              // Update conversation context with the full AI response (concatenated messages)
-              await updateConversationContext(supabaseClient, currentChatId, dummyProfile.first_name, humanProfile.first_name, lastHumanMessage, fullAiResponse, context);
-              console.log(`initiate-dummy-chats (Edge): Sent ${individualMessages.length} messages immediately from ${dummyProfile.first_name} to ${humanProfile.first_name}.`);
             }
+            await updateConversationContext(supabaseClient, currentChatId, dummyProfile.first_name, humanProfile.first_name, lastHumanMessage, fullAiResponse, context);
             chatsProcessedCount++;
-
           } catch (processError: any) {
-            console.error(`initiate-dummy-chats (Edge): Error processing chat for ${dummyProfile.first_name} and ${humanProfile.first_name}:`, processError.message);
-            errors.push(`Failed to process chat for ${dummyProfile.first_name} and ${humanProfile.first_name}: ${processError.message}`);
+            errors.push(`Failed to process chat for ${dummyProfile.first_name}: ${processError.message}`);
           }
         }
       }
     }
 
-    console.log(`initiate-dummy-chats (Edge): Finished. Chats processed (initiated/re-engaged): ${chatsProcessedCount}. Errors: ${errors.length}`);
-
     return new Response(
-      JSON.stringify({
-        success: true,
-        chatsProcessed: chatsProcessedCount,
-        errors: errors.length > 0 ? errors : undefined,
-      }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
+      JSON.stringify({ success: true, chatsProcessed: chatsProcessedCount, errors: errors.length > 0 ? errors : undefined }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
-
   } catch (error: any) {
-    console.error('initiate-dummy-chats (Edge): Top-level error:', error.message);
     return new Response(
       JSON.stringify({ error: error.message, success: false }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });
