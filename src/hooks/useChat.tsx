@@ -131,21 +131,29 @@ export const useChat = () => {
     }
   };
 
+  const savedLoadUserChats = useRef(loadUserChats);
+  const savedLoadMessages = useRef(loadMessages);
+
+  useEffect(() => {
+    savedLoadUserChats.current = loadUserChats;
+    savedLoadMessages.current = loadMessages;
+  });
+
   useEffect(() => {
     if (user) {
-      loadUserChats();
+      savedLoadUserChats.current();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   useEffect(() => {
     if (isWindowFocused && user) {
-      loadUserChats();
+      savedLoadUserChats.current();
       if (chat?.id) {
-        loadMessages(chat.id);
+        savedLoadMessages.current(chat.id);
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isWindowFocused, user, chat?.id]);
 
   useEffect(() => {
@@ -153,7 +161,6 @@ export const useChat = () => {
       return;
     }
 
-    // Clean up existing channel if it exists before creating a new one
     if (realtimeChannelRef.current) {
       supabase.removeChannel(realtimeChannelRef.current);
       realtimeChannelRef.current = null;
@@ -181,7 +188,7 @@ export const useChat = () => {
         realtimeChannelRef.current = null;
       }
     };
-  }, [chat?.id, user?.id]); // Dependency array is now stable and correct
+  }, [chat?.id, user?.id]);
 
   return { chat, chats, messages, loading, initializeChat, sendMessage, loadUserChats };
 };

@@ -106,7 +106,6 @@ export const useMatches = () => {
     }
   }, [user, getExistingMatches]);
 
-  // Use refs to hold the latest callbacks to prevent re-subscribing on every render
   const savedGetExistingMatches = useRef(getExistingMatches);
   const savedTriggerMatchGeneration = useRef(triggerMatchGeneration);
   const savedFetchBlockLists = useRef(fetchBlockLists);
@@ -119,22 +118,22 @@ export const useMatches = () => {
 
   useEffect(() => {
     if (user) {
-      triggerMatchGeneration();
+      savedTriggerMatchGeneration.current();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   useEffect(() => {
     if (isWindowFocused && user) {
-      getExistingMatches();
+      savedGetExistingMatches.current();
     }
-  }, [isWindowFocused, user, getExistingMatches]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isWindowFocused, user]);
 
   useEffect(() => {
     if (!user) return;
 
     const handleBlockUpdate = () => {
-      console.log('Block update detected, fetching new block lists and then matches.');
       savedFetchBlockLists.current().then(() => {
         savedGetExistingMatches.current();
       });
@@ -157,7 +156,7 @@ export const useMatches = () => {
       supabase.removeChannel(matchesChannel);
       supabase.removeChannel(blocksChannel);
     };
-  }, [user]); // This effect now only depends on `user`, making it stable.
+  }, [user]);
 
   return {
     matches,
