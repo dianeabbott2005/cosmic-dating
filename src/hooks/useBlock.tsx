@@ -68,14 +68,40 @@ export const BlockProvider = ({ children }: { children: React.ReactNode }) => {
       return;
     }
 
-    console.log(`useBlock (Provider): Setting up single real-time subscription for user: ${userId}`);
     fetchBlockLists();
 
     const handleRealtimeChange = (payload: any) => {
-      console.log('useBlock (Provider): Real-time block change received! Refetching lists.', payload);
-      // The safest and most robust action is to just refetch the lists.
-      // This avoids complex logic to parse the payload and ensures the state is always in sync.
-      fetchBlockLists();
+      console.log('useBlock (Provider): Real-time block change received!', {
+        eventType: payload.eventType,
+        payload: payload,
+      });
+
+      if (payload.eventType === 'INSERT') {
+        const newRecord = payload.new;
+        console.log('useBlock (Provider): Handling INSERT.', newRecord);
+        if (newRecord.blocker_id === userId) {
+          console.log(`useBlock (Provider): User ${userId} blocked ${newRecord.blocked_id}. Updating state.`);
+          setBlockedUserIds(prev => [...new Set([...prev, newRecord.blocked_id])]);
+        } else if (newRecord.blocked_id === userId) {
+          console.log(`useBlock (Provider): User ${newRecord.blocker_id} blocked ${userId}. Updating state.`);
+          setUsersWhoBlockedMeIds(prev => [...new Set([...prev, newRecord.blocker_id])]);
+        }
+      } else if (payload.eventType === 'DELETE') {
+        const oldRecord = payload.old;
+        console.log('useBlock (Provider): Handling DELETE.', oldRecord);
+        if (oldRecord.blocker_id && oldRecord.blocked_id) {
+          if (oldRecord.blocker_id === userId) {
+            console.log(`useBlock (Provider): User ${userId} unblocked ${oldRecord.blocked_id}. Updating state.`);
+            setBlockedUserIds(prev => prev.filter(id => id !== oldRecord.blocked_id));
+          } else if (oldRecord.blocked_id === userId) {
+            console.log(`useBlock (Provider): User ${oldRecord.blocker_id} unblocked ${userId}. Updating state.`);
+            setUsersWhoBlockedMeIds(prev => prev.filter(id => id !== oldRecord.blocker_id));
+          }
+        } else {
+          console.warn('useBlock (Provider): Incomplete DELETE payload, refetching block lists for safety.');
+          fetchBlockLists();
+        }
+      }
     };
 
     const blockChannel = supabase
@@ -83,7 +109,7 @@ export const BlockProvider = ({ children }: { children: React.ReactNode }) => {
       .on(
         'postgres_changes',
         {
-          event: '*', // Listen to INSERT, UPDATE, DELETE
+          event: '*',
           schema: 'public',
           table: 'blocked_users',
           filter: `or(blocker_id.eq.${userId},blocked_id.eq.${userId})`,
