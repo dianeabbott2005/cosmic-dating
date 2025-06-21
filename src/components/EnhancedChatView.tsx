@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { ArrowLeft, Send, MapPin, MoreVertical, ShieldOff, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { getSunSign } from '@/utils/astro/zodiacCalculations';
@@ -27,6 +27,10 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
 
+  // State for message batching
+  const [messageQueue, setMessageQueue] = useState<{ content: string; tempId: string }[]>([]);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const hasBeenBlocked = usersWhoBlockedMeIds.includes(match.user_id);
   const haveIBlocked = blockedUserIds.includes(match.user_id);
 
@@ -36,6 +40,46 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
     if (!sign) return '';
     return sign.charAt(0).toUpperCase() + sign.slice(1);
   };
+
+  const sendQueuedMessages = useCallback(async (chatForSend: Chat) => {
+    if (messageQueue.length === 0 || !user) {
+        return;
+    }
+
+    const queueToSend = [...messageQueue];
+    setMessageQueue([]);
+
+    const messagesToInsert = queueToSend.map(mq => ({
+        chat_id: chatForSend.id,
+        sender_id: user.id,
+        content: mq.content,
+    }));
+
+    const tempIds = queueToSend.map(mq => mq.tempId);
+
+    const { data: insertedMessages, error } = await supabase
+        .from('messages')
+        .insert(messagesToInsert)
+        .select();
+
+    if (error) {
+        toast({
+            title: "Error Sending Messages",
+            description: "Failed to send a batch of messages. Please try again.",
+            variant: "destructive",
+        });
+        setMessages(prev => prev.filter(m => !tempIds.includes(m.id)));
+        const failedContent = queueToSend.map(q => q.content).join('\n');
+        setNewMessage(prev => prev ? `${prev}\n${failedContent}` : failedContent);
+    } else if (insertedMessages) {
+        setMessages(prev => {
+            const nonTempMessages = prev.filter(m => !tempIds.includes(m.id));
+            const allMessages = [...nonTempMessages, ...insertedMessages];
+            allMessages.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+            return allMessages;
+        });
+    }
+  }, [messageQueue, user, toast]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,7 +92,6 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
     }
 
     let currentChat = chat;
-    // If chat doesn't exist, create it first
     if (!currentChat) {
       const { data: newChat, error: createError } = await supabase
         .from('chats')
@@ -64,18 +107,41 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
       setChat(newChat);
     }
 
-    const { error } = await supabase.from('messages').insert({
-      chat_id: currentChat.id,
-      sender_id: user.id,
-      content: newMessage.trim(),
-    });
+    const tempId = `temp-${Date.now()}-${Math.random()}`;
+    const tempMessage: Message = {
+        id: tempId,
+        content: newMessage.trim(),
+        sender_id: user.id,
+        created_at: new Date().toISOString(),
+        chat_id: currentChat.id,
+    };
 
-    if (error) {
-      toast({ title: "Error sending message", description: error.message, variant: "destructive" });
-    } else {
-      setNewMessage('');
+    setMessages(prev => [...prev, tempMessage]);
+    setMessageQueue(prev => [...prev, { content: newMessage.trim(), tempId }]);
+    setNewMessage('');
+
+    if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
     }
+
+    typingTimeoutRef.current = setTimeout(() => {
+        sendQueuedMessages(currentChat!);
+    }, 30000);
   };
+
+  const subscribeToChat = useCallback((chatId: string) => {
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+    }
+    const channel = supabase.channel(`chat-${chatId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `chat_id=eq.${chatId}` }, (payload) => {
+        if (payload.new.sender_id !== user?.id) {
+          setMessages(prev => [...prev, payload.new as Message]);
+        }
+      })
+      .subscribe();
+    channelRef.current = channel;
+  }, [user?.id]);
 
   useEffect(() => {
     if (!user || !match?.user_id) return;
@@ -91,11 +157,6 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
         .or(`and(user1_id.eq.${user.id},user2_id.eq.${match.user_id}),and(user1_id.eq.${match.user_id},user2_id.eq.${user.id})`)
         .maybeSingle();
 
-      if (channelRef.current) {
-        supabase.removeChannel(channelRef.current);
-        channelRef.current = null;
-      }
-
       if (existingChat) {
         setChat(existingChat);
         const { data: initialMessages, error: messagesError } = await supabase
@@ -109,13 +170,7 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
         } else {
           setMessages(initialMessages || []);
         }
-
-        const channel = supabase.channel(`chat-${existingChat.id}`)
-          .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `chat_id=eq.${existingChat.id}` }, (payload) => {
-            setMessages(prev => [...prev, payload.new as Message]);
-          })
-          .subscribe();
-        channelRef.current = channel;
+        subscribeToChat(existingChat.id);
       } else {
         setChat(null);
         setMessages([]);
@@ -131,8 +186,11 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
         supabase.removeChannel(channelRef.current);
         channelRef.current = null;
       }
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
     };
-  }, [user, match?.user_id, fetchBlockLists]);
+  }, [user, match?.user_id, fetchBlockLists, subscribeToChat]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
