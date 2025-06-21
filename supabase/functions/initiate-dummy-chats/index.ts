@@ -10,7 +10,6 @@ const corsHeaders = {
 };
 
 const MESSAGE_DELIMITER = "@@@MESSAGEBREAK@@@"; // Unique delimiter for splitting AI responses
-const ANALYSIS_DELIMITER = "@@@ANALYSISBREAK@@@";
 const MAX_TOKEN_LIMIT = 100; // Maximum tokens for the AI response
 const INITIATION_RATE = 0.03; // 3% chance for a dummy profile to initiate a chat with a human match
 const REENGAGEMENT_RATE = 0.1; // 10% chance for a dummy profile to re-engage in an existing chat if there's a gap
@@ -163,10 +162,9 @@ ${detailedHistory || "No history yet."}
 ${latestExchange}
 
 **Your Task & Output Format (CRITICAL):**
-Your final output MUST follow this structure exactly, with no extra text:
-1.  A **new, updated, one-sentence summary** of the entire conversation's state. This summary MUST use the names "${humanFirstName}" and "${aiFirstName}" and MUST NOT use the words "AI", "bot", "user", or "automated".
-2.  The analysis delimiter: "${ANALYSIS_DELIMITER}"
-3.  A sentiment adjustment value (a number between -0.2 and 0.2) based on the **latest exchange**.
+Your final output MUST be a valid JSON object with NO other text, markdown, or code fences. The JSON object must have exactly two keys:
+1.  "summary": A new, updated, one-sentence summary of the entire conversation's state. This summary MUST use the names "${humanFirstName}" and "${aiFirstName}" and MUST NOT use the words "AI", "bot", "user", or "automated".
+2.  "sentimentAdjustment": A sentiment adjustment value (a number between -0.2 and 0.2) based on the **latest exchange**.
 
 **Sentiment Adjustment Rules:**
 - **Highly Positive (+0.1 to +0.2):** User is admiring, reassuring, good flirting, respectful.
@@ -174,8 +172,11 @@ Your final output MUST follow this structure exactly, with no extra text:
 - **Negative (-0.1 to -0.05):** User is boring, dismissive, or slightly rude.
 - **Highly Negative (-0.2 to -0.1):** User is hostile, disrespectful, threatening, bullying.
 
-**Example Output:**
-${humanFirstName} is asking a thoughtful follow-up question to ${aiFirstName}, showing genuine interest.${ANALYSIS_DELIMITER}0.08`;
+**Example JSON Output:**
+{
+  "summary": "${humanFirstName} is asking a thoughtful follow-up question to ${aiFirstName}, showing genuine interest.",
+  "sentimentAdjustment": 0.08
+}`;
   return prompt;
 }
 
@@ -314,22 +315,23 @@ async function updateConversationContext(supabaseClient: SupabaseClient, chatId:
     if (lastHumanMessage) {
         const analysisPrompt = buildAnalysisPrompt(existingContext?.context_summary, existingContext?.detailed_chat, latestExchange, aiFirstName, humanFirstName);
         const analysisResponse = await callAiApi(analysisPrompt);
+        console.info("Raw analysis response received:", analysisResponse); // Log for debugging
 
         let newSummary = "Conversation is ongoing.";
         let sentimentAdjustment = 0.0;
 
-        const analysisRegex = /@@@ANALYSISBREAK@@@\s*(-?\d*\.?\d+)/;
-        const match = analysisResponse.match(analysisRegex);
-
-        if (match && match[1]) {
-            newSummary = analysisResponse.substring(0, match.index).trim();
-            const parsedSentiment = parseFloat(match[1]);
-            if (!isNaN(parsedSentiment)) {
-                sentimentAdjustment = parsedSentiment;
+        try {
+            const parsedAnalysis = JSON.parse(analysisResponse);
+            if (parsedAnalysis.summary && typeof parsedAnalysis.summary === 'string') {
+                newSummary = parsedAnalysis.summary;
             }
-        } else {
+            if (parsedAnalysis.sentimentAdjustment && typeof parsedAnalysis.sentimentAdjustment === 'number') {
+                sentimentAdjustment = parsedAnalysis.sentimentAdjustment;
+            }
+        } catch (e) {
+            console.warn("Failed to parse analysis response as JSON. Treating entire response as summary.", { analysisResponse, error: e.message });
             newSummary = analysisResponse.trim();
-            console.warn("Analysis delimiter not found in initiate-dummy-chats, using full response as summary.");
+            sentimentAdjustment = 0.0;
         }
 
         const consecutiveNegativeCount = existingContext?.consecutive_negative_count ?? 0;
