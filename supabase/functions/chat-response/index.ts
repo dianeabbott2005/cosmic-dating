@@ -266,6 +266,27 @@ serve(async (req) => {
     const { chatId, senderId, message, receiverId, messageId } = await req.json();
     const supabaseClient = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
 
+    // --- New Logic: Cancel pending AI messages on user reply ---
+    const { data: deletedMessages, error: deleteError } = await supabaseClient
+      .from('delayed_messages')
+      .delete()
+      .match({
+        chat_id: chatId,
+        sender_id: receiverId, // The AI is the sender of the messages to be cancelled
+        status: 'pending'
+      })
+      .select();
+
+    if (deleteError) {
+      console.error('Error cancelling pending messages:', deleteError);
+      // Non-fatal, log and continue
+    }
+
+    if (deletedMessages && deletedMessages.length > 0) {
+      console.log(`Cancelled ${deletedMessages.length} pending message(s) for chat ${chatId} from AI ${receiverId} due to new user reply.`);
+    }
+    // --- End of New Logic ---
+
     const { data: msg } = await supabaseClient.from('messages').select('is_processed').eq('id', messageId).single();
     if (msg?.is_processed) return new Response(JSON.stringify({ status: 'skipped' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
