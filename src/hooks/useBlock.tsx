@@ -104,8 +104,10 @@ export const BlockProvider = ({ children }: { children: React.ReactNode }) => {
       }
     };
 
+    // Use a unique channel name to prevent any potential caching issues on the real-time server.
+    const channelName = `block-changes-for-${userId}-${Math.random()}`;
     const blockChannel = supabase
-      .channel(`block-changes-for-${userId}`)
+      .channel(channelName)
       .on(
         'postgres_changes',
         {
@@ -118,14 +120,14 @@ export const BlockProvider = ({ children }: { children: React.ReactNode }) => {
       )
       .subscribe((status, err) => {
         if (status === 'SUBSCRIBED') {
-          console.log(`useBlock (Provider): Successfully subscribed to block-changes-for-${userId}`);
+          console.log(`useBlock (Provider): Successfully subscribed to ${channelName}`);
         } else {
-          console.error(`useBlock (Provider): Subscription status for block-changes: ${status}`, err);
+          console.error(`useBlock (Provider): Subscription status for ${channelName}: ${status}`, err);
         }
       });
 
     return () => {
-      console.log(`useBlock (Provider): Cleaning up subscription for user: ${userId}`);
+      console.log(`useBlock (Provider): Cleaning up subscription for channel: ${channelName}`);
       if (blockChannel) {
         supabase.removeChannel(blockChannel);
       }
