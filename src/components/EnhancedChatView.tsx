@@ -28,7 +28,7 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
   const channelRef = useRef<RealtimeChannel | null>(null);
 
   // State for message batching
-  const [messageQueue, setMessageQueue] = useState<{ content: string; tempId: string }[]>([]);
+  const [messageQueue, setMessageQueue] = useState<{ content: string; tempId: string; createdAt: string }[]>([]);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const hasBeenBlocked = usersWhoBlockedMeIds.includes(match.user_id);
@@ -53,6 +53,7 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
         chat_id: chatForSend.id,
         sender_id: user.id,
         content: mq.content,
+        created_at: mq.createdAt, // Send the original client-side timestamp
     }));
 
     const tempIds = queueToSend.map(mq => mq.tempId);
@@ -74,9 +75,6 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
     } else if (insertedMessages) {
         setMessages(prev => {
             const nonTempMessages = prev.filter(m => !tempIds.includes(m.id));
-            // The returned `insertedMessages` are already in the correct order.
-            // We do not re-sort here because batch-inserted messages can have the same timestamp,
-            // which makes sorting by `created_at` unstable.
             const allMessages = [...nonTempMessages, ...insertedMessages];
             return allMessages;
         });
@@ -109,17 +107,18 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
       setChat(newChat);
     }
 
+    const clientTimestamp = new Date().toISOString();
     const tempId = `temp-${Date.now()}-${Math.random()}`;
     const tempMessage: Message = {
         id: tempId,
         content: newMessage.trim(),
         sender_id: user.id,
-        created_at: new Date().toISOString(),
+        created_at: clientTimestamp,
         chat_id: currentChat.id,
     };
 
     setMessages(prev => [...prev, tempMessage]);
-    setMessageQueue(prev => [...prev, { content: newMessage.trim(), tempId }]);
+    setMessageQueue(prev => [...prev, { content: newMessage.trim(), tempId, createdAt: clientTimestamp }]);
     setNewMessage('');
 
     if (typingTimeoutRef.current) {

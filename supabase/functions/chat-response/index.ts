@@ -302,7 +302,7 @@ serve(async (req) => {
     const sentimentPrompt = buildSentimentPrompt(latestExchange);
 
     const [updatedSummary, sentimentResponse] = await Promise.all([
-        callAiApi(summaryPrompt, 75),
+        callAiApi(summaryPrompt, 200),
         callAiApi(sentimentPrompt, 10)
     ]);
 
