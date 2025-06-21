@@ -149,8 +149,8 @@ const NON_NATIVE_ENGLISH_REGIONS: { [key: string]: { languageIssue: string; dial
   'UAE': { languageIssue: 'formal yet friendly, occasional Arabic loanwords', dialect: 'common Arabic expressions (e.g., "mashallah", "khalas")' },
 };
 
-function buildAnalysisPrompt(existingSummary: string | null, detailedHistory: string | null, latestExchange: string, aiFirstName: string, humanFirstName: string) {
-  let prompt = `You are a conversation analyst. Your task is to update a conversation summary between ${humanFirstName} and ${aiFirstName}.
+function buildSummaryPrompt(existingSummary: string | null, detailedHistory: string | null, latestExchange: string, aiFirstName: string, humanFirstName: string): string {
+  return `You are a conversation analyst. Your task is to update a conversation summary between ${humanFirstName} and ${aiFirstName}.
 
 **Existing Summary:**
 ${existingSummary || "No summary yet."}
@@ -161,23 +161,26 @@ ${detailedHistory || "No history yet."}
 **Latest Exchange:**
 ${latestExchange}
 
-**Your Task & Output Format (CRITICAL):**
-Your response MUST be ONLY a valid JSON object. Do not include any other text, explanations, or markdown code fences like \`\`\`json. Start your response with { and end it with }. The JSON object must have exactly two keys:
-1.  "summary": A new, updated, one-sentence summary of the entire conversation's state. This summary MUST use the names "${humanFirstName}" and "${aiFirstName}" and MUST NOT use the words "AI", "bot", "user", or "automated".
-2.  "sentimentAdjustment": A sentiment adjustment value (a number between -0.2 and 0.2) based on the **latest exchange**.
+**Your Task (CRITICAL):**
+Provide ONLY the new, updated, one-sentence summary of the entire conversation's state. Do not add any other text, explanation, or formatting. The summary MUST use the names "${humanFirstName}" and "${aiFirstName}" and MUST NOT use the words "AI", "bot", "user", or "automated".
 
-**Sentiment Adjustment Rules:**
+**Example Output:**
+${humanFirstName} is asking a thoughtful follow-up question to ${aiFirstName}, showing genuine interest.`;
+}
+
+function buildSentimentPrompt(latestExchange: string): string {
+  return `Analyze the sentiment of the following exchange and provide ONLY a numerical score between -0.2 and 0.2. Do not add any other text or explanation.
+
+**Sentiment Score Rules:**
 - **Highly Positive (+0.1 to +0.2):** User is admiring, reassuring, good flirting, respectful.
 - **Neutral/Positive (-0.05 to +0.05):** Normal, friendly chat.
 - **Negative (-0.1 to -0.05):** User is boring, dismissive, or slightly rude.
 - **Highly Negative (-0.2 to -0.1):** User is hostile, disrespectful, threatening, bullying.
 
-**Example JSON Output:**
-{
-  "summary": "${humanFirstName} is asking a thoughtful follow-up question to ${aiFirstName}, showing genuine interest.",
-  "sentimentAdjustment": 0.08
-}`;
-  return prompt;
+**Exchange to Analyze:**
+${latestExchange}
+
+**Your Output (ONLY the number):**`;
 }
 
 /**
@@ -253,7 +256,7 @@ Now, respond as ${aiProfile.first_name}:`;
 /**
  * Calls the AI API to get a chat response.
  */
-async function callAiApi(prompt: string): Promise<string> {
+async function callAiApi(prompt: string, maxTokens: number): Promise<string> {
     const aiResponse = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${Deno.env.get('GEMINI_API_KEY')}`,
       {
@@ -265,7 +268,7 @@ async function callAiApi(prompt: string): Promise<string> {
             temperature: 0.8,
             topK: 40,
             topP: 0.95,
-            maxOutputTokens: MAX_TOKEN_LIMIT,
+            maxOutputTokens: maxTokens,
           }
         }),
       }
@@ -313,45 +316,27 @@ async function updateConversationContext(supabaseClient: SupabaseClient, chatId:
 
     // Only perform sentiment analysis and threshold updates if this is a response to a human message.
     if (lastHumanMessage) {
-        const analysisPrompt = buildAnalysisPrompt(existingContext?.context_summary, existingContext?.detailed_chat, latestExchange, aiFirstName, humanFirstName);
-        const analysisResponse = await callAiApi(analysisPrompt);
-        console.info("Raw analysis response received:", analysisResponse); // Log for debugging
+        const summaryPrompt = buildSummaryPrompt(existingContext?.context_summary, existingContext?.detailed_chat, latestExchange, aiFirstName, humanFirstName);
+        const sentimentPrompt = buildSentimentPrompt(latestExchange);
 
-        let newSummary = "Conversation is ongoing.";
+        const [newSummary, sentimentResponse] = await Promise.all([
+            callAiApi(summaryPrompt, 75),
+            callAiApi(sentimentPrompt, 10)
+        ]);
+
+        console.info("Raw summary response:", newSummary);
+        console.info("Raw sentiment response:", sentimentResponse);
+
         let sentimentAdjustment = 0.0;
-
-        // Step 1: Aggressively find and extract the JSON part of the string.
-        const firstBrace = analysisResponse.indexOf('{');
-        const lastBrace = analysisResponse.lastIndexOf('}');
-
-        if (firstBrace !== -1 && lastBrace > firstBrace) {
-            const jsonString = analysisResponse.substring(firstBrace, lastBrace + 1);
-            
-            // Step 2: Try to parse the extracted string.
-            try {
-                const parsedAnalysis = JSON.parse(jsonString);
-                if (parsedAnalysis.summary && typeof parsedAnalysis.summary === 'string') {
-                    newSummary = parsedAnalysis.summary;
-                }
-                if (parsedAnalysis.sentimentAdjustment && typeof parsedAnalysis.sentimentAdjustment === 'number') {
-                    sentimentAdjustment = parsedAnalysis.sentimentAdjustment;
-                }
-            } catch (e) {
-                // Step 3: If parsing fails, log the specific error and the string we tried to parse.
-                console.warn("Failed to parse extracted JSON string. Treating entire response as summary.", { 
-                    originalResponse: analysisResponse,
-                    extractedString: jsonString,
-                    error: e.message 
-                });
-                // Fallback to using the raw response as summary.
-                newSummary = analysisResponse.trim().replace(/```json|```/g, '');
-                sentimentAdjustment = 0.0;
+        try {
+            const parsedSentiment = parseFloat(sentimentResponse);
+            if (!isNaN(parsedSentiment)) {
+                sentimentAdjustment = parsedSentiment;
+            } else {
+                console.warn("Could not parse sentiment response as a number.", { sentimentResponse });
             }
-        } else {
-            // Step 4: If we can't even find braces, log it and use the raw response.
-            console.warn("Could not find a JSON object in the analysis response. Treating entire response as summary.", { analysisResponse });
-            newSummary = analysisResponse.trim();
-            sentimentAdjustment = 0.0;
+        } catch (e) {
+            console.warn("Error parsing sentiment response.", { sentimentResponse, error: e.message });
         }
 
         const consecutiveNegativeCount = existingContext?.consecutive_negative_count ?? 0;
@@ -527,7 +512,7 @@ serve(async (req) => {
         if (shouldProcess && currentChatId) {
           try {
             const aiPrompt = buildAiPrompt(dummyProfile, humanProfile, context, conversationHistory, lastHumanMessage, timeSinceLastAiMessage, isInitialChat, wasAiLastSpeaker);
-            let fullAiResponse = await callAiApi(aiPrompt);
+            let fullAiResponse = await callAiApi(aiPrompt, MAX_TOKEN_LIMIT);
             
             fullAiResponse = fullAiResponse.replace(/\p{Emoji}/gu, '').trim();
             fullAiResponse = fullAiResponse.replace(/[\*_`#]/g, ''); 

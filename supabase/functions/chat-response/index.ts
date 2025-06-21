@@ -73,21 +73,8 @@ async function getConversationContext(supabaseClient: SupabaseClient, chatId: st
   return context;
 }
 
-function buildSummaryFromHistoryPrompt(detailedHistory: string, aiFirstName: string, humanFirstName: string): string {
-    return `You are a conversation analyst. The following is a detailed chat history between ${humanFirstName} and ${aiFirstName}. Your task is to create a concise, one-sentence summary of the current state of the conversation.
-
-**Chat History:**
-${detailedHistory}
-
-**Your Task:**
-Provide ONLY the one-sentence summary. Do not add any other text or explanation. The summary MUST use the names "${humanFirstName}" and "${aiFirstName}" and MUST NOT use the words "AI", "bot", "user", or "automated".
-
-**Example Output:**
-${humanFirstName} is asking ${aiFirstName} about their hobbies after some initial pleasantries.`;
-}
-
-function buildAnalysisPrompt(existingSummary: string | null, detailedHistory: string | null, latestExchange: string, aiFirstName: string, humanFirstName: string) {
-  let prompt = `You are a conversation analyst. Your task is to update a conversation summary between ${humanFirstName} and ${aiFirstName}.
+function buildSummaryPrompt(existingSummary: string | null, detailedHistory: string | null, latestExchange: string, aiFirstName: string, humanFirstName: string): string {
+  return `You are a conversation analyst. Your task is to update a conversation summary between ${humanFirstName} and ${aiFirstName}.
 
 **Existing Summary:**
 ${existingSummary || "No summary yet."}
@@ -98,23 +85,26 @@ ${detailedHistory || "No history yet."}
 **Latest Exchange:**
 ${latestExchange}
 
-**Your Task & Output Format (CRITICAL):**
-Your response MUST be ONLY a valid JSON object. Do not include any other text, explanations, or markdown code fences like \`\`\`json. Start your response with { and end it with }. The JSON object must have exactly two keys:
-1.  "summary": A new, updated, one-sentence summary of the entire conversation's state. This summary MUST use the names "${humanFirstName}" and "${aiFirstName}" and MUST NOT use the words "AI", "bot", "user", or "automated".
-2.  "sentimentAdjustment": A sentiment adjustment value (a number between -0.2 and 0.2) based on the **latest exchange**.
+**Your Task (CRITICAL):**
+Provide ONLY the new, updated, one-sentence summary of the entire conversation's state. Do not add any other text, explanation, or formatting. The summary MUST use the names "${humanFirstName}" and "${aiFirstName}" and MUST NOT use the words "AI", "bot", "user", or "automated".
 
-**Sentiment Adjustment Rules:**
+**Example Output:**
+${humanFirstName} is asking a thoughtful follow-up question to ${aiFirstName}, showing genuine interest.`;
+}
+
+function buildSentimentPrompt(latestExchange: string): string {
+  return `Analyze the sentiment of the following exchange and provide ONLY a numerical score between -0.2 and 0.2. Do not add any other text or explanation.
+
+**Sentiment Score Rules:**
 - **Highly Positive (+0.1 to +0.2):** User is admiring, reassuring, good flirting, respectful.
 - **Neutral/Positive (-0.05 to +0.05):** Normal, friendly chat.
 - **Negative (-0.1 to -0.05):** User is boring, dismissive, or slightly rude.
 - **Highly Negative (-0.2 to -0.1):** User is hostile, disrespectful, threatening, bullying.
 
-**Example JSON Output:**
-{
-  "summary": "${humanFirstName} is asking a thoughtful follow-up question to ${aiFirstName}, showing genuine interest.",
-  "sentimentAdjustment": 0.08
-}`;
-  return prompt;
+**Exchange to Analyze:**
+${latestExchange}
+
+**Your Output (ONLY the number):**`;
 }
 
 function buildChatPrompt(aiProfile: any, humanProfile: any, conversationHistory: string, userMessage: string, analysisSummary: string, sentimentScore: number, currentCity: string, currentTime: string) {
@@ -268,63 +258,30 @@ serve(async (req) => {
       getConversationContext(supabaseClient, chatId),
     ]);
 
-    // --- NEW LOGIC: Generate summary if missing ---
-    let currentSummary = context?.context_summary;
-    if (!currentSummary && context?.detailed_chat) {
-        console.log("Context summary is missing, generating from detailed chat history.");
-        try {
-            const summaryPrompt = buildSummaryFromHistoryPrompt(context.detailed_chat, receiverProfile.first_name, senderProfile.first_name);
-            currentSummary = await callAiApi(summaryPrompt, 50); // Generate a new summary
-            console.log("Generated new summary:", currentSummary);
-        } catch (summaryError) {
-            console.error("Failed to generate summary from history:", summaryError);
-            currentSummary = "Summary could not be generated."; // Fallback
-        }
-    }
-    // --- END NEW LOGIC ---
-
     const latestExchange = `${senderProfile.first_name}: "${message}"`;
     
-    // --- First AI Call: Get Analysis ---
-    const analysisPrompt = buildAnalysisPrompt(currentSummary, context?.detailed_chat, latestExchange, receiverProfile.first_name, senderProfile.first_name);
-    const analysisResponse = await callAiApi(analysisPrompt, 50);
-    console.info("Raw analysis response received:", analysisResponse); // Log for debugging
+    // --- New: Two separate, reliable AI calls ---
+    const summaryPrompt = buildSummaryPrompt(context?.context_summary, context?.detailed_chat, latestExchange, receiverProfile.first_name, senderProfile.first_name);
+    const sentimentPrompt = buildSentimentPrompt(latestExchange);
 
-    let updatedSummary = currentSummary || "Chat initiated.";
+    const [updatedSummary, sentimentResponse] = await Promise.all([
+        callAiApi(summaryPrompt, 75), // Increased token limit for summary
+        callAiApi(sentimentPrompt, 10)  // Low token limit for sentiment
+    ]);
+
+    console.info("Raw summary response:", updatedSummary);
+    console.info("Raw sentiment response:", sentimentResponse);
+
     let sentimentAdjustment = 0.0;
-
-    // Step 1: Aggressively find and extract the JSON part of the string.
-    const firstBrace = analysisResponse.indexOf('{');
-    const lastBrace = analysisResponse.lastIndexOf('}');
-
-    if (firstBrace !== -1 && lastBrace > firstBrace) {
-        const jsonString = analysisResponse.substring(firstBrace, lastBrace + 1);
-        
-        // Step 2: Try to parse the extracted string.
-        try {
-            const parsedAnalysis = JSON.parse(jsonString);
-            if (parsedAnalysis.summary && typeof parsedAnalysis.summary === 'string') {
-                updatedSummary = parsedAnalysis.summary;
-            }
-            if (parsedAnalysis.sentimentAdjustment && typeof parsedAnalysis.sentimentAdjustment === 'number') {
-                sentimentAdjustment = parsedAnalysis.sentimentAdjustment;
-            }
-        } catch (e) {
-            // Step 3: If parsing fails, log the specific error and the string we tried to parse.
-            console.warn("Failed to parse extracted JSON string. Treating entire response as summary.", { 
-                originalResponse: analysisResponse,
-                extractedString: jsonString,
-                error: e.message 
-            });
-            // Fallback to using the raw response as summary.
-            updatedSummary = analysisResponse.trim().replace(/```json|```/g, '');
-            sentimentAdjustment = 0.0;
+    try {
+        const parsedSentiment = parseFloat(sentimentResponse);
+        if (!isNaN(parsedSentiment)) {
+            sentimentAdjustment = parsedSentiment;
+        } else {
+            console.warn("Could not parse sentiment response as a number.", { sentimentResponse });
         }
-    } else {
-        // Step 4: If we can't even find braces, log it and use the raw response.
-        console.warn("Could not find a JSON object in the analysis response. Treating entire response as summary.", { analysisResponse });
-        updatedSummary = analysisResponse.trim();
-        sentimentAdjustment = 0.0;
+    } catch (e) {
+        console.warn("Error parsing sentiment response.", { sentimentResponse, error: e.message });
     }
 
     // --- Consecutive Negativity Logic ---
