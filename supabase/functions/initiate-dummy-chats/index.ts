@@ -381,6 +381,25 @@ async function updateConversationContext(supabaseClient: SupabaseClient, chatId:
     }
 }
 
+/**
+ * Cleans a single part of an AI-generated message.
+ * - Trims whitespace
+ * - Removes surrounding quotes
+ * - Removes markdown characters
+ * @param part The string to clean.
+ * @returns The cleaned string.
+ */
+const cleanMessagePart = (part: string): string => {
+    let cleanedPart = part.trim();
+    // Remove surrounding quotes (single or double)
+    if ((cleanedPart.startsWith('"') && cleanedPart.endsWith('"')) || (cleanedPart.startsWith("'") && cleanedPart.endsWith("'"))) {
+        cleanedPart = cleanedPart.substring(1, cleanedPart.length - 1);
+    }
+    // Remove markdown characters
+    cleanedPart = cleanedPart.replace(/[*_`#]/g, '');
+    return cleanedPart.trim();
+};
+
 let isInitialChat = false; // Define at a scope accessible by updateConversationContext
 
 serve(async (req) => {
@@ -512,12 +531,13 @@ serve(async (req) => {
         if (shouldProcess && currentChatId) {
           try {
             const aiPrompt = buildAiPrompt(dummyProfile, humanProfile, context, conversationHistory, lastHumanMessage, timeSinceLastAiMessage, isInitialChat, wasAiLastSpeaker);
-            let fullAiResponse = await callAiApi(aiPrompt, MAX_TOKEN_LIMIT);
+            const fullAiResponse = await callAiApi(aiPrompt, MAX_TOKEN_LIMIT);
             
-            fullAiResponse = fullAiResponse.replace(/\p{Emoji}/gu, '').trim();
-            fullAiResponse = fullAiResponse.replace(/[\*_`#]/g, ''); 
-            
-            const individualMessages = fullAiResponse.split(MESSAGE_DELIMITER).filter(part => part !== "");
+            const individualMessages = fullAiResponse.split(MESSAGE_DELIMITER)
+                .map(cleanMessagePart)
+                .filter(part => part.length > 0);
+
+            if (individualMessages.length === 0) continue;
 
             const responseDelay = calculateResponseDelay();
             const totalTypingDelay = individualMessages.reduce((sum, msg) => sum + calculateTypingDelay(msg.length), 0);
@@ -541,7 +561,8 @@ serve(async (req) => {
                 if (i < individualMessages.length - 1) await new Promise(resolve => setTimeout(resolve, calculateInterMessageGap()));
               }
             }
-            await updateConversationContext(supabaseClient, currentChatId, dummyProfile.first_name, humanProfile.first_name, lastHumanMessage, fullAiResponse, context);
+            const cleanedAiResponseForContext = individualMessages.join('\n');
+            await updateConversationContext(supabaseClient, currentChatId, dummyProfile.first_name, humanProfile.first_name, lastHumanMessage, cleanedAiResponseForContext, context);
             chatsProcessedCount++;
           } catch (processError: any) {
             errors.push(`Failed to process chat for ${dummyProfile.first_name}: ${processError.message}`);

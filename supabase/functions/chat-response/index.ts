@@ -240,6 +240,25 @@ async function markMessageProcessed(supabaseClient: SupabaseClient, messageId: s
   await supabaseClient.from('messages').update({ is_processed: true }).eq('id', messageId);
 }
 
+/**
+ * Cleans a single part of an AI-generated message.
+ * - Trims whitespace
+ * - Removes surrounding quotes
+ * - Removes markdown characters
+ * @param part The string to clean.
+ * @returns The cleaned string.
+ */
+const cleanMessagePart = (part: string): string => {
+    let cleanedPart = part.trim();
+    // Remove surrounding quotes (single or double)
+    if ((cleanedPart.startsWith('"') && cleanedPart.endsWith('"')) || (cleanedPart.startsWith("'") && cleanedPart.endsWith("'"))) {
+        cleanedPart = cleanedPart.substring(1, cleanedPart.length - 1);
+    }
+    // Remove markdown characters
+    cleanedPart = cleanedPart.replace(/[*_`#]/g, '');
+    return cleanedPart.trim();
+};
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
@@ -307,14 +326,13 @@ serve(async (req) => {
     const rawChatResponse = await callAiApi(chatPrompt, MAX_TOKEN_LIMIT);
 
     let aiWantsToBlock = false;
-    let chatResponse = rawChatResponse;
+    let chatResponseForProcessing = rawChatResponse;
 
     if (rawChatResponse.includes('@@@BLOCKUSER@@@')) {
         aiWantsToBlock = true;
-        chatResponse = rawChatResponse.replace('@@@BLOCKUSER@@@', '').trim();
+        chatResponseForProcessing = rawChatResponse.replace('@@@BLOCKUSER@@@', '').trim();
         console.log("AI has signaled intent to block.");
     }
-    chatResponse = chatResponse.replace(/[*_`#]/g, '');
 
     if (newCurrentThreshold <= receiverProfile.block_threshold || aiWantsToBlock) {
         console.log(`Entering blocking logic. Reason: Threshold (${newCurrentThreshold.toFixed(3)} <= ${receiverProfile.block_threshold}) OR AI intent (${aiWantsToBlock}).`);
@@ -323,11 +341,11 @@ serve(async (req) => {
         const finalThreshold = aiWantsToBlock ? receiverProfile.block_threshold : newCurrentThreshold;
 
         if (aiWantsToBlock) {
-            finalMessageToSend = chatResponse;
+            finalMessageToSend = cleanMessagePart(chatResponseForProcessing);
         } else {
             const blockPrompt = buildBlockPrompt(receiverProfile, senderProfile, conversationHistory, message);
             const blockActionResponse = await callAiApi(blockPrompt, 50);
-            finalMessageToSend = blockActionResponse.replace(/[*_`#]/g, '');
+            finalMessageToSend = cleanMessagePart(blockActionResponse);
         }
 
         let finalExchangeForContext = latestExchange;
@@ -340,14 +358,18 @@ serve(async (req) => {
         await supabaseClient.from('blocked_users').insert({ blocker_id: receiverId, blocked_id: senderId });
         
     } else {
-        const fullLatestExchange = `${latestExchange}\n${receiverProfile.first_name}: "${chatResponse.replace(new RegExp(MESSAGE_DELIMITER, 'g'), '\n')}"`;
+        const messagesToSend = chatResponseForProcessing.split(MESSAGE_DELIMITER)
+            .map(cleanMessagePart)
+            .filter(m => m.length > 0);
+
+        const cleanedAiResponseForContext = messagesToSend.join('\n');
+        const fullLatestExchange = `${latestExchange}\n${receiverProfile.first_name}: "${cleanedAiResponseForContext}"`;
         await updateContext(supabaseClient, chatId, updatedSummary, context?.detailed_chat, fullLatestExchange, newCurrentThreshold, newConsecutiveNegativeCount);
 
-        const messagesToSend = chatResponse.split(MESSAGE_DELIMITER).filter(m => m.trim());
         if (messagesToSend.length > 0) {
             let cumulativeDelay = calculateResponseDelay();
             for (const msgContent of messagesToSend) {
-                await scheduleMessage(supabaseClient, chatId, receiverId, msgContent.trim(), cumulativeDelay);
+                await scheduleMessage(supabaseClient, chatId, receiverId, msgContent, cumulativeDelay);
                 cumulativeDelay += calculateTypingDelay(msgContent.length) + calculateInterMessageGap();
             }
         }
