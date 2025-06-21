@@ -70,8 +70,8 @@ export const BlockProvider = ({ children }: { children: React.ReactNode }) => {
     fetchBlockLists();
 
     if (!blockChannelRef.current) {
-      const handleRealtimeChange = (payload: any) => {
-        console.log('useBlock (Provider): Real-time block change received, refetching lists.');
+      const handleRealtimeChange = () => {
+        console.log('Block change detected, refetching lists.');
         fetchBlockLists();
       };
 
@@ -89,9 +89,9 @@ export const BlockProvider = ({ children }: { children: React.ReactNode }) => {
         )
         .subscribe((status, err) => {
           if (status === 'SUBSCRIBED') {
-            console.log(`useBlock.subscribe: Successfully subscribed to block changes.`);
+            console.log(`Successfully subscribed to block changes for user ${userId}.`);
           } else {
-            console.error(`useBlock.subscribe: Subscription status: ${status}`, err);
+            console.error(`Block subscription status for user ${userId}: ${status}`, err);
           }
         });
       blockChannelRef.current = channel;

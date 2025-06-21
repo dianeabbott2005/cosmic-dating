@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Send, MapPin, MoreVertical, ShieldOff, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { getSunSign } from '@/utils/astro/zodiacCalculations';
@@ -39,7 +39,7 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim() || !chat || !user) return;
+    if (!newMessage.trim() || !user) return;
 
     if (hasBeenBlocked || haveIBlocked) {
       toast({ title: "Cannot send message", description: "Your block status with this user has changed.", variant: "destructive" });
@@ -47,8 +47,25 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
       return;
     }
 
+    let currentChat = chat;
+    // If chat doesn't exist, create it first
+    if (!currentChat) {
+      const { data: newChat, error: createError } = await supabase
+        .from('chats')
+        .insert({ user1_id: user.id, user2_id: match.user_id })
+        .select()
+        .single();
+      
+      if (createError) {
+        toast({ title: "Error starting chat", description: createError.message, variant: "destructive" });
+        return;
+      }
+      currentChat = newChat;
+      setChat(newChat);
+    }
+
     const { error } = await supabase.from('messages').insert({
-      chat_id: chat.id,
+      chat_id: currentChat.id,
       sender_id: user.id,
       content: newMessage.trim(),
     });
@@ -66,7 +83,6 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
     const initialize = async () => {
       setLoading(true);
       
-      // Fetch block lists on mount
       fetchBlockLists();
 
       const { data: existingChat } = await supabase
@@ -75,18 +91,17 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
         .or(`and(user1_id.eq.${user.id},user2_id.eq.${match.user_id}),and(user1_id.eq.${match.user_id},user2_id.eq.${user.id})`)
         .maybeSingle();
 
-      let currentChat = existingChat;
-      if (!currentChat) {
-        // If no chat exists, we don't create it until the first message is sent.
-        // For now, we can prepare a temporary chat object.
-        setChat(null);
-        setMessages([]);
-      } else {
-        setChat(currentChat);
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
+
+      if (existingChat) {
+        setChat(existingChat);
         const { data: initialMessages, error: messagesError } = await supabase
           .from('messages')
           .select('*')
-          .eq('chat_id', currentChat.id)
+          .eq('chat_id', existingChat.id)
           .order('created_at', { ascending: true });
 
         if (messagesError) {
@@ -94,22 +109,19 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
         } else {
           setMessages(initialMessages || []);
         }
+
+        const channel = supabase.channel(`chat-${existingChat.id}`)
+          .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `chat_id=eq.${existingChat.id}` }, (payload) => {
+            setMessages(prev => [...prev, payload.new as Message]);
+          })
+          .subscribe();
+        channelRef.current = channel;
+      } else {
+        setChat(null);
+        setMessages([]);
       }
       
       setLoading(false);
-
-      // Subscribe to changes
-      if (channelRef.current) {
-        supabase.removeChannel(channelRef.current);
-      }
-
-      const channel = supabase.channel(`chat-${currentChat?.id || `new-${match.user_id}`}`)
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `chat_id=eq.${currentChat?.id}` }, (payload) => {
-          setMessages(prev => [...prev, payload.new as Message]);
-        })
-        .subscribe();
-      
-      channelRef.current = channel;
     };
 
     initialize();

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, createContext, useContext, useMemo } from 'react';
+import { useState, useEffect, useCallback, createContext, useContext, useMemo, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { calculateAge } from '@/utils/dateCalculations';
@@ -100,6 +100,11 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
     }
   }, [userId, blockedUserIds, usersWhoBlockedMeIds]);
 
+  const loadUserChatsRef = useRef(loadUserChats);
+  useEffect(() => {
+    loadUserChatsRef.current = loadUserChats;
+  });
+
   useEffect(() => {
     if (userId) {
       loadUserChats();
@@ -118,14 +123,14 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
     const channel = supabase.channel(`public:messages:user-${userId}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
         console.log('useChat (Provider): New message detected, reloading chat list.', payload);
-        loadUserChats();
+        loadUserChatsRef.current();
       })
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [userId, loadUserChats]);
+  }, [userId]);
 
   const value = useMemo(() => ({
     chats,
