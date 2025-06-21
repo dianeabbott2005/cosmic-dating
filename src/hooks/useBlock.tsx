@@ -1,6 +1,7 @@
-import { useState, useEffect, createContext, useContext, useCallback, useMemo } from 'react';
+import { useState, useEffect, createContext, useContext, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { RealtimeChannel } from '@supabase/supabase-js';
 
 interface BlockContextType {
   blockedUserIds: string[];
@@ -8,6 +9,8 @@ interface BlockContextType {
   blockUser: (userIdToBlock: string) => Promise<void>;
   unblockUser: (userIdToUnblock: string) => Promise<void>;
   fetchBlockLists: () => Promise<void>;
+  subscribeToBlockChanges: () => void;
+  unsubscribeFromBlockChanges: () => void;
 }
 
 const BlockContext = createContext<BlockContextType | undefined>(undefined);
@@ -25,6 +28,7 @@ export const BlockProvider = ({ children }: { children: React.ReactNode }) => {
   const [blockedUserIds, setBlockedUserIds] = useState<string[]>([]);
   const [usersWhoBlockedMeIds, setUsersWhoBlockedMeIds] = useState<string[]>([]);
   const userId = user?.id;
+  const blockChannelRef = useRef<RealtimeChannel | null>(null);
 
   const fetchBlockLists = useCallback(async () => {
     if (!userId) {
@@ -63,12 +67,16 @@ export const BlockProvider = ({ children }: { children: React.ReactNode }) => {
   }, [userId]);
 
   useEffect(() => {
-    if (!userId) {
-      console.log('useBlock (Provider): No user ID, skipping subscription setup.');
+    if (userId) {
+      fetchBlockLists();
+    }
+  }, [userId, fetchBlockLists]);
+
+  const subscribeToBlockChanges = useCallback(() => {
+    if (!userId || blockChannelRef.current) {
+      console.log('useBlock.subscribe: Subscription skipped (no user or already subscribed).');
       return;
     }
-
-    fetchBlockLists();
 
     const handleRealtimeChange = (payload: any) => {
       console.log('useBlock (Provider): Real-time block change received!', {
@@ -104,9 +112,11 @@ export const BlockProvider = ({ children }: { children: React.ReactNode }) => {
       }
     };
 
-    // Use a unique channel name to prevent any potential caching issues on the real-time server.
+    console.log('useBlock.subscribe: Attempting to subscribe to block changes.');
+    fetchBlockLists();
+
     const channelName = `block-changes-for-${userId}-${Math.random()}`;
-    const blockChannel = supabase
+    const channel = supabase
       .channel(channelName)
       .on(
         'postgres_changes',
@@ -120,19 +130,24 @@ export const BlockProvider = ({ children }: { children: React.ReactNode }) => {
       )
       .subscribe((status, err) => {
         if (status === 'SUBSCRIBED') {
-          console.log(`useBlock (Provider): Successfully subscribed to ${channelName}`);
+          console.log(`useBlock.subscribe: Successfully subscribed to ${channelName}`);
         } else {
-          console.error(`useBlock (Provider): Subscription status for ${channelName}: ${status}`, err);
+          console.error(`useBlock.subscribe: Subscription status for ${channelName}: ${status}`, err);
         }
       });
-
-    return () => {
-      console.log(`useBlock (Provider): Cleaning up subscription for channel: ${channelName}`);
-      if (blockChannel) {
-        supabase.removeChannel(blockChannel);
-      }
-    };
+    
+    blockChannelRef.current = channel;
   }, [userId, fetchBlockLists]);
+
+  const unsubscribeFromBlockChanges = useCallback(() => {
+    if (blockChannelRef.current) {
+      console.log(`useBlock.unsubscribe: Removing channel subscription: ${blockChannelRef.current.topic}`);
+      supabase.removeChannel(blockChannelRef.current);
+      blockChannelRef.current = null;
+    } else {
+      console.log('useBlock.unsubscribe: No active subscription to remove.');
+    }
+  }, []);
 
   const blockUser = useCallback(async (userIdToBlock: string) => {
     if (!userId) throw new Error('User must be logged in to block.');
@@ -161,7 +176,9 @@ export const BlockProvider = ({ children }: { children: React.ReactNode }) => {
     blockUser,
     unblockUser,
     fetchBlockLists,
-  }), [blockedUserIds, usersWhoBlockedMeIds, blockUser, unblockUser, fetchBlockLists]);
+    subscribeToBlockChanges,
+    unsubscribeFromBlockChanges,
+  }), [blockedUserIds, usersWhoBlockedMeIds, blockUser, unblockUser, fetchBlockLists, subscribeToBlockChanges, unsubscribeFromBlockChanges]);
 
   return (
     <BlockContext.Provider value={value}>

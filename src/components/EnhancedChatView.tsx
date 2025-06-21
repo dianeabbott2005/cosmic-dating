@@ -17,7 +17,7 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
   const [message, setMessage] = useState('');
   const { user } = useAuth();
   const { messages, messagesLoading, initializeChat, sendMessage } = useChat();
-  const { fetchBlockLists, blockedUserIds, usersWhoBlockedMeIds } = useBlock();
+  const { subscribeToBlockChanges, unsubscribeFromBlockChanges, fetchBlockLists, blockedUserIds, usersWhoBlockedMeIds } = useBlock();
   const [isBlockDialogOpen, setIsBlockDialogOpen] = useState(false);
   const { toast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -40,13 +40,22 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
   }, [match?.user_id, initializeChat, fetchBlockLists]);
 
   useEffect(() => {
-    // Use a short timeout to ensure the DOM has updated before scrolling
+    console.log('EnhancedChatView: Subscribing to block changes.');
+    subscribeToBlockChanges();
+
+    return () => {
+      console.log('EnhancedChatView: Unsubscribing from block changes.');
+      unsubscribeFromBlockChanges();
+    };
+  }, [subscribeToBlockChanges, unsubscribeFromBlockChanges]);
+
+  useEffect(() => {
     const timer = setTimeout(() => {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, 50); // 50ms delay
+    }, 50);
 
-    return () => clearTimeout(timer); // Cleanup the timer
-  }, [messages, blockedUserIds, usersWhoBlockedMeIds]);
+    return () => clearTimeout(timer);
+  }, [messages]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
