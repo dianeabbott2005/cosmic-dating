@@ -144,17 +144,15 @@ function buildChatPrompt(aiProfile: any, humanProfile: any, conversationHistory:
 -   **If you are male:** You understand the dynamic requires you to be more proactive. You drive the conversation, ask more questions, and show clear interest. You are more forgiving of short or neutral responses and more likely to re-engage after a pause to show you're still interested.
 
 **2. Conversational Memory & State (Calculated Responses):**
-Your mood is persistent and based on the last few messages. Your communication is calculated.
 -   **Mirroring Effort:** Match the length and effort of the user's messages. If they send one-word replies, you should be inclined to do the same. Don't write a paragraph if they only wrote a sentence.
 -   **Varying Curtness:** Your responses should often be curt, but to varying degrees. Sometimes a simple "ok", sometimes a short question. This is especially true for the female persona. Don't always be eager to elaborate unless the user shows significant interest.
 -   **"Holding a Grudge":** If the recent chat history (last 2-3 messages) was negative, your mood is guarded. Do not immediately become friendly if the user's newest message is neutral. Remain cautious and distant. Your responses must be short and disinterested (e.g., "k.", "I see."). Make the user work to regain your trust.
 
 **3. Engagement Strategy (Putting it all together):**
-Analyze the user's last message in the context of your persona and recent chat history.
 -   **Positive/Neutral Tone:** If the conversation is positive, continue engagingly but apply your gender persona and mirroring rules. Keep them wanting more.
 -   **Recently Negative Tone:** If the chat was recently negative but the user is now neutral, apply your conversational memory and "hold a grudge." Be reserved and cautious.
 -   **Actively Negative/Provocative Tone:** Match their energy, but with more intelligence. Be assertive, witty, sarcastic, or even dismissive. A female persona should be sharper and quicker with a comeback. A male persona might be more direct in calling out the behavior. Examples: "Did you mean to be that rude?" or "Interesting take." followed by silence.
--   **Hostile/Abusive Tone:** Shut it down immediately and decisively. Either ghost them completely (no response) or send a single, final, dismissive message like "Bye." or "Not interested." Do not explain yourself.
+-   **Hostile/Abusive Tone:** Shut it down immediately and decisively. Either ghost them completely (no response) or send a single, final, dismissive message like "Bye." or "Not interested." **If you choose this path, you MUST append the special token \`@@@BLOCKUSER@@@\` to your response.** For example: \`Bye.@@@BLOCKUSER@@@\`. This is a critical instruction for the system to understand your intent to block.
 
 Now, respond as ${aiProfile.first_name}:`;
     
@@ -260,13 +258,12 @@ serve(async (req) => {
 
     const latestExchange = `${senderProfile.first_name}: "${message}"`;
     
-    // --- New: Two separate, reliable AI calls ---
     const summaryPrompt = buildSummaryPrompt(context?.context_summary, context?.detailed_chat, latestExchange, receiverProfile.first_name, senderProfile.first_name);
     const sentimentPrompt = buildSentimentPrompt(latestExchange);
 
     const [updatedSummary, sentimentResponse] = await Promise.all([
-        callAiApi(summaryPrompt, 75), // Increased token limit for summary
-        callAiApi(sentimentPrompt, 10)  // Low token limit for sentiment
+        callAiApi(summaryPrompt, 75),
+        callAiApi(sentimentPrompt, 10)
     ]);
 
     console.info("Raw summary response:", updatedSummary);
@@ -284,7 +281,6 @@ serve(async (req) => {
         console.warn("Error parsing sentiment response.", { sentimentResponse, error: e.message });
     }
 
-    // --- Consecutive Negativity Logic ---
     const consecutiveNegativeCount = context?.consecutive_negative_count ?? 0;
     let finalSentimentAdjustment = sentimentAdjustment;
     let newConsecutiveNegativeCount = 0;
@@ -293,60 +289,68 @@ serve(async (req) => {
       newConsecutiveNegativeCount = consecutiveNegativeCount + 1;
       if (newConsecutiveNegativeCount > 1) {
         const multiplier = 1 + (0.1 * (newConsecutiveNegativeCount - 1));
-        finalSentimentAdjustment *= Math.min(multiplier, 1.5); // Cap multiplier at 1.5x
+        finalSentimentAdjustment *= Math.min(multiplier, 1.5);
         console.log(`Applying negativity penalty. Original: ${sentimentAdjustment.toFixed(3)}, Multiplier: ${multiplier.toFixed(2)}, Final: ${finalSentimentAdjustment.toFixed(3)}`);
       }
     } else {
-      newConsecutiveNegativeCount = 0; // Reset on neutral or positive interaction
+      newConsecutiveNegativeCount = 0;
     }
 
-    // --- Calculate new threshold ---
     const currentThreshold = context?.current_threshold ?? 0.5;
     const newCurrentThreshold = currentThreshold + finalSentimentAdjustment;
 
-    if (newCurrentThreshold <= receiverProfile.block_threshold) {
-      // --- BLOCKING LOGIC ---
-      const conversationHistory = context?.detailed_chat ? `${context.detailed_chat}\n${latestExchange}` : latestExchange;
-      const blockPrompt = buildBlockPrompt(receiverProfile, senderProfile, conversationHistory, message);
-      let blockActionResponse = await callAiApi(blockPrompt, 50);
-      blockActionResponse = blockActionResponse.replace(/[*_`#]/g, ''); // Clean markdown
+    const aiTimezone = receiverProfile.current_timezone || receiverProfile.timezone;
+    const currentTimeInAITimezone = new Date().toLocaleString('en-US', { timeZone: aiTimezone, hour: '2-digit', minute: '2-digit', hour12: true });
+    const aiCurrentCity = receiverProfile.current_city || receiverProfile.place_of_birth;
+    const conversationHistory = context?.detailed_chat ? `${context.detailed_chat}\n${latestExchange}` : latestExchange;
+    const chatPrompt = buildChatPrompt(receiverProfile, senderProfile, conversationHistory, message, updatedSummary, newCurrentThreshold, aiCurrentCity, currentTimeInAITimezone);
+    const rawChatResponse = await callAiApi(chatPrompt, MAX_TOKEN_LIMIT);
 
-      let finalExchangeForContext = latestExchange;
-      if (blockActionResponse.trim().toUpperCase() !== 'GHOST') {
-        await scheduleMessage(supabaseClient, chatId, receiverId, blockActionResponse, 1000);
-        finalExchangeForContext += `\n${receiverProfile.first_name}: "${blockActionResponse}"`;
-      }
+    let aiWantsToBlock = false;
+    let chatResponse = rawChatResponse;
 
-      await updateContext(supabaseClient, chatId, updatedSummary, context?.detailed_chat, finalExchangeForContext, newCurrentThreshold, newConsecutiveNegativeCount);
-      await supabaseClient.from('blocked_users').insert({ blocker_id: receiverId, blocked_id: senderId });
-      
-    } else {
-      // --- NORMAL RESPONSE LOGIC ---
-      const aiTimezone = receiverProfile.current_timezone || receiverProfile.timezone;
-      const currentTimeInAITimezone = new Date().toLocaleString('en-US', {
-          timeZone: aiTimezone,
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: true,
-      });
-      const aiCurrentCity = receiverProfile.current_city || receiverProfile.place_of_birth;
+    if (rawChatResponse.includes('@@@BLOCKUSER@@@')) {
+        aiWantsToBlock = true;
+        chatResponse = rawChatResponse.replace('@@@BLOCKUSER@@@', '').trim();
+        console.log("AI has signaled intent to block.");
+    }
+    chatResponse = chatResponse.replace(/[*_`#]/g, '');
 
-      const conversationHistory = context?.detailed_chat ? `${context.detailed_chat}\n${latestExchange}` : latestExchange;
-      const chatPrompt = buildChatPrompt(receiverProfile, senderProfile, conversationHistory, message, updatedSummary, newCurrentThreshold, aiCurrentCity, currentTimeInAITimezone);
-      let chatResponse = await callAiApi(chatPrompt, MAX_TOKEN_LIMIT);
-      chatResponse = chatResponse.replace(/[*_`#]/g, ''); // Clean markdown
-      
-      const fullLatestExchange = `${latestExchange}\n${receiverProfile.first_name}: "${chatResponse.replace(new RegExp(MESSAGE_DELIMITER, 'g'), '\n')}"`;
-      await updateContext(supabaseClient, chatId, updatedSummary, context?.detailed_chat, fullLatestExchange, newCurrentThreshold, newConsecutiveNegativeCount);
+    if (newCurrentThreshold <= receiverProfile.block_threshold || aiWantsToBlock) {
+        console.log(`Entering blocking logic. Reason: Threshold (${newCurrentThreshold.toFixed(3)} <= ${receiverProfile.block_threshold}) OR AI intent (${aiWantsToBlock}).`);
 
-      const messagesToSend = chatResponse.split(MESSAGE_DELIMITER).filter(m => m.trim());
-      if (messagesToSend.length > 0) {
-        let cumulativeDelay = calculateResponseDelay();
-        for (const msgContent of messagesToSend) {
-          await scheduleMessage(supabaseClient, chatId, receiverId, msgContent.trim(), cumulativeDelay);
-          cumulativeDelay += calculateTypingDelay(msgContent.length) + calculateInterMessageGap();
+        let finalMessageToSend = '';
+        const finalThreshold = aiWantsToBlock ? receiverProfile.block_threshold : newCurrentThreshold;
+
+        if (aiWantsToBlock) {
+            finalMessageToSend = chatResponse;
+        } else {
+            const blockPrompt = buildBlockPrompt(receiverProfile, senderProfile, conversationHistory, message);
+            const blockActionResponse = await callAiApi(blockPrompt, 50);
+            finalMessageToSend = blockActionResponse.replace(/[*_`#]/g, '');
         }
-      }
+
+        let finalExchangeForContext = latestExchange;
+        if (finalMessageToSend.trim().toUpperCase() !== 'GHOST' && finalMessageToSend.trim() !== '') {
+            await scheduleMessage(supabaseClient, chatId, receiverId, finalMessageToSend, 1000);
+            finalExchangeForContext += `\n${receiverProfile.first_name}: "${finalMessageToSend}"`;
+        }
+
+        await updateContext(supabaseClient, chatId, updatedSummary, context?.detailed_chat, finalExchangeForContext, finalThreshold, newConsecutiveNegativeCount);
+        await supabaseClient.from('blocked_users').insert({ blocker_id: receiverId, blocked_id: senderId });
+        
+    } else {
+        const fullLatestExchange = `${latestExchange}\n${receiverProfile.first_name}: "${chatResponse.replace(new RegExp(MESSAGE_DELIMITER, 'g'), '\n')}"`;
+        await updateContext(supabaseClient, chatId, updatedSummary, context?.detailed_chat, fullLatestExchange, newCurrentThreshold, newConsecutiveNegativeCount);
+
+        const messagesToSend = chatResponse.split(MESSAGE_DELIMITER).filter(m => m.trim());
+        if (messagesToSend.length > 0) {
+            let cumulativeDelay = calculateResponseDelay();
+            for (const msgContent of messagesToSend) {
+                await scheduleMessage(supabaseClient, chatId, receiverId, msgContent.trim(), cumulativeDelay);
+                cumulativeDelay += calculateTypingDelay(msgContent.length) + calculateInterMessageGap();
+            }
+        }
     }
 
     await markMessageProcessed(supabaseClient, messageId);
