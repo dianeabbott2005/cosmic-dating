@@ -308,7 +308,8 @@ serve(async (req) => {
       // --- BLOCKING LOGIC ---
       const conversationHistory = context?.detailed_chat ? `${context.detailed_chat}\n${latestExchange}` : latestExchange;
       const blockPrompt = buildBlockPrompt(receiverProfile, senderProfile, conversationHistory, message);
-      const blockActionResponse = await callAiApi(blockPrompt, 50);
+      let blockActionResponse = await callAiApi(blockPrompt, 50);
+      blockActionResponse = blockActionResponse.replace(/[*_`#]/g, ''); // Clean markdown
 
       let finalExchangeForContext = latestExchange;
       if (blockActionResponse.trim().toUpperCase() !== 'GHOST') {
@@ -332,7 +333,8 @@ serve(async (req) => {
 
       const conversationHistory = context?.detailed_chat ? `${context.detailed_chat}\n${latestExchange}` : latestExchange;
       const chatPrompt = buildChatPrompt(receiverProfile, senderProfile, conversationHistory, message, updatedSummary, newCurrentThreshold, aiCurrentCity, currentTimeInAITimezone);
-      const chatResponse = await callAiApi(chatPrompt, MAX_TOKEN_LIMIT);
+      let chatResponse = await callAiApi(chatPrompt, MAX_TOKEN_LIMIT);
+      chatResponse = chatResponse.replace(/[*_`#]/g, ''); // Clean markdown
       
       const fullLatestExchange = `${latestExchange}\n${receiverProfile.first_name}: "${chatResponse.replace(new RegExp(MESSAGE_DELIMITER, 'g'), '\n')}"`;
       await updateContext(supabaseClient, chatId, updatedSummary, context?.detailed_chat, fullLatestExchange, newCurrentThreshold, newConsecutiveNegativeCount);
