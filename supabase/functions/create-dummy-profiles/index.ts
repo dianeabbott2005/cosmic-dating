@@ -68,7 +68,7 @@ const CITIES_AND_TIMEZONES = [
   { city: 'Mexico City', country: 'Mexico', lat: 19.4326, lng: -99.1332, timezone: 'America/Mexico_City' },
   { city: 'Guadalajara', country: 'Mexico', lat: 20.6597, lng: -103.3496, timezone: 'America/Mexico_City' },
   { city: 'Cairo', country: 'Egypt', lat: 30.0444, lng: 31.2357, timezone: 'Africa/Cairo' },
-  { city: 'Alexandria', country: 31.2001, lng: 29.9187, timezone: 'Africa/Cairo' },
+  { city: 'Alexandria', country: 'Egypt', lat: 31.2001, lng: 29.9187, timezone: 'Africa/Cairo' },
 ];
 
 const GENDERS = ['male', 'female', 'non-binary'];
@@ -211,8 +211,15 @@ serve(async (req) => {
         const region = getRandomElement(REGIONS);
         const gender = getRandomElement(GENDERS);
         const lookingFor = getRandomElement(LOOKING_FOR_OPTIONS);
-        const cityData = getRandomElement(CITIES_AND_TIMEZONES.filter(c => c.country === region));
         
+        const birthCityData = getRandomElement(CITIES_AND_TIMEZONES.filter(c => c.country === region));
+        
+        // Determine current location (30% chance to be different from birth city)
+        let currentCityData = birthCityData;
+        if (Math.random() < 0.3) {
+            currentCityData = getRandomElement(CITIES_AND_TIMEZONES);
+        }
+
         const firstNamePool = gender === 'male' ? FIRST_NAMES_MALE[region as keyof typeof FIRST_NAMES_MALE] : FIRST_NAMES_FEMALE[region as keyof typeof FIRST_NAMES_FEMALE];
         const firstName = getRandomElement(firstNamePool);
         const lastName = getRandomElement(LAST_NAMES[region as keyof typeof LAST_NAMES]);
@@ -233,10 +240,13 @@ serve(async (req) => {
           last_name: lastName,
           date_of_birth: dateOfBirth,
           time_of_birth: timeOfBirth,
-          place_of_birth: cityData.city,
-          latitude: cityData.lat,
-          longitude: cityData.lng,
-          timezone: cityData.timezone,
+          place_of_birth: birthCityData.city,
+          latitude: birthCityData.lat,
+          longitude: birthCityData.lng,
+          timezone: birthCityData.timezone,
+          current_city: currentCityData.city,
+          current_country: currentCityData.country,
+          current_timezone: currentCityData.timezone,
           gender: gender,
           looking_for: lookingFor,
           min_age: minAge,
@@ -254,8 +264,6 @@ serve(async (req) => {
           ...profileMetadata,
           personality_prompt: personalityPrompt,
         };
-
-        console.log('Attempting to create user with metadata:', finalUserMetadata); // Added log
 
         // 1. Create user in auth.users (this will trigger handle_new_user to create the profile)
         const { data: authUserData, error: authError } = await supabaseClient.auth.admin.createUser({

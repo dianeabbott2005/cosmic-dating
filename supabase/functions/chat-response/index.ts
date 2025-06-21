@@ -116,7 +116,7 @@ ${humanFirstName} is asking a thoughtful follow-up question to ${aiFirstName}, s
   return prompt;
 }
 
-function buildChatPrompt(aiProfile: any, humanProfile: any, conversationHistory: string, userMessage: string, analysisSummary: string, sentimentScore: number) {
+function buildChatPrompt(aiProfile: any, humanProfile: any, conversationHistory: string, userMessage: string, analysisSummary: string, sentimentScore: number, currentCity: string, currentTime: string) {
     const aiAge = calculateAge(aiProfile.date_of_birth);
     let promptInstructions = aiProfile.personality_prompt;
 
@@ -132,6 +132,8 @@ function buildChatPrompt(aiProfile: any, humanProfile: any, conversationHistory:
 
     promptInstructions += ` You are chatting with ${humanProfile.first_name}.`;
     
+    promptInstructions += `\n\nYou are currently located in ${currentCity}. The current time there is ${currentTime}. If asked about your location or the time, you MUST use this information. Do not mention your birth city unless it's relevant to the conversation.`;
+
     promptInstructions += `\n\n**Conversation Analysis:** ${analysisSummary} (Sentiment Score: ${sentimentScore.toFixed(2)})`;
 
     if (conversationHistory) promptInstructions += `\n\nRecent conversation:\n${conversationHistory}`;
@@ -337,8 +339,17 @@ serve(async (req) => {
       
     } else {
       // --- NORMAL RESPONSE LOGIC ---
+      const aiTimezone = receiverProfile.current_timezone || receiverProfile.timezone;
+      const currentTimeInAITimezone = new Date().toLocaleString('en-US', {
+          timeZone: aiTimezone,
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true,
+      });
+      const aiCurrentCity = receiverProfile.current_city || receiverProfile.place_of_birth;
+
       const conversationHistory = context?.detailed_chat ? `${context.detailed_chat}\n${latestExchange}` : latestExchange;
-      const chatPrompt = buildChatPrompt(receiverProfile, senderProfile, conversationHistory, message, updatedSummary, newCurrentThreshold);
+      const chatPrompt = buildChatPrompt(receiverProfile, senderProfile, conversationHistory, message, updatedSummary, newCurrentThreshold, aiCurrentCity, currentTimeInAITimezone);
       const chatResponse = await callAiApi(chatPrompt, MAX_TOKEN_LIMIT);
       
       const fullLatestExchange = `${latestExchange}\n${receiverProfile.first_name}: "${chatResponse.replace(new RegExp(MESSAGE_DELIMITER, 'g'), '\n')}"`;
