@@ -136,7 +136,7 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
           onOpenChange={setIsBlockDialogOpen}
           userIdToBlock={match.user_id}
           userName={match.first_name}
-          onSuccess={onBack}
+          onSuccess={fetchBlockLists}
         />
       )}
     </>
