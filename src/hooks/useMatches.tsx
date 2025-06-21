@@ -49,13 +49,13 @@ export const useMatches = () => {
     const fetchAndGenerateMatches = async () => {
       setLoading(true);
       try {
-        // First, invoke generation to ensure backend has the latest.
         await supabase.functions.invoke('generate-matches', {
           body: { user_id: userId }
         });
 
-        // Now, fetch the current state of matches.
-        const { data: existingMatches, error } = await supabase
+        const allBlockedIds = [...new Set([...blockedUserIds, ...usersWhoBlockedMeIds])];
+
+        let query = supabase
           .from('matches')
           .select(`
             id,
@@ -64,19 +64,29 @@ export const useMatches = () => {
             compatibility_score,
             user1_profile:profiles!matches_user_id_fkey(user_id, first_name, date_of_birth, time_of_birth, place_of_birth, gender),
             user2_profile:profiles!matches_matched_user_id_fkey(user_id, first_name, date_of_birth, time_of_birth, place_of_birth, gender)
-          `)
-          .or(`user_id.eq.${userId},matched_user_id.eq.${userId}`);
+          `);
+
+        if (allBlockedIds.length > 0) {
+          const blockedIdsString = `(${allBlockedIds.join(',')})`;
+          query = query.or(
+            `and(user_id.eq.${userId},matched_user_id.not.in.${blockedIdsString}),` +
+            `and(matched_user_id.eq.${userId},user_id.not.in.${blockedIdsString})`
+          );
+        } else {
+          query = query.or(`user_id.eq.${userId},matched_user_id.eq.${userId}`);
+        }
+        
+        const { data: existingMatches, error } = await query;
         
         if (error) throw error;
 
         const uniqueMatchesMap = new Map<string, MatchProfile>();
-        const allBlockedIds = new Set([...blockedUserIds, ...usersWhoBlockedMeIds]);
 
         (existingMatches || []).forEach(match => {
           const otherUserId = match.user_id === userId ? match.matched_user_id : match.user_id;
           const otherUserProfile = match.user_id === userId ? match.user2_profile : match.user1_profile;
 
-          if (otherUserProfile && otherUserId !== userId && !uniqueMatchesMap.has(otherUserId) && !allBlockedIds.has(otherUserId)) {
+          if (otherUserProfile && otherUserId !== userId && !uniqueMatchesMap.has(otherUserId)) {
             const age = calculateAge(otherUserProfile.date_of_birth);
             uniqueMatchesMap.set(otherUserId, {
               ...otherUserProfile,

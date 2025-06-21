@@ -59,19 +59,29 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
     }
     setChatsLoading(true);
     try {
-      const { data: userChats, error } = await supabase
+      const allBlockedIds = [...new Set([...blockedUserIds, ...usersWhoBlockedMeIds])];
+
+      let query = supabase
         .from('chats')
-        .select(`*, messages (id, content, sender_id, created_at, chat_id)`)
-        .or(`user1_id.eq.${userId},user2_id.eq.${userId}`);
+        .select(`*, messages (id, content, sender_id, created_at, chat_id)`);
+
+      if (allBlockedIds.length > 0) {
+        const blockedIdsString = `(${allBlockedIds.join(',')})`;
+        query = query.or(
+          `and(user1_id.eq.${userId},user2_id.not.in.${blockedIdsString}),` +
+          `and(user2_id.eq.${userId},user1_id.not.in.${blockedIdsString})`
+        );
+      } else {
+        query = query.or(`user1_id.eq.${userId},user2_id.eq.${userId}`);
+      }
+
+      const { data: userChats, error } = await query;
 
       if (error) throw error;
 
-      const allBlockedIds = new Set([...blockedUserIds, ...usersWhoBlockedMeIds]);
-
       const chatPromises = (userChats || []).map(async (chat) => {
         const otherUserId = chat.user1_id === userId ? chat.user2_id : chat.user1_id;
-        if (allBlockedIds.has(otherUserId)) return null;
-
+        
         const { data: profile } = await supabase.from('profiles').select('first_name, user_id, date_of_birth, place_of_birth').eq('user_id', otherUserId).single();
         const lastMessage = chat.messages?.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0] || null;
         
