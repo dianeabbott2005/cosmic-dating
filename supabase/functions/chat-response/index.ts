@@ -99,7 +99,7 @@ ${detailedHistory || "No history yet."}
 ${latestExchange}
 
 **Your Task & Output Format (CRITICAL):**
-Your final output MUST be a valid JSON object with NO other text, markdown, or code fences. The JSON object must have exactly two keys:
+Your final output MUST be a valid JSON object with NO other text, markdown, or code fences (like \`\`\`json). The JSON object must have exactly two keys:
 1.  "summary": A new, updated, one-sentence summary of the entire conversation's state. This summary MUST use the names "${humanFirstName}" and "${aiFirstName}" and MUST NOT use the words "AI", "bot", "user", or "automated".
 2.  "sentimentAdjustment": A sentiment adjustment value (a number between -0.2 and 0.2) based on the **latest exchange**.
 
@@ -294,16 +294,27 @@ serve(async (req) => {
     let sentimentAdjustment = 0.0;
 
     try {
-        const parsedAnalysis = JSON.parse(analysisResponse);
-        if (parsedAnalysis.summary && typeof parsedAnalysis.summary === 'string') {
-            updatedSummary = parsedAnalysis.summary;
-        }
-        if (parsedAnalysis.sentimentAdjustment && typeof parsedAnalysis.sentimentAdjustment === 'number') {
-            sentimentAdjustment = parsedAnalysis.sentimentAdjustment;
+        // New Regex to extract JSON content from markdown code fences or other text
+        const jsonRegex = /\{[\s\S]*\}/;
+        const jsonMatch = analysisResponse.match(jsonRegex);
+
+        if (jsonMatch && jsonMatch[0]) {
+            const jsonString = jsonMatch[0];
+            const parsedAnalysis = JSON.parse(jsonString);
+            
+            if (parsedAnalysis.summary && typeof parsedAnalysis.summary === 'string') {
+                updatedSummary = parsedAnalysis.summary;
+            }
+            if (parsedAnalysis.sentimentAdjustment && typeof parsedAnalysis.sentimentAdjustment === 'number') {
+                sentimentAdjustment = parsedAnalysis.sentimentAdjustment;
+            }
+        } else {
+            // Fallback if no JSON object is found at all
+            throw new Error("No valid JSON object found in the analysis response.");
         }
     } catch (e) {
         console.warn("Failed to parse analysis response as JSON. Treating entire response as summary.", { analysisResponse, error: e.message });
-        updatedSummary = analysisResponse.trim();
+        updatedSummary = analysisResponse.trim().replace(/```json|```/g, ''); // Clean up and use as summary
         sentimentAdjustment = 0.0;
     }
 
