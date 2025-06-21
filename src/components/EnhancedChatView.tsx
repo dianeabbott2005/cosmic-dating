@@ -74,8 +74,10 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
     } else if (insertedMessages) {
         setMessages(prev => {
             const nonTempMessages = prev.filter(m => !tempIds.includes(m.id));
+            // The returned `insertedMessages` are already in the correct order.
+            // We do not re-sort here because batch-inserted messages can have the same timestamp,
+            // which makes sorting by `created_at` unstable.
             const allMessages = [...nonTempMessages, ...insertedMessages];
-            allMessages.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
             return allMessages;
         });
     }
