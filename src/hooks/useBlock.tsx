@@ -33,6 +33,8 @@ export const BlockProvider = ({ children }: { children: React.ReactNode }) => {
       return;
     }
 
+    console.log('useBlock.fetchBlockLists: Fetching block lists for user:', userId);
+
     const { data: myBlocks, error: myBlocksError } = await supabase
       .from('blocked_users')
       .select('blocked_id')
@@ -41,7 +43,9 @@ export const BlockProvider = ({ children }: { children: React.ReactNode }) => {
     if (myBlocksError) {
       console.error('useBlock.fetchBlockLists: Error fetching my blocks:', myBlocksError);
     } else {
-      setBlockedUserIds(myBlocks.map(b => b.blocked_id));
+      const ids = myBlocks.map(b => b.blocked_id);
+      setBlockedUserIds(ids);
+      console.log('useBlock.fetchBlockLists: Set my blocked users:', ids);
     }
 
     const { data: blocksOnMe, error: blocksOnMeError } = await supabase
@@ -52,16 +56,23 @@ export const BlockProvider = ({ children }: { children: React.ReactNode }) => {
     if (blocksOnMeError) {
       console.error('useBlock.fetchBlockLists: Error fetching blocks on me:', blocksOnMeError);
     } else {
-      setUsersWhoBlockedMeIds(blocksOnMe.map(b => b.blocker_id));
+      const ids = blocksOnMe.map(b => b.blocker_id);
+      setUsersWhoBlockedMeIds(ids);
+      console.log('useBlock.fetchBlockLists: Set users who blocked me:', ids);
     }
   }, [userId]);
 
   useEffect(() => {
-    if (!userId) return;
+    if (!userId) {
+      console.log('useBlock (Provider): No user ID, skipping subscription setup.');
+      return;
+    }
 
+    console.log(`useBlock (Provider): Setting up real-time subscriptions for user: ${userId}`);
     fetchBlockLists();
 
     const handleInsert = (payload: any) => {
+      console.log('useBlock (Provider): Real-time block INSERT received!', payload);
       const newRecord = payload.new;
       if (newRecord.blocker_id === userId) {
         setBlockedUserIds(prev => prev.includes(newRecord.blocked_id) ? prev : [...prev, newRecord.blocked_id]);
@@ -71,11 +82,20 @@ export const BlockProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     const handleDelete = (payload: any) => {
+      console.log('useBlock (Provider): Real-time block DELETE received!', payload);
       const oldRecord = payload.old;
-      if (oldRecord.blocker_id === userId) {
-        setBlockedUserIds(prev => prev.filter(id => id !== oldRecord.blocked_id));
-      } else if (oldRecord.blocked_id === userId) {
-        setUsersWhoBlockedMeIds(prev => prev.filter(id => id !== oldRecord.blocker_id));
+      // The 'old' record might not contain all columns, but it will have the primary key.
+      // We need to check both parts of the composite key.
+      if (oldRecord.blocker_id && oldRecord.blocked_id) {
+        if (oldRecord.blocker_id === userId) {
+          setBlockedUserIds(prev => prev.filter(id => id !== oldRecord.blocked_id));
+        } else if (oldRecord.blocked_id === userId) {
+          setUsersWhoBlockedMeIds(prev => prev.filter(id => id !== oldRecord.blocker_id));
+        }
+      } else {
+        // If payload.old is incomplete, we must refetch to ensure consistency.
+        console.warn('useBlock (Provider): Incomplete DELETE payload, refetching block lists.');
+        fetchBlockLists();
       }
     };
 
@@ -83,15 +103,28 @@ export const BlockProvider = ({ children }: { children: React.ReactNode }) => {
       .channel(`my-blocks-changes-for-${userId}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'blocked_users', filter: `blocker_id=eq.${userId}` }, handleInsert)
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'blocked_users', filter: `blocker_id=eq.${userId}` }, handleDelete)
-      .subscribe();
+      .subscribe((status, err) => {
+        if (status === 'SUBSCRIBED') {
+          console.log(`useBlock (Provider): Successfully subscribed to my-blocks-changes-for-${userId}`);
+        } else {
+          console.error(`useBlock (Provider): Subscription status for my-blocks: ${status}`, err);
+        }
+      });
 
     const blocksOnMeChannel = supabase
       .channel(`blocks-on-me-changes-for-${userId}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'blocked_users', filter: `blocked_id=eq.${userId}` }, handleInsert)
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'blocked_users', filter: `blocked_id=eq.${userId}` }, handleDelete)
-      .subscribe();
+      .subscribe((status, err) => {
+        if (status === 'SUBSCRIBED') {
+          console.log(`useBlock (Provider): Successfully subscribed to blocks-on-me-changes-for-${userId}`);
+        } else {
+          console.error(`useBlock (Provider): Subscription status for blocks-on-me: ${status}`, err);
+        }
+      });
 
     return () => {
+      console.log(`useBlock (Provider): Cleaning up subscriptions for user: ${userId}`);
       supabase.removeChannel(myBlocksChannel);
       supabase.removeChannel(blocksOnMeChannel);
     };
