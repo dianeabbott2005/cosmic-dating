@@ -136,7 +136,7 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
 
     typingTimeoutRef.current = setTimeout(() => {
         sendQueuedMessages(currentChat!);
-    }, 30000);
+    }, 15000);
   };
 
   const subscribeToChat = useCallback((chatId: string) => {
