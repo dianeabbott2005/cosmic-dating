@@ -68,65 +68,41 @@ export const BlockProvider = ({ children }: { children: React.ReactNode }) => {
       return;
     }
 
-    console.log(`useBlock (Provider): Setting up real-time subscriptions for user: ${userId}`);
+    console.log(`useBlock (Provider): Setting up single real-time subscription for user: ${userId}`);
     fetchBlockLists();
 
-    const handleInsert = (payload: any) => {
-      console.log('useBlock (Provider): Real-time block INSERT received!', payload);
-      const newRecord = payload.new;
-      if (newRecord.blocker_id === userId) {
-        setBlockedUserIds(prev => prev.includes(newRecord.blocked_id) ? prev : [...prev, newRecord.blocked_id]);
-      } else if (newRecord.blocked_id === userId) {
-        setUsersWhoBlockedMeIds(prev => prev.includes(newRecord.blocker_id) ? prev : [...prev, newRecord.blocker_id]);
-      }
+    const handleRealtimeChange = (payload: any) => {
+      console.log('useBlock (Provider): Real-time block change received! Refetching lists.', payload);
+      // The safest and most robust action is to just refetch the lists.
+      // This avoids complex logic to parse the payload and ensures the state is always in sync.
+      fetchBlockLists();
     };
 
-    const handleDelete = (payload: any) => {
-      console.log('useBlock (Provider): Real-time block DELETE received!', payload);
-      const oldRecord = payload.old;
-      // The 'old' record might not contain all columns, but it will have the primary key.
-      // We need to check both parts of the composite key.
-      if (oldRecord.blocker_id && oldRecord.blocked_id) {
-        if (oldRecord.blocker_id === userId) {
-          setBlockedUserIds(prev => prev.filter(id => id !== oldRecord.blocked_id));
-        } else if (oldRecord.blocked_id === userId) {
-          setUsersWhoBlockedMeIds(prev => prev.filter(id => id !== oldRecord.blocker_id));
-        }
-      } else {
-        // If payload.old is incomplete, we must refetch to ensure consistency.
-        console.warn('useBlock (Provider): Incomplete DELETE payload, refetching block lists.');
-        fetchBlockLists();
-      }
-    };
-
-    const myBlocksChannel = supabase
-      .channel(`my-blocks-changes-for-${userId}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'blocked_users', filter: `blocker_id=eq.${userId}` }, handleInsert)
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'blocked_users', filter: `blocker_id=eq.${userId}` }, handleDelete)
+    const blockChannel = supabase
+      .channel(`block-changes-for-${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // Listen to INSERT, UPDATE, DELETE
+          schema: 'public',
+          table: 'blocked_users',
+          filter: `or(blocker_id.eq.${userId},blocked_id.eq.${userId})`,
+        },
+        handleRealtimeChange
+      )
       .subscribe((status, err) => {
         if (status === 'SUBSCRIBED') {
-          console.log(`useBlock (Provider): Successfully subscribed to my-blocks-changes-for-${userId}`);
+          console.log(`useBlock (Provider): Successfully subscribed to block-changes-for-${userId}`);
         } else {
-          console.error(`useBlock (Provider): Subscription status for my-blocks: ${status}`, err);
-        }
-      });
-
-    const blocksOnMeChannel = supabase
-      .channel(`blocks-on-me-changes-for-${userId}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'blocked_users', filter: `blocked_id=eq.${userId}` }, handleInsert)
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'blocked_users', filter: `blocked_id=eq.${userId}` }, handleDelete)
-      .subscribe((status, err) => {
-        if (status === 'SUBSCRIBED') {
-          console.log(`useBlock (Provider): Successfully subscribed to blocks-on-me-changes-for-${userId}`);
-        } else {
-          console.error(`useBlock (Provider): Subscription status for blocks-on-me: ${status}`, err);
+          console.error(`useBlock (Provider): Subscription status for block-changes: ${status}`, err);
         }
       });
 
     return () => {
-      console.log(`useBlock (Provider): Cleaning up subscriptions for user: ${userId}`);
-      supabase.removeChannel(myBlocksChannel);
-      supabase.removeChannel(blocksOnMeChannel);
+      console.log(`useBlock (Provider): Cleaning up subscription for user: ${userId}`);
+      if (blockChannel) {
+        supabase.removeChannel(blockChannel);
+      }
     };
   }, [userId, fetchBlockLists]);
 
