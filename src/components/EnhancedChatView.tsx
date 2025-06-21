@@ -1,12 +1,14 @@
-import { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Send, MapPin, MoreVertical, ShieldOff } from 'lucide-react';
-import { useChat } from '@/hooks/useChat';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { ArrowLeft, Send, MapPin, MoreVertical, ShieldOff, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { getSunSign } from '@/utils/astro/zodiacCalculations';
 import { useBlock } from '@/hooks/useBlock';
 import { BlockUserDialog } from "@/components/BlockUserDialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from '@/integrations/supabase/client';
+import type { Message, Chat } from '@/hooks/useChat';
+import { RealtimeChannel } from '@supabase/supabase-js';
 
 interface EnhancedChatViewProps {
   match: any;
@@ -14,13 +16,16 @@ interface EnhancedChatViewProps {
 }
 
 const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
-  const [message, setMessage] = useState('');
+  const [newMessage, setNewMessage] = useState('');
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [chat, setChat] = useState<Chat | null>(null);
+  const [loading, setLoading] = useState(true);
   const { user } = useAuth();
-  const { messages, messagesLoading, initializeChat, sendMessage } = useChat();
-  const { subscribeToBlockChanges, unsubscribeFromBlockChanges, fetchBlockLists, blockedUserIds, usersWhoBlockedMeIds } = useBlock();
+  const { fetchBlockLists, blockedUserIds, usersWhoBlockedMeIds } = useBlock();
   const [isBlockDialogOpen, setIsBlockDialogOpen] = useState(false);
   const { toast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const channelRef = useRef<RealtimeChannel | null>(null);
 
   const hasBeenBlocked = usersWhoBlockedMeIds.includes(match.user_id);
   const haveIBlocked = blockedUserIds.includes(match.user_id);
@@ -32,47 +37,101 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
     return sign.charAt(0).toUpperCase() + sign.slice(1);
   };
 
-  useEffect(() => {
-    if (match?.user_id) {
-      initializeChat(match.user_id);
-    }
-  }, [match?.user_id, initializeChat]);
-
-  useEffect(() => {
-    console.log('EnhancedChatView: Subscribing to block changes.');
-    subscribeToBlockChanges();
-
-    return () => {
-      console.log('EnhancedChatView: Unsubscribing from block changes.');
-      unsubscribeFromBlockChanges();
-    };
-  }, [subscribeToBlockChanges, unsubscribeFromBlockChanges]);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, 50);
-
-    return () => clearTimeout(timer);
-  }, [messages]);
-
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (message.trim() && !hasBeenBlocked && !haveIBlocked) {
-      await sendMessage(message);
-      setMessage('');
-    } else {
+    if (!newMessage.trim() || !chat || !user) return;
+
+    if (hasBeenBlocked || haveIBlocked) {
       toast({ title: "Cannot send message", description: "Your block status with this user has changed.", variant: "destructive" });
-      setMessage('');
+      setNewMessage('');
+      return;
+    }
+
+    const { error } = await supabase.from('messages').insert({
+      chat_id: chat.id,
+      sender_id: user.id,
+      content: newMessage.trim(),
+    });
+
+    if (error) {
+      toast({ title: "Error sending message", description: error.message, variant: "destructive" });
+    } else {
+      setNewMessage('');
     }
   };
+
+  useEffect(() => {
+    if (!user || !match?.user_id) return;
+
+    const initialize = async () => {
+      setLoading(true);
+      
+      // Fetch block lists on mount
+      fetchBlockLists();
+
+      const { data: existingChat } = await supabase
+        .from('chats')
+        .select('*')
+        .or(`and(user1_id.eq.${user.id},user2_id.eq.${match.user_id}),and(user1_id.eq.${match.user_id},user2_id.eq.${user.id})`)
+        .maybeSingle();
+
+      let currentChat = existingChat;
+      if (!currentChat) {
+        // If no chat exists, we don't create it until the first message is sent.
+        // For now, we can prepare a temporary chat object.
+        setChat(null);
+        setMessages([]);
+      } else {
+        setChat(currentChat);
+        const { data: initialMessages, error: messagesError } = await supabase
+          .from('messages')
+          .select('*')
+          .eq('chat_id', currentChat.id)
+          .order('created_at', { ascending: true });
+
+        if (messagesError) {
+          console.error("Error fetching messages:", messagesError);
+        } else {
+          setMessages(initialMessages || []);
+        }
+      }
+      
+      setLoading(false);
+
+      // Subscribe to changes
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+      }
+
+      const channel = supabase.channel(`chat-${currentChat?.id || `new-${match.user_id}`}`)
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `chat_id=eq.${currentChat?.id}` }, (payload) => {
+          setMessages(prev => [...prev, payload.new as Message]);
+        })
+        .subscribe();
+      
+      channelRef.current = channel;
+    };
+
+    initialize();
+
+    return () => {
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
+    };
+  }, [user, match?.user_id, fetchBlockLists]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
   const formatTime = (dateString: string) => {
     return new Date(dateString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  if (messagesLoading) {
-    return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full"></div></div>;
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin" /></div>;
   }
 
   return (
@@ -131,8 +190,8 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
           <div className="bg-slate-900/50 backdrop-blur-sm border-t border-purple-500/20 p-4">
             <div className="max-w-2xl mx-auto">
               <form onSubmit={handleSendMessage} className="flex gap-3">
-                <input type="text" value={message} onChange={(e) => setMessage(e.target.value)} placeholder={`Message ${match.first_name}...`} className="flex-1 input-cosmic py-3" />
-                <button type="submit" disabled={!message.trim()} className="bg-gradient-to-r from-purple-500 to-blue-500 text-white p-3 rounded-xl hover:from-purple-600 hover:to-blue-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"><Send className="w-5 h-5" /></button>
+                <input type="text" value={newMessage} onChange={(e) => setNewMessage(e.target.value)} placeholder={`Message ${match.first_name}...`} className="flex-1 input-cosmic py-3" />
+                <button type="submit" disabled={!newMessage.trim()} className="bg-gradient-to-r from-purple-500 to-blue-500 text-white p-3 rounded-xl hover:from-purple-600 hover:to-blue-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"><Send className="w-5 h-5" /></button>
               </form>
             </div>
           </div>

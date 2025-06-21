@@ -9,8 +9,6 @@ interface BlockContextType {
   blockUser: (userIdToBlock: string) => Promise<void>;
   unblockUser: (userIdToUnblock: string) => Promise<void>;
   fetchBlockLists: () => Promise<void>;
-  subscribeToBlockChanges: () => void;
-  unsubscribeFromBlockChanges: () => void;
 }
 
 const BlockContext = createContext<BlockContextType | undefined>(undefined);
@@ -37,8 +35,6 @@ export const BlockProvider = ({ children }: { children: React.ReactNode }) => {
       return;
     }
 
-    console.log('useBlock.fetchBlockLists: Fetching block lists for user:', userId);
-
     const { data: myBlocks, error: myBlocksError } = await supabase
       .from('blocked_users')
       .select('blocked_id')
@@ -47,9 +43,7 @@ export const BlockProvider = ({ children }: { children: React.ReactNode }) => {
     if (myBlocksError) {
       console.error('useBlock.fetchBlockLists: Error fetching my blocks:', myBlocksError);
     } else {
-      const ids = myBlocks.map(b => b.blocked_id);
-      setBlockedUserIds(ids);
-      console.log('useBlock.fetchBlockLists: Set my blocked users:', ids);
+      setBlockedUserIds(myBlocks.map(b => b.blocked_id));
     }
 
     const { data: blocksOnMe, error: blocksOnMeError } = await supabase
@@ -60,94 +54,56 @@ export const BlockProvider = ({ children }: { children: React.ReactNode }) => {
     if (blocksOnMeError) {
       console.error('useBlock.fetchBlockLists: Error fetching blocks on me:', blocksOnMeError);
     } else {
-      const ids = blocksOnMe.map(b => b.blocker_id);
-      setUsersWhoBlockedMeIds(ids);
-      console.log('useBlock.fetchBlockLists: Set users who blocked me:', ids);
+      setUsersWhoBlockedMeIds(blocksOnMe.map(b => b.blocker_id));
     }
   }, [userId]);
 
   useEffect(() => {
-    if (userId) {
-      fetchBlockLists();
-    }
-  }, [userId, fetchBlockLists]);
-
-  const subscribeToBlockChanges = useCallback(() => {
-    if (!userId || blockChannelRef.current) {
-      console.log('useBlock.subscribe: Subscription skipped (no user or already subscribed).');
+    if (!userId) {
+      if (blockChannelRef.current) {
+        supabase.removeChannel(blockChannelRef.current);
+        blockChannelRef.current = null;
+      }
       return;
     }
 
-    const handleRealtimeChange = (payload: any) => {
-      console.log('useBlock (Provider): Real-time block change received!', {
-        eventType: payload.eventType,
-        payload: payload,
-      });
+    fetchBlockLists();
 
-      if (payload.eventType === 'INSERT') {
-        const newRecord = payload.new;
-        console.log('useBlock (Provider): Handling INSERT.', newRecord);
-        if (newRecord.blocker_id === userId) {
-          console.log(`useBlock (Provider): User ${userId} blocked ${newRecord.blocked_id}. Updating state.`);
-          setBlockedUserIds(prev => [...new Set([...prev, newRecord.blocked_id])]);
-        } else if (newRecord.blocked_id === userId) {
-          console.log(`useBlock (Provider): User ${newRecord.blocker_id} blocked ${userId}. Updating state.`);
-          setUsersWhoBlockedMeIds(prev => [...new Set([...prev, newRecord.blocker_id])]);
-        }
-      } else if (payload.eventType === 'DELETE') {
-        const oldRecord = payload.old;
-        console.log('useBlock (Provider): Handling DELETE.', oldRecord);
-        if (oldRecord.blocker_id && oldRecord.blocked_id) {
-          if (oldRecord.blocker_id === userId) {
-            console.log(`useBlock (Provider): User ${userId} unblocked ${oldRecord.blocked_id}. Updating state.`);
-            setBlockedUserIds(prev => prev.filter(id => id !== oldRecord.blocked_id));
-          } else if (oldRecord.blocked_id === userId) {
-            console.log(`useBlock (Provider): User ${oldRecord.blocker_id} unblocked ${userId}. Updating state.`);
-            setUsersWhoBlockedMeIds(prev => prev.filter(id => id !== oldRecord.blocker_id));
+    if (!blockChannelRef.current) {
+      const handleRealtimeChange = (payload: any) => {
+        console.log('useBlock (Provider): Real-time block change received, refetching lists.');
+        fetchBlockLists();
+      };
+
+      const channel = supabase
+        .channel(`block-changes-for-${userId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'blocked_users',
+            filter: `or(blocker_id.eq.${userId},blocked_id.eq.${userId})`,
+          },
+          handleRealtimeChange
+        )
+        .subscribe((status, err) => {
+          if (status === 'SUBSCRIBED') {
+            console.log(`useBlock.subscribe: Successfully subscribed to block changes.`);
+          } else {
+            console.error(`useBlock.subscribe: Subscription status: ${status}`, err);
           }
-        } else {
-          console.warn('useBlock (Provider): Incomplete DELETE payload, refetching block lists for safety.');
-          fetchBlockLists();
-        }
+        });
+      blockChannelRef.current = channel;
+    }
+
+    return () => {
+      if (blockChannelRef.current) {
+        supabase.removeChannel(blockChannelRef.current);
+        blockChannelRef.current = null;
       }
     };
-
-    console.log('useBlock.subscribe: Attempting to subscribe to block changes.');
-    fetchBlockLists();
-    
-    const channelName = `block-changes-for-${userId}-${Math.random()}`;
-    const channel = supabase
-      .channel(channelName)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'blocked_users',
-          filter: `or(blocker_id.eq.${userId},blocked_id.eq.${userId})`,
-        },
-        handleRealtimeChange
-      )
-      .subscribe((status, err) => {
-        if (status === 'SUBSCRIBED') {
-          console.log(`useBlock.subscribe: Successfully subscribed to ${channelName}`);
-        } else {
-          console.error(`useBlock.subscribe: Subscription status for ${channelName}: ${status}`, err);
-        }
-      });
-    
-    blockChannelRef.current = channel;
   }, [userId, fetchBlockLists]);
-
-  const unsubscribeFromBlockChanges = useCallback(() => {
-    if (blockChannelRef.current) {
-      console.log(`useBlock.unsubscribe: Removing channel subscription: ${blockChannelRef.current.topic}`);
-      supabase.removeChannel(blockChannelRef.current);
-      blockChannelRef.current = null;
-    } else {
-      console.log('useBlock.unsubscribe: No active subscription to remove.');
-    }
-  }, []);
 
   const blockUser = useCallback(async (userIdToBlock: string) => {
     if (!userId) throw new Error('User must be logged in to block.');
@@ -176,9 +132,7 @@ export const BlockProvider = ({ children }: { children: React.ReactNode }) => {
     blockUser,
     unblockUser,
     fetchBlockLists,
-    subscribeToBlockChanges,
-    unsubscribeFromBlockChanges,
-  }), [blockedUserIds, usersWhoBlockedMeIds, blockUser, unblockUser, fetchBlockLists, subscribeToBlockChanges, unsubscribeFromBlockChanges]);
+  }), [blockedUserIds, usersWhoBlockedMeIds, blockUser, unblockUser, fetchBlockLists]);
 
   return (
     <BlockContext.Provider value={value}>
