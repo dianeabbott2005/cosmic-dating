@@ -371,8 +371,19 @@ serve(async (req) => {
 
         let finalExchangeForContext = latestExchange;
         if (finalMessageToSend.trim().toUpperCase() !== 'GHOST' && finalMessageToSend.trim() !== '') {
-            await scheduleMessage(supabaseClient, chatId, receiverId, finalMessageToSend, 1000);
-            finalExchangeForContext += `\n${receiverProfile.first_name}: "${finalMessageToSend}"`;
+            const messagesToSend = finalMessageToSend.split(MESSAGE_DELIMITER)
+                .map(cleanMessagePart)
+                .filter(m => m.length > 0);
+
+            if (messagesToSend.length > 0) {
+                let cumulativeDelay = 1000;
+                for (const msgContent of messagesToSend) {
+                    await scheduleMessage(supabaseClient, chatId, receiverId, msgContent, cumulativeDelay);
+                    cumulativeDelay += 1500; 
+                }
+                const cleanedAiResponseForContext = messagesToSend.join('\n');
+                finalExchangeForContext += `\n${receiverProfile.first_name}: "${cleanedAiResponseForContext}"`;
+            }
         }
 
         await updateContext(supabaseClient, chatId, updatedSummary, context?.detailed_chat, finalExchangeForContext, finalThreshold, newConsecutiveNegativeCount);
