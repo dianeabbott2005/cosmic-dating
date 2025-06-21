@@ -310,51 +310,66 @@ async function updateConversationContext(supabaseClient: SupabaseClient, chatId:
       ? `${existingContext.detailed_chat}\n${latestExchange}`
       : latestExchange;
 
-    const analysisPrompt = buildAnalysisPrompt(existingContext?.context_summary, existingContext?.detailed_chat, latestExchange, aiFirstName, humanFirstName);
-    const analysisResponse = await callAiApi(analysisPrompt);
+    // Only perform sentiment analysis and threshold updates if this is a response to a human message.
+    if (lastHumanMessage) {
+        const analysisPrompt = buildAnalysisPrompt(existingContext?.context_summary, existingContext?.detailed_chat, latestExchange, aiFirstName, humanFirstName);
+        const analysisResponse = await callAiApi(analysisPrompt);
 
-    let newSummary = "Conversation is ongoing.";
-    let sentimentAdjustment = 0.0;
+        let newSummary = "Conversation is ongoing.";
+        let sentimentAdjustment = 0.0;
 
-    if (analysisResponse.includes(ANALYSIS_DELIMITER)) {
-        const parts = analysisResponse.split(ANALYSIS_DELIMITER);
-        newSummary = parts[0].trim();
-        const parsedSentiment = parseFloat(parts[1].trim());
-        if (!isNaN(parsedSentiment)) {
-            sentimentAdjustment = parsedSentiment;
+        if (analysisResponse.includes(ANALYSIS_DELIMITER)) {
+            const parts = analysisResponse.split(ANALYSIS_DELIMITER);
+            newSummary = parts[0].trim();
+            const parsedSentiment = parseFloat(parts[1].trim());
+            if (!isNaN(parsedSentiment)) {
+                sentimentAdjustment = parsedSentiment;
+            }
+        } else {
+            newSummary = analysisResponse.trim();
+            console.warn("Analysis delimiter not found in initiate-dummy-chats, using full response as summary.");
         }
+
+        const consecutiveNegativeCount = existingContext?.consecutive_negative_count ?? 0;
+        let finalSentimentAdjustment = sentimentAdjustment;
+        let newConsecutiveNegativeCount = 0;
+
+        if (sentimentAdjustment < NEGATIVE_SENTIMENT_THRESHOLD) {
+          newConsecutiveNegativeCount = consecutiveNegativeCount + 1;
+          if (newConsecutiveNegativeCount > 1) {
+            const multiplier = 1 + (0.1 * (newConsecutiveNegativeCount - 1));
+            finalSentimentAdjustment *= Math.min(multiplier, 1.5);
+          }
+        } else {
+          newConsecutiveNegativeCount = 0;
+        }
+
+        const currentThreshold = existingContext?.current_threshold ?? 0.5;
+        const newCurrentThreshold = currentThreshold + finalSentimentAdjustment;
+
+        await supabaseClient
+          .from('conversation_contexts')
+          .upsert({
+            chat_id: chatId,
+            context_summary: newSummary,
+            detailed_chat: updatedDetailedChat,
+            last_updated: new Date().toISOString(),
+            current_threshold: newCurrentThreshold,
+            consecutive_negative_count: newConsecutiveNegativeCount,
+          }, { onConflict: 'chat_id' });
     } else {
-        newSummary = analysisResponse.trim();
-        console.warn("Analysis delimiter not found in initiate-dummy-chats, using full response as summary.");
+        // If it's an AI-initiated message, just update the chat log and create a simple summary.
+        // DO NOT update the threshold or negative count.
+        const newSummary = `${aiFirstName} has initiated or re-engaged the conversation.`;
+        await supabaseClient
+          .from('conversation_contexts')
+          .upsert({
+            chat_id: chatId,
+            context_summary: newSummary,
+            detailed_chat: updatedDetailedChat,
+            last_updated: new Date().toISOString(),
+          }, { onConflict: 'chat_id' });
     }
-
-    const consecutiveNegativeCount = existingContext?.consecutive_negative_count ?? 0;
-    let finalSentimentAdjustment = sentimentAdjustment;
-    let newConsecutiveNegativeCount = 0;
-
-    if (sentimentAdjustment < NEGATIVE_SENTIMENT_THRESHOLD) {
-      newConsecutiveNegativeCount = consecutiveNegativeCount + 1;
-      if (newConsecutiveNegativeCount > 1) {
-        const multiplier = 1 + (0.1 * (newConsecutiveNegativeCount - 1));
-        finalSentimentAdjustment *= Math.min(multiplier, 1.5);
-      }
-    } else {
-      newConsecutiveNegativeCount = 0;
-    }
-
-    const currentThreshold = existingContext?.current_threshold ?? 0.5;
-    const newCurrentThreshold = currentThreshold + finalSentimentAdjustment;
-
-    await supabaseClient
-      .from('conversation_contexts')
-      .upsert({
-        chat_id: chatId,
-        context_summary: newSummary,
-        detailed_chat: updatedDetailedChat,
-        last_updated: new Date().toISOString(),
-        current_threshold: newCurrentThreshold,
-        consecutive_negative_count: newConsecutiveNegativeCount,
-      }, { onConflict: 'chat_id' });
 }
 
 let isInitialChat = false; // Define at a scope accessible by updateConversationContext
