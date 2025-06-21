@@ -113,6 +113,7 @@ export const BlockProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     console.log('useBlock.subscribe: Attempting to subscribe to block changes.');
+    fetchBlockLists();
     
     const channelName = `block-changes-for-${userId}-${Math.random()}`;
     const channel = supabase
