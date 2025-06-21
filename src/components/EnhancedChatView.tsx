@@ -34,10 +34,9 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
 
   useEffect(() => {
     if (match?.user_id) {
-      fetchBlockLists();
       initializeChat(match.user_id);
     }
-  }, [match?.user_id, initializeChat, fetchBlockLists]);
+  }, [match?.user_id, initializeChat]);
 
   useEffect(() => {
     console.log('EnhancedChatView: Subscribing to block changes.');
