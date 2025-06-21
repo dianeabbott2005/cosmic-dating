@@ -162,7 +162,7 @@ ${detailedHistory || "No history yet."}
 ${latestExchange}
 
 **Your Task & Output Format (CRITICAL):**
-Your final output MUST be a valid JSON object with NO other text, markdown, or code fences (like \`\`\`json). The JSON object must have exactly two keys:
+Your response MUST be ONLY a valid JSON object. Do not include any other text, explanations, or markdown code fences like \`\`\`json. Start your response with { and end it with }. The JSON object must have exactly two keys:
 1.  "summary": A new, updated, one-sentence summary of the entire conversation's state. This summary MUST use the names "${humanFirstName}" and "${aiFirstName}" and MUST NOT use the words "AI", "bot", "user", or "automated".
 2.  "sentimentAdjustment": A sentiment adjustment value (a number between -0.2 and 0.2) based on the **latest exchange**.
 
@@ -320,28 +320,37 @@ async function updateConversationContext(supabaseClient: SupabaseClient, chatId:
         let newSummary = "Conversation is ongoing.";
         let sentimentAdjustment = 0.0;
 
-        try {
-            // New Regex to extract JSON content from markdown code fences or other text
-            const jsonRegex = /\{[\s\S]*\}/;
-            const jsonMatch = analysisResponse.match(jsonRegex);
+        // Step 1: Aggressively find and extract the JSON part of the string.
+        const firstBrace = analysisResponse.indexOf('{');
+        const lastBrace = analysisResponse.lastIndexOf('}');
 
-            if (jsonMatch && jsonMatch[0]) {
-                const jsonString = jsonMatch[0];
+        if (firstBrace !== -1 && lastBrace > firstBrace) {
+            const jsonString = analysisResponse.substring(firstBrace, lastBrace + 1);
+            
+            // Step 2: Try to parse the extracted string.
+            try {
                 const parsedAnalysis = JSON.parse(jsonString);
-                
                 if (parsedAnalysis.summary && typeof parsedAnalysis.summary === 'string') {
                     newSummary = parsedAnalysis.summary;
                 }
                 if (parsedAnalysis.sentimentAdjustment && typeof parsedAnalysis.sentimentAdjustment === 'number') {
                     sentimentAdjustment = parsedAnalysis.sentimentAdjustment;
                 }
-            } else {
-                // Fallback if no JSON object is found at all
-                throw new Error("No valid JSON object found in the analysis response.");
+            } catch (e) {
+                // Step 3: If parsing fails, log the specific error and the string we tried to parse.
+                console.warn("Failed to parse extracted JSON string. Treating entire response as summary.", { 
+                    originalResponse: analysisResponse,
+                    extractedString: jsonString,
+                    error: e.message 
+                });
+                // Fallback to using the raw response as summary.
+                newSummary = analysisResponse.trim().replace(/```json|```/g, '');
+                sentimentAdjustment = 0.0;
             }
-        } catch (e) {
-            console.warn("Failed to parse analysis response as JSON. Treating entire response as summary.", { analysisResponse, error: e.message });
-            newSummary = analysisResponse.trim().replace(/```json|```/g, ''); // Clean up and use as summary
+        } else {
+            // Step 4: If we can't even find braces, log it and use the raw response.
+            console.warn("Could not find a JSON object in the analysis response. Treating entire response as summary.", { analysisResponse });
+            newSummary = analysisResponse.trim();
             sentimentAdjustment = 0.0;
         }
 
