@@ -27,8 +27,13 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
 
-  // State for message batching
+  // State and ref for message batching
   const [messageQueue, setMessageQueue] = useState<{ content: string; tempId: string; createdAt: string }[]>([]);
+  const queueRef = useRef(messageQueue);
+  useEffect(() => {
+    queueRef.current = messageQueue;
+  }, [messageQueue]);
+  
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const hasBeenBlocked = usersWhoBlockedMeIds.includes(match.user_id);
@@ -42,18 +47,18 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
   };
 
   const sendQueuedMessages = useCallback(async (chatForSend: Chat) => {
-    if (messageQueue.length === 0 || !user) {
+    const queueToSend = queueRef.current;
+    if (queueToSend.length === 0 || !user) {
         return;
     }
 
-    const queueToSend = [...messageQueue];
-    setMessageQueue([]);
+    setMessageQueue([]); // Optimistically clear the queue
 
     const messagesToInsert = queueToSend.map(mq => ({
         chat_id: chatForSend.id,
         sender_id: user.id,
         content: mq.content,
-        created_at: mq.createdAt, // Send the original client-side timestamp
+        created_at: mq.createdAt,
     }));
 
     const tempIds = queueToSend.map(mq => mq.tempId);
@@ -69,17 +74,21 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
             description: "Failed to send a batch of messages. Please try again.",
             variant: "destructive",
         });
-        setMessages(prev => prev.filter(m => !tempIds.includes(m.id)));
-        const failedContent = queueToSend.map(q => q.content).join('\n');
-        setNewMessage(prev => prev ? `${prev}\n${failedContent}` : failedContent);
+        // Restore the queue on failure, putting failed messages at the front.
+        setMessageQueue(currentQueue => [...queueToSend, ...currentQueue]);
     } else if (insertedMessages) {
+        // Sort the newly inserted messages by their creation timestamp to ensure correct order.
+        const sortedInsertedMessages = insertedMessages.sort(
+            (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        );
+
         setMessages(prev => {
             const nonTempMessages = prev.filter(m => !tempIds.includes(m.id));
-            const allMessages = [...nonTempMessages, ...insertedMessages];
+            const allMessages = [...nonTempMessages, ...sortedInsertedMessages];
             return allMessages;
         });
     }
-  }, [messageQueue, user, toast]);
+  }, [user, toast]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
