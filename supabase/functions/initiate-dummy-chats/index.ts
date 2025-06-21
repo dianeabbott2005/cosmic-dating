@@ -318,10 +318,12 @@ async function updateConversationContext(supabaseClient: SupabaseClient, chatId:
         let newSummary = "Conversation is ongoing.";
         let sentimentAdjustment = 0.0;
 
-        if (analysisResponse.includes(ANALYSIS_DELIMITER)) {
-            const parts = analysisResponse.split(ANALYSIS_DELIMITER);
-            newSummary = parts[0].trim();
-            const parsedSentiment = parseFloat(parts[1].trim());
+        const analysisRegex = /@@@ANALYSISBREAK@@@\s*(-?\d*\.?\d+)/;
+        const match = analysisResponse.match(analysisRegex);
+
+        if (match && match[1]) {
+            newSummary = analysisResponse.substring(0, match.index).trim();
+            const parsedSentiment = parseFloat(match[1]);
             if (!isNaN(parsedSentiment)) {
                 sentimentAdjustment = parsedSentiment;
             }

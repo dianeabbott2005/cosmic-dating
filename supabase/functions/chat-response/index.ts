@@ -291,15 +291,25 @@ serve(async (req) => {
     let updatedSummary = currentSummary || "Chat initiated.";
     let sentimentAdjustment = 0.0;
 
-    if (analysisResponse.includes(ANALYSIS_DELIMITER)) {
-      const parts = analysisResponse.split(ANALYSIS_DELIMITER);
-      updatedSummary = parts[0].trim();
-      const parsedSentiment = parseFloat(parts[1].trim());
-      if (!isNaN(parsedSentiment)) {
-        sentimentAdjustment = parsedSentiment;
-      }
+    const analysisRegex = /@@@ANALYSISBREAK@@@\s*(-?\d*\.?\d+)/;
+    const match = analysisResponse.match(analysisRegex);
+
+    if (match && match[1]) {
+        updatedSummary = analysisResponse.substring(0, match.index).trim();
+        const parsedSentiment = parseFloat(match[1]);
+        if (!isNaN(parsedSentiment)) {
+            sentimentAdjustment = parsedSentiment;
+        } else {
+            console.warn("Regex matched, but failed to parse sentiment score from:", match[1]);
+        }
+        if (!updatedSummary) {
+            updatedSummary = currentSummary || "Chat summary could not be updated.";
+            console.warn("Extracted summary was empty. Preserving old summary.");
+        }
     } else {
-      console.warn("Failed to parse analysis response, preserving old summary.", { analysisResponse });
+        console.warn("Failed to parse analysis response with regex. Treating entire response as summary.", { analysisResponse });
+        updatedSummary = analysisResponse.trim();
+        sentimentAdjustment = 0.0;
     }
 
     // --- Consecutive Negativity Logic ---
