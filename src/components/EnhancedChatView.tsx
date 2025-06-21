@@ -39,14 +39,15 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
   }, [match?.user_id, initializeChat]);
 
   useEffect(() => {
-    console.log('EnhancedChatView: Subscribing to block changes.');
+    console.log('EnhancedChatView: Fetching initial block status and subscribing to changes.');
+    fetchBlockLists();
     subscribeToBlockChanges();
 
     return () => {
       console.log('EnhancedChatView: Unsubscribing from block changes.');
       unsubscribeFromBlockChanges();
     };
-  }, [subscribeToBlockChanges, unsubscribeFromBlockChanges]);
+  }, [fetchBlockLists, subscribeToBlockChanges, unsubscribeFromBlockChanges]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
