@@ -54,6 +54,27 @@ function calculateAge(dateOfBirth: string): number {
     return age;
 }
 
+function getSunSign(dateOfBirth: string): string {
+  const date = new Date(dateOfBirth);
+  const month = date.getMonth() + 1;
+  const day = date.getDate();
+
+  if ((month === 3 && day >= 21) || (month === 4 && day <= 19)) return 'aries';
+  if ((month === 4 && day >= 20) || (month === 5 && day <= 20)) return 'taurus';
+  if ((month === 5 && day >= 21) || (month === 6 && day <= 20)) return 'gemini';
+  if ((month === 6 && day >= 21) || (month === 7 && day <= 22)) return 'cancer';
+  if ((month === 7 && day >= 23) || (month === 8 && day <= 22)) return 'leo';
+  if ((month === 8 && day >= 23) || (month === 9 && day <= 22)) return 'virgo';
+  if ((month === 9 && day >= 23) || (month === 10 && day <= 22)) return 'libra';
+  if ((month === 10 && day >= 23) || (month === 11 && day <= 21)) return 'scorpio';
+  if ((month === 11 && day >= 22) || (month === 12 && day <= 21)) return 'sagittarius';
+  if ((month === 12 && day >= 22) || (month === 1 && day <= 19)) return 'capricorn';
+  if ((month === 1 && day >= 20) || (month === 2 && day <= 18)) return 'aquarius';
+  if ((month === 2 && day >= 19) || (month === 3 && day <= 20)) return 'pisces';
+  
+  return 'aries';
+}
+
 async function getProfile(supabaseClient: SupabaseClient, userId: string) {
   const { data: profile, error } = await supabaseClient
     .from('profiles')
@@ -109,6 +130,7 @@ ${latestExchange}
 
 function buildChatPrompt(aiProfile: any, humanProfile: any, conversationHistory: string, userMessage: string, analysisSummary: string, sentimentScore: number, currentCity: string, currentTime: string) {
     const aiAge = calculateAge(aiProfile.date_of_birth);
+    const humanSunSign = getSunSign(humanProfile.date_of_birth);
     let promptInstructions = aiProfile.personality_prompt;
 
     if (!promptInstructions) {
@@ -121,7 +143,7 @@ function buildChatPrompt(aiProfile: any, humanProfile: any, conversationHistory:
       promptInstructions += `\n\nAlso, subtly induce English language issues typical of a non-native speaker from ${region} (${languageIssue}). Occasionally let local dialect flow into conversations (${dialect}).`;
     }
 
-    promptInstructions += ` You are chatting with ${humanProfile.first_name}.`;
+    promptInstructions += ` You are chatting with ${humanProfile.first_name}, whose sun sign is ${humanSunSign}.`;
     
     promptInstructions += `\n\nYou are currently located in ${currentCity}. The current time there is ${currentTime}. If asked about your location or the time, you MUST use this information. Do not mention your birth city unless it's relevant to the conversation.`;
 
