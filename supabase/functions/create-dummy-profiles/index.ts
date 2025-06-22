@@ -7,47 +7,46 @@ const corsHeaders = {
 };
 
 // --- Data for Profile Generation ---
+
+// New, updated name lists to increase variety
 const FIRST_NAMES_MALE = {
-  'US': ['Ethan', 'Liam', 'Noah', 'Mason', 'Lucas', 'Oliver', 'Elijah', 'James', 'William', 'Benjamin'],
-  'UK': ['Harry', 'George', 'Jack', 'Leo', 'Oscar', 'Charlie', 'Freddie', 'Arthur', 'Noah', 'Archie'],
-  'India': ['Aryan', 'Rohan', 'Vivaan', 'Shaurya', 'Kabir', 'Arjun', 'Reyansh', 'Aarav', 'Dhruv', 'Ishaan'],
-  'Japan': ['Ren', 'Haruto', 'Sota', 'Yuto', 'Hinata', 'Aoi', 'Riku', 'Minato', 'Asahi', 'Kaito'],
-  'Brazil': ['Miguel', 'Arthur', 'Heitor', 'Théo', 'Davi', 'Bernardo', 'Gael', 'Gabriel', 'Samuel', 'João'],
-  'Nigeria': ['Chinedu', 'Emeka', 'Obi', 'Tunde', 'Segun', 'Kunle', 'Femi', 'Ade', 'Nnamdi', 'Kelechi'],
-  'Germany': ['Leon', 'Noah', 'Finn', 'Paul', 'Ben', 'Jonas', 'Emil', 'Felix', 'Louis', 'Henry'],
-  'France': ['Gabriel', 'Louis', 'Raphaël', 'Arthur', 'Maël', 'Léo', 'Jules', 'Adam', 'Lucas', 'Hugo'],
-  'Mexico': ['Santiago', 'Mateo', 'Sebastián', 'Leonardo', 'Matías', 'Emiliano', 'Diego', 'Daniel', 'Alexander', 'Nicolás'],
-  'Egypt': ['Mohamed', 'Ahmed', 'Youssef', 'Omar', 'Mostafa', 'Ali', 'Khaled', 'Mahmoud', 'Ziad', 'Karim'],
+  'US': ['Jackson', 'Aiden', 'Lucas', 'Liam', 'Noah', 'Ethan', 'Caden', 'Jacob', 'Logan', 'Jayden'],
+  'UK': ['Alfie', 'Freddie', 'Thomas', 'Henry', 'William', 'James', 'Joshua', 'Max', 'Daniel', 'Reuben'],
+  'India': ['Rohan', 'Kabir', 'Dev', 'Samar', 'Neel', 'Parth', 'Yash', 'Veer', 'Zayn', 'Kian'],
+  'Japan': ['Kenji', 'Daiki', 'Takeru', 'Yuki', 'Kazuki', 'Naoki', 'Shinji', 'Akira', 'Haru', 'Sora'],
+  'Brazil': ['Lucas', 'Matheus', 'Rafael', 'Enzo', 'Guilherme', 'Nicolas', 'João', 'Felipe', 'Gustavo', 'Bruno'],
+  'Nigeria': ['Adekunle', 'Babatunde', 'Chukwuemeka', 'Dayo', 'Efe', 'Folarin', 'Gbenga', 'Ikenna', 'Jide', 'Obinna'],
+  'Germany': ['Maximilian', 'Alexander', 'Jakob', 'Anton', 'Oskar', 'Theo', 'Matteo', 'Karl', 'Vincent', 'Moritz'],
+  'France': ['Enzo', 'Nathan', 'Théo', 'Tom', 'Ethan', 'Clément', 'Antoine', 'Valentin', 'Maxime', 'Paul'],
+  'Mexico': ['Javier', 'Carlos', 'Ricardo', 'Fernando', 'Arturo', 'Andrés', 'Eduardo', 'Jorge', 'Sergio', 'Adrián'],
+  'Egypt': ['Amr', 'Tarek', 'Hassan', 'Karim', 'Sameh', 'Hesham', 'Wael', 'Fares', 'Ramy', 'Sherif'],
 };
-
 const FIRST_NAMES_FEMALE = {
-  'US': ['Olivia', 'Emma', 'Ava', 'Sophia', 'Isabella', 'Charlotte', 'Amelia', 'Mia', 'Harper', 'Evelyn'],
-  'UK': ['Olivia', 'Amelia', 'Isla', 'Ava', 'Lily', 'Sophia', 'Grace', 'Mia', 'Freya', 'Willow'],
-  'India': ['Aditi', 'Diya', 'Kiara', 'Myra', 'Siya', 'Anaya', 'Aaradhya', 'Fatima', 'Pari', 'Sara'],
-  'Japan': ['Yui', 'Sakura', 'Hana', 'Mio', 'Riko', 'Aoi', 'Mei', 'Saki', 'Nana', 'Akari'],
-  'Brazil': ['Alice', 'Sophia', 'Helena', 'Valentina', 'Laura', 'Isabella', 'Manuela', 'Júlia', 'Luísa', 'Lorena'],
-  'Nigeria': ['Fatima', 'Aisha', 'Zainab', 'Blessing', 'Grace', 'Chiamaka', 'Ngozi', 'Ada', 'Chioma', 'Amara'],
-  'Germany': ['Mia', 'Hannah', 'Emilia', 'Sofia', 'Lina', 'Ella', 'Mila', 'Lea', 'Lena', 'Clara'],
-  'France': ['Louise', 'Jade', 'Emma', 'Alice', 'Chloé', 'Léa', 'Manon', 'Rose', 'Anna', 'Inès'],
-  'Mexico': ['Sofía', 'Valentina', 'Regina', 'Camila', 'María José', 'Ximena', 'Valeria', 'Renata', 'Victoria', 'Mariana'],
-  'Egypt': ['Nour', 'Sara', 'Hana', 'Malak', 'Farah', 'Jana', 'Laila', 'Salma', 'Mariam', 'Yara'],
+  'US': ['Sophia', 'Emma', 'Isabella', 'Olivia', 'Ava', 'Emily', 'Abigail', 'Mia', 'Madison', 'Elizabeth'],
+  'UK': ['Florence', 'Poppy', 'Charlotte', 'Evelyn', 'Grace', 'Freya', 'Emily', 'Daisy', 'Matilda', 'Ruby'],
+  'India': ['Anika', 'Zara', 'Riya', 'Ishika', 'Tara', 'Navya', 'Meera', 'Sia', 'Aisha', 'Shanaya'],
+  'Japan': ['Hana', 'Miyu', 'Yuna', 'Kaede', 'Natsuki', 'Mika', 'Reina', 'Asuka', 'Yumi', 'Chiyo'],
+  'Brazil': ['Mariana', 'Beatriz', 'Livia', 'Giovanna', 'Yasmin', 'Clara', 'Larissa', 'Gabriela', 'Ana', 'Catarina'],
+  'Nigeria': ['Adanna', 'Bimpe', 'Chidinma', 'Eniola', 'Funmilayo', 'Habiba', 'Ifeoma', 'Jumoke', 'Nkechi', 'Omolara'],
+  'Germany': ['Clara', 'Charlotte', 'Frieda', 'Ida', 'Johanna', 'Leni', 'Greta', 'Mathilda', 'Luisa', 'Pauline'],
+  'France': ['Manon', 'Camille', 'Inès', 'Sarah', 'Juliette', 'Lucie', 'Eva', 'Zoé', 'Clara', 'Mathilde'],
+  'Mexico': ['Daniela', 'Fernanda', 'Mariana', 'Paulina', 'Alejandra', 'Gabriela', 'Luciana', 'Andrea', 'Jimena', 'Natalia'],
+  'Egypt': ['Dina', 'Heba', 'Laila', 'Mona', 'Nada', 'Rania', 'Sara', 'Yasmin', 'Zeina', 'Amina'],
 };
-
 const LAST_NAMES = {
-  'US': ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 'Rodriguez', 'Martinez'],
-  'UK': ['Smith', 'Jones', 'Williams', 'Brown', 'Taylor', 'Davies', 'Evans', 'Thomas', 'Roberts', 'Jackson'],
-  'India': ['Sharma', 'Singh', 'Kumar', 'Yadav', 'Patel', 'Gupta', 'Reddy', 'Khan', 'Das', 'Choudhury'],
-  'Japan': ['Sato', 'Suzuki', 'Takahashi', 'Tanaka', 'Watanabe', 'Ito', 'Yamamoto', 'Nakamura', 'Kobayashi', 'Kato'],
-  'Brazil': ['Silva', 'Santos', 'Oliveira', 'Souza', 'Lima', 'Pereira', 'Ferreira', 'Rodrigues', 'Alves', 'Costa'],
-  'Nigeria': ['Okoro', 'Adeyemi', 'Okafor', 'Abdullahi', 'Duru', 'Eze', 'Mohammed', 'Nwachukwu', 'Oladipo', 'Umar'],
-  'Germany': ['Müller', 'Schmidt', 'Schneider', 'Fischer', 'Weber', 'Meyer', 'Wagner', 'Becker', 'Schulz', 'Hoffmann'],
-  'France': ['Martin', 'Bernard', 'Dubois', 'Thomas', 'Robert', 'Richard', 'Petit', 'Durand', 'Leroy', 'Moreau'],
-  'Mexico': ['Hernández', 'García', 'Martínez', 'López', 'González', 'Rodríguez', 'Pérez', 'Sánchez', 'Ramírez', 'Cruz'],
-  'Egypt': ['Mohamed', 'Ahmed', 'Ali', 'Ibrahim', 'Hassan', 'Mahmoud', 'Hussein', 'Sayed', 'Amin', 'Khalil'],
+  'US': ['Anderson', 'Taylor', 'Moore', 'Jackson', 'Martin', 'Lee', 'Perez', 'Thompson', 'White', 'Harris'],
+  'UK': ['Walker', 'Edwards', 'Green', 'Hall', 'Lewis', 'Clarke', 'Patel', 'Khan', 'Scott', 'Turner'],
+  'India': ['Chopra', 'Malhotra', 'Rao', 'Iyer', 'Menon', 'Nair', 'Pillai', 'Reddy', 'Mishra', 'Dubey'],
+  'Japan': ['Yoshida', 'Yamada', 'Sasaki', 'Matsumoto', 'Inoue', 'Kimura', 'Hayashi', 'Shimizu', 'Mori', 'Abe'],
+  'Brazil': ['Ribeiro', 'Carvalho', 'Costa', 'Martins', 'Araújo', 'Melo', 'Barbosa', 'Cardoso', 'Teixeira', 'Nunes'],
+  'Nigeria': ['Adeboye', 'Bankole', 'Chidubem', 'Danjuma', 'Ekwueme', 'Fagbenle', 'Gowon', 'Iwu', 'Jega', 'Kuti'],
+  'Germany': ['Bauer', 'Richter', 'Klein', 'Wolf', 'Schröder', 'Neumann', 'Schwarz', 'Zimmermann', 'Braun', 'Krüger'],
+  'France': ['Simon', 'Michel', 'Lefebvre', 'Leroy', 'Roux', 'David', 'Bertrand', 'Morel', 'Fournier', 'Girard'],
+  'Mexico': ['Rojas', 'Morales', 'Ortega', 'Salazar', 'Guzmán', 'Mendoza', 'Castillo', 'Reyes', 'Vargas', 'Jiménez'],
+  'Egypt': ['El-Masry', 'Shalaby', 'Fahmy', 'Ghanem', 'Ramadan', 'Diab', 'Zaki', 'Adel', 'Kamal', 'Mansour'],
 };
 
 const REGIONS = ['US', 'UK', 'India', 'Japan', 'Brazil', 'Nigeria', 'Germany', 'France', 'Mexico', 'Egypt'];
-
 const CITIES_AND_TIMEZONES = [
   { city: 'New York', country: 'US', lat: 40.7128, lng: -74.0060, timezone: 'America/New_York' },
   { city: 'Los Angeles', country: 'US', lat: 34.0522, lng: -118.2437, timezone: 'America/Los_Angeles' },
@@ -70,18 +69,6 @@ const CITIES_AND_TIMEZONES = [
   { city: 'Cairo', country: 'Egypt', lat: 30.0444, lng: 31.2357, timezone: 'Africa/Cairo' },
   { city: 'Alexandria', country: 'Egypt', lat: 31.2001, lng: 29.9187, timezone: 'Africa/Cairo' },
 ];
-
-const GENDERS = ['male', 'female', 'non-binary'];
-const LOOKING_FOR_OPTIONS = ['male', 'female', 'non-binary'];
-
-const PERSONALITY_TRAITS = [
-  { type: 'disposition', values: ['friendly', 'reserved', 'outgoing', 'calm', 'energetic', 'mysterious', 'witty', 'thoughtful', 'playful', 'serious', 'optimistic', 'cynical', 'curious', 'practical', 'dreamy'] },
-  { type: 'patience', values: ['very patient', 'a bit impatient', 'has a short fuse', 'generally calm', 'can be easily annoyed', 'takes things in stride', 'gets frustrated quickly'] },
-  { type: 'flaws', values: ['prone to sarcasm', 'a bit shy at first', 'can be overly direct', 'sometimes overthinks things', 'occasionally forgets details', 'can be stubborn', 'a bit messy', 'tends to procrastinate', 'can be a know-it-all'] },
-  { type: 'interests', values: ['loves travel and outdoor activities', 'enjoys quiet evenings and reading', 'passionate about art and philosophy', 'always looking for fun and lighthearted banter', 'interested in deep conversations', 'enjoys cooking and trying new foods', 'a big fan of movies and TV shows', 'loves exploring new cultures', 'into fitness and healthy living', 'enjoys gaming and tech', 'fascinated by history', 'loves animals', 'enjoys volunteering'] },
-  { type: 'dating_approach', values: ['looking for a deep connection', 'enjoys lighthearted banter and getting to know people slowly', 'seeking a serious relationship', 'open to new experiences and seeing where things go', 'values intellectual compatibility', 'prefers emotional connection over superficiality', 'likes to take things slow', 'prefers direct communication', 'enjoys playful teasing'] },
-];
-
 const PROFESSIONS = [
   'Software Engineer', 'Teacher', 'Artist', 'Doctor', 'Marketing Specialist',
   'Chef', 'Musician', 'Accountant', 'Journalist', 'Architect',
@@ -90,26 +77,115 @@ const PROFESSIONS = [
   'Librarian', 'Veterinarian', 'Social Worker', 'Electrician', 'Plumber',
   'Pilot', 'Flight Attendant', 'Scientist', 'Researcher', 'Historian'
 ];
-
 const APP_DISCOVERY_METHODS = ['X (formerly Twitter)', 'Reddit'];
 
-const ZODIAC_SIGNS = [
-  'aries', 'taurus', 'gemini', 'cancer', 'leo', 'virgo',
-  'libra', 'scorpio', 'sagittarius', 'capricorn', 'aquarius', 'pisces'
+const zodiacSigns = [
+  "Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo",
+  "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces"
 ];
+const genders = ["Male", "Female", "Non-binary", "Prefer not to say"];
+const cultures = [
+  "Latinx", "Asian", "African American", "European", "Middle Eastern", "Mixed Heritage",
+  "South Asian", "Indigenous", "Pacific Islander", "Caribbean", "Scandinavian", "East African",
+  "Central Asian", "North African", "West African", "Southeast Asian", "Balkan", "Celtic",
+  "Polynesian", "Mediterranean", "Andean", "Himalayan", "Amazonian", "Arctic Indigenous",
+  "South American Mestizo", "Saharan", "Caucasian", "Melanesian", "Micronesian", "Sub-Saharan",
+  "Iberian", "Slavic", "Nordic", "Baltic", "South Pacific", "Afro-Caribbean", "Creole"
+];
+const zodiacData = {
+  Aries: {
+    traits: ["Bold", "Adventurous", "Energetic", "Courageous"],
+    quirks: ["Always wears a lucky charm", "Talks in movie quotes", "Loves spicy food challenges"],
+    flaws: ["Impulsive", "Too competitive", "Struggles with patience"]
+  },
+  Taurus: {
+    traits: ["Grounded", "Sensual", "Patient", "Reliable"],
+    quirks: ["Collects vintage maps", "Obsessed with miniature models", "Always has a book in hand"],
+    flaws: ["Stubborn", "Overly cautious", "Resistant to change"]
+  },
+  Gemini: {
+    traits: ["Witty", "Curious", "Adaptable", "Sociable"],
+    quirks: ["Talks to themselves in public", "Can't resist a good pun", "Loves solving puzzles"],
+    flaws: ["Indecisive", "Easily distracted", "Overthinks everything"]
+  },
+  Cancer: {
+    traits: ["Nurturing", "Emotional", "Intuitive", "Protective"],
+    quirks: ["Names their houseplants", "Keeps a dream journal", "Collects pressed flowers"],
+    flaws: ["Overly sentimental", "Avoids confrontation", "Too self-critical"]
+  },
+  Leo: {
+    traits: ["Charismatic", "Confident", "Generous", "Loyal"],
+    quirks: ["Wears themed outfits", "Always has a pocketknife", "Loves retro video games"],
+    flaws: ["Too prideful", "Hates asking for help", "Overly dramatic"]
+  },
+  Virgo: {
+    traits: ["Detail-oriented", "Practical", "Analytical", "Organized"],
+    quirks: ["Obsessed with origami", "Always carries a tiny umbrella", "Loves vintage typewriters"],
+    flaws: ["Perfectionist", "Overly critical", "Struggles with spontaneity"]
+  },
+  Libra: {
+    traits: ["Charming", "Diplomatic", "Romantic", "Balanced"],
+    quirks: ["Wears a signature hat", "Talks in rhymes sometimes", "Loves old radio shows"],
+    flaws: ["Indecisive", "Avoids conflict", "Overly idealistic"]
+  },
+  Scorpio: {
+    traits: ["Intense", "Mysterious", "Passionate", "Resourceful"],
+    quirks: ["Writes poetry under the full moon", "Fascinated by conspiracy theories", "Practices bird calls"],
+    flaws: ["Secretive", "Holds grudges", "Overly suspicious"]
+  },
+  Sagittarius: {
+    traits: ["Free-spirited", "Optimistic", "Adventurous", "Philosophical"],
+    quirks: ["Collects unusual souvenirs", "Always wears mismatched socks", "Loves stargazing"],
+    flaws: ["Tactless", "Restless", "Overly blunt"]
+  },
+  Capricorn: {
+    traits: ["Ambitious", "Disciplined", "Practical", "Resilient"],
+    quirks: ["Builds tiny furniture for pets", "Always has a sketchbook", "Obsessed with sci-fi novels"],
+    flaws: ["Pessimistic", "Workaholic", "Too serious"]
+  },
+  Aquarius: {
+    traits: ["Innovative", "Independent", "Humanitarian", "Eccentric"],
+    quirks: ["Talks to plants", "Loves conspiracy theories", "Collects colorful rocks"],
+    flaws: ["Detached", "Unpredictable", "Stubbornly independent"]
+  },
+  Pisces: {
+    traits: ["Dreamy", "Empathetic", "Creative", "Intuitive"],
+    quirks: ["Sings in the shower", "Doodles on everything", "Keeps a dream journal"],
+    flaws: ["Escapist", "Overly sensitive", "Indecisive"]
+  }
+};
 
 // --- Helper Functions ---
 function getRandomElement<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-function generateRandomDateOfBirth(minAge: number, maxAge: number): string {
-  const today = new Date();
-  const maxBirthDate = new Date(today.getFullYear() - minAge, today.getMonth(), today.getDate());
-  const minBirthDate = new Date(today.getFullYear() - maxAge, today.getMonth(), today.getDate());
+function generateRandomDateInZodiac(sign: keyof typeof zodiacData, minAge = 18, maxAge = 60): string {
+    const ranges = {
+        Aries: ["03-21", "04-19"], Taurus: ["04-20", "05-20"], Gemini: ["05-21", "06-20"],
+        Cancer: ["06-21", "07-22"], Leo: ["07-23", "08-22"], Virgo: ["08-23", "09-22"],
+        Libra: ["09-23", "10-22"], Scorpio: ["10-23", "11-21"], Sagittarius: ["11-22", "12-21"],
+        Capricorn: ["12-22", "01-19"], Aquarius: ["01-20", "02-18"], Pisces: ["02-19", "03-20"],
+    };
 
-  const randomTime = minBirthDate.getTime() + Math.random() * (maxBirthDate.getTime() - minBirthDate.getTime());
-  return new Date(randomTime).toISOString().split('T')[0];
+    const [startMonthDay, endMonthDay] = ranges[sign];
+    const [startMonth, startDay] = startMonthDay.split('-').map(Number);
+    const [endMonth, endDay] = endMonthDay.split('-').map(Number);
+
+    const currentYear = new Date().getFullYear();
+    const birthYear = currentYear - (Math.floor(Math.random() * (maxAge - minAge + 1)) + minAge);
+
+    let startDate = new Date(birthYear, startMonth - 1, startDay);
+    let endDate = new Date(birthYear, endMonth - 1, endDay);
+
+    if (sign === 'Capricorn') {
+        endDate = new Date(birthYear + 1, endMonth - 1, endDay);
+    }
+
+    const randomTime = startDate.getTime() + Math.random() * (endDate.getTime() - startDate.getTime());
+    const randomDate = new Date(randomTime);
+    
+    return randomDate.toISOString().split('T')[0];
 }
 
 function generateRandomTimeOfBirth(): string {
@@ -118,41 +194,16 @@ function generateRandomTimeOfBirth(): string {
   return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
 }
 
-// Updated to sanitize names for email addresses
 function generateRandomEmail(firstName: string, lastName: string): string {
   const domain = getRandomElement(['example.com', 'mail.com', 'web.net', 'inbox.org']);
   const uniqueId = Math.random().toString(36).substring(2, 8);
-
-  // Sanitize names: remove accents and non-alphanumeric characters
   const sanitizedFirstName = firstName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]/g, "");
   const sanitizedLastName = lastName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]/g, "");
-
   return `${sanitizedFirstName.toLowerCase()}.${sanitizedLastName.toLowerCase()}${uniqueId}@${domain}`;
 }
 
 function generateRandomPassword(): string {
-  return Math.random().toString(36).substring(2, 15); // Simple random string for dummy users
-}
-
-function getSunSign(dateOfBirth: string): string {
-  const date = new Date(dateOfBirth);
-  const month = date.getMonth() + 1;
-  const day = date.getDate();
-
-  if ((month === 3 && day >= 21) || (month === 4 && day <= 19)) return 'aries';
-  if ((month === 4 && day >= 20) || (month === 5 && day <= 20)) return 'taurus';
-  if ((month === 5 && day >= 21) || (month === 6 && day <= 20)) return 'gemini';
-  if ((month === 6 && day >= 21) || (month === 7 && day <= 22)) return 'cancer';
-  if ((month === 7 && day >= 23) || (month === 8 && day <= 22)) return 'leo';
-  if ((month === 8 && day >= 23) || (month === 9 && day <= 22)) return 'virgo';
-  if ((month === 9 && day >= 23) || (month === 10 && day <= 22)) return 'libra';
-  if ((month === 10 && day >= 23) || (month === 11 && day <= 21)) return 'scorpio';
-  if ((month === 11 && day >= 22) || (month === 12 && day <= 21)) return 'sagittarius';
-  if ((month === 12 && day >= 22) || (month === 1 && day <= 19)) return 'capricorn';
-  if ((month === 1 && day >= 20) || (month === 2 && day <= 18)) return 'aquarius';
-  if ((month === 2 && day >= 19) || (month === 3 && day <= 20)) return 'pisces';
-  
-  return 'aries'; // Default or error case
+  return Math.random().toString(36).substring(2, 15);
 }
 
 function calculateAge(dateOfBirth: string): number {
@@ -160,31 +211,20 @@ function calculateAge(dateOfBirth: string): number {
   const birthDate = new Date(dateOfBirth);
   let age = today.getFullYear() - birthDate.getFullYear();
   const monthDiff = today.getMonth() - birthDate.getMonth();
-  
   if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
     age--;
   }
-  
   return age;
 }
 
 function generatePersonalityPrompt(profile: any): string {
-  const disposition = getRandomElement(PERSONALITY_TRAITS.find(t => t.type === 'disposition')!.values);
-  const patience = getRandomElement(PERSONALITY_TRAITS.find(t => t.type === 'patience')!.values);
-  const flaw = getRandomElement(PERSONALITY_TRAITS.find(t => t.type === 'flaws')!.values);
-  const interest = getRandomElement(PERSONALITY_TRAITS.find(t => t.type === 'interests')!.values);
-  const datingApproach = getRandomElement(PERSONALITY_TRAITS.find(t => t.type === 'dating_approach')!.values);
-  const appDiscovery = getRandomElement(APP_DISCOVERY_METHODS);
-  const sunSign = getSunSign(profile.date_of_birth);
-  const age = calculateAge(profile.date_of_birth); // Calculate age here
-
-  let prompt = `You are ${profile.first_name}, a ${age}-year-old ${profile.gender} from ${profile.place_of_birth} who works as a ${profile.profession}. Your sun sign is ${sunSign}.`;
-  
-  prompt += ` You are generally ${disposition} and ${patience}. You can sometimes be ${flaw}. In your free time, you ${interest}. On dating apps, you ${datingApproach}.`;
-  prompt += ` You found this dating platform on ${appDiscovery} and are excited about its promise to find matches based on birth chart compatibility.`;
+  let prompt = `You are ${profile.first_name}, a ${profile.age}-year-old ${profile.gender} of ${profile.culture} heritage. Your sun sign is ${profile.zodiacSign}.`;
+  prompt += ` You are known for being ${profile.trait}, but can sometimes be ${profile.flaw}.`;
+  prompt += ` A unique quirk about you is that you ${profile.quirk}.`;
+  prompt += ` You work as a ${profile.profession} and live in ${profile.current_city}.`;
+  prompt += ` You found this dating app on ${profile.appDiscovery} and are interested in its focus on astrological compatibility.`;
   prompt += ` You are a real human being, not an AI or bot. Your responses should reflect genuine human emotions and traits. If you feel offended or uncomfortable, you will make it known politely but firmly. You are not overly accommodating.`;
   prompt += ` Your communication style is influenced by your background from ${profile.place_of_birth} and your ${profile.gender} perspective.`;
-
   return prompt;
 }
 
@@ -196,25 +236,41 @@ serve(async (req) => {
 
   const supabaseClient = createClient(
     Deno.env.get('SUPABASE_URL') ?? '',
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '' // Use service role key for admin operations
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
   );
 
   try {
-    const NUM_PROFILES_TO_CREATE = 70;
+    let numProfilesToCreate = 70; // Default value
+    try {
+      const body = await req.json();
+      if (body && typeof body.n === 'number' && body.n > 0) {
+        numProfilesToCreate = Math.min(body.n, 500); // Cap at 500 to prevent abuse
+      }
+    } catch (e) {
+      // Ignore error if no body is sent, use default
+    }
+
     let createdCount = 0;
     const errors: string[] = [];
+    const generatedEmails = new Set<string>();
 
-    console.log(`Attempting to create ${NUM_PROFILES_TO_CREATE} dummy profiles...`);
+    console.log(`Attempting to create ${numProfilesToCreate} dummy profiles...`);
 
-    for (let i = 0; i < NUM_PROFILES_TO_CREATE; i++) {
+    for (let i = 0; i < numProfilesToCreate; i++) {
       try {
-        const region = getRandomElement(REGIONS);
-        const gender = getRandomElement(GENDERS);
-        const lookingFor = getRandomElement(LOOKING_FOR_OPTIONS);
+        // Generate new profile data
+        const zodiacSign = getRandomElement(zodiacSigns) as keyof typeof zodiacData;
+        const { traits, quirks, flaws } = zodiacData[zodiacSign];
+        const trait = getRandomElement(traits);
+        const quirk = getRandomElement(quirks);
+        const flaw = getRandomElement(flaws);
+        const gender = getRandomElement(genders).toLowerCase().replace(/\s+/g, '_');
+        const culture = getRandomElement(cultures);
+        const lookingFor = getRandomElement(genders).toLowerCase().replace(/\s+/g, '_');
         
+        const region = getRandomElement(REGIONS);
         const birthCityData = getRandomElement(CITIES_AND_TIMEZONES.filter(c => c.country === region));
         
-        // Determine current location (30% chance to be different from birth city)
         let currentCityData = birthCityData;
         if (Math.random() < 0.3) {
             currentCityData = getRandomElement(CITIES_AND_TIMEZONES);
@@ -224,18 +280,38 @@ serve(async (req) => {
         const firstName = getRandomElement(firstNamePool);
         const lastName = getRandomElement(LAST_NAMES[region as keyof typeof LAST_NAMES]);
         
-        const email = generateRandomEmail(firstName, lastName);
-        const password = generateRandomPassword(); // Dummy password for auth.users
-        
-        const dateOfBirth = generateRandomDateOfBirth(18, 60); // Age between 18 and 60
+        let email = generateRandomEmail(firstName, lastName);
+        while (generatedEmails.has(email)) {
+          email = generateRandomEmail(firstName, lastName); // Ensure uniqueness within this run
+        }
+        generatedEmails.add(email);
+
+        const password = generateRandomPassword();
+        const dateOfBirth = generateRandomDateInZodiac(zodiacSign, 18, 60);
         const timeOfBirth = generateRandomTimeOfBirth();
         const profession = getRandomElement(PROFESSIONS);
+        const appDiscovery = getRandomElement(APP_DISCOVERY_METHODS);
         
-        const minAge = Math.max(18, Math.floor(Math.random() * 20) + 20); // 20-40
-        const maxAge = Math.min(99, minAge + Math.floor(Math.random() * 15) + 5); // minAge + 5-20
+        const minAge = Math.max(18, Math.floor(Math.random() * 20) + 20);
+        const maxAge = Math.min(99, minAge + Math.floor(Math.random() * 15) + 5);
 
-        // Prepare profile data to be passed as user_metadata
-        const profileMetadata = {
+        const profileForPrompt = {
+          first_name: firstName,
+          age: calculateAge(dateOfBirth),
+          gender: gender,
+          culture: culture,
+          zodiacSign: zodiacSign,
+          trait: trait,
+          flaw: flaw,
+          quirk: quirk,
+          profession: profession,
+          current_city: currentCityData.city,
+          place_of_birth: birthCityData.city,
+          appDiscovery: appDiscovery,
+        };
+        const personalityPrompt = generatePersonalityPrompt(profileForPrompt);
+
+        const finalUserMetadata = {
           first_name: firstName,
           last_name: lastName,
           date_of_birth: dateOfBirth,
@@ -251,36 +327,24 @@ serve(async (req) => {
           looking_for: lookingFor,
           min_age: minAge,
           max_age: maxAge,
-          is_active: true, // Mark as automated profile
-          profession: profession, // Temporarily here for prompt generation
-          block_threshold: Math.random() * 0.6 - 0.7, // Range: -0.7 to -0.1
-        };
-
-        // Generate personality prompt using the full profileMetadata
-        const personalityPrompt = generatePersonalityPrompt(profileMetadata);
-        
-        // Add personality_prompt to metadata for the SQL trigger
-        const finalUserMetadata = {
-          ...profileMetadata,
+          is_active: true,
           personality_prompt: personalityPrompt,
+          block_threshold: Math.random() * 0.6 - 0.7,
         };
 
-        // 1. Create user in auth.users (this will trigger handle_new_user to create the profile)
-        const { data: authUserData, error: authError } = await supabaseClient.auth.admin.createUser({
+        const { error: authError } = await supabaseClient.auth.admin.createUser({
           email: email,
           password: password,
-          email_confirm: true, // Auto-confirm for dummy users
+          email_confirm: true,
           user_metadata: finalUserMetadata
         });
 
         if (authError) {
           console.error(`Error creating auth user ${email}:`, authError.message);
           errors.push(`Auth user creation failed for ${email}: ${authError.message}`);
-          continue; // Skip to next profile
+          continue;
         }
 
-        const userId = authUserData.user.id;
-        console.log(`Created auth user: ${userId} (${email}). Profile will be created by trigger.`);
         createdCount++;
 
       } catch (profileError: any) {
