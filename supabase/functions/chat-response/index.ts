@@ -67,7 +67,7 @@ async function getProfile(supabaseClient: SupabaseClient, userId: string) {
 async function getConversationContext(supabaseClient: SupabaseClient, chatId: string) {
   const { data: context } = await supabaseClient
     .from('conversation_contexts')
-    .select('context_summary, detailed_chat, current_threshold, consecutive_negative_count')
+    .select('context_summary, detailed_chat, current_threshold, consecutive_negative_count, ai_reengagement_attempts')
     .eq('chat_id', chatId)
     .single();
   return context;
@@ -86,10 +86,10 @@ ${detailedHistory || "No history yet."}
 ${latestExchange}
 
 **Your Task (CRITICAL):**
-Provide ONLY the new, updated, one-sentence summary of the entire conversation's state. Do not add any other text, explanation, or formatting. The summary MUST use the names "${humanFirstName}" and "${aiFirstName}" and MUST NOT use the words "AI", "bot", "user", or "automated".
+Provide ONLY a new, concise paragraph (2-3 sentences) that summarizes the key points, emotional tone, and current state of the entire conversation. Do not add any other text, explanation, or formatting. The summary MUST use the names "${humanFirstName}" and "${aiFirstName}" and MUST NOT use the words "AI", "bot", "user", or "automated".
 
 **Example Output:**
-${humanFirstName} is asking a thoughtful follow-up question to ${aiFirstName}, showing genuine interest.`;
+${humanFirstName} opened up about their passion for astrology, and ${aiFirstName} responded with curiosity, asking about their sun sign. The tone is friendly and inquisitive, with potential for a deeper connection.`;
 }
 
 function buildSentimentPrompt(latestExchange: string): string {
@@ -136,6 +136,7 @@ function buildChatPrompt(aiProfile: any, humanProfile: any, conversationHistory:
     promptInstructions += `\n\nABSOLUTELY CRITICAL: DO NOT use any markdown characters whatsoever, including asterisks (*), underscores (_), hash symbols (#), or backticks (\`). Your response MUST be plain text. This is paramount.`;
     promptInstructions += `\n\nABSOLUTELY NO EMOJIS. Your responses must not contain any emojis. This is a strict rule.`;
     promptInstructions += `\n\nYour response should be very concise and natural, like a human texting including rare varying human-like typos depending on the situation. It can be a single short message, or if it needed, break it into 1 to 6 (in varying degree choose number of messages) very short, related messages. Overall the combined length should never exceed the token limit "${MAX_TOKEN_LIMIT}". ABSOLUTELY CRITICAL: If you send multiple messages, separate each with the delimiter: "${MESSAGE_DELIMITER}", ensure you do this most accurately and not make any typos as it ruin the entire logic. This delimiter is ONLY for separating messages and MUST NOT appear within the content of any message. Ensure this is done with utmost accuracy.`;
+    promptInstructions += `\n\nCRITICAL: Avoid conversational tics and repetitive phrases (like winking or overusing certain words). Vary your responses to keep the chat fresh and unpredictable.`;
 
     promptInstructions += `\n\nNow, for the most crucial part: **Your Persona, Conversational Memory, and Engagement Strategy (Calculated & Realistic).**
 
@@ -198,7 +199,10 @@ async function callAiApi(prompt: string, maxTokens: number) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: maxTokens }
+        generationConfig: { 
+          temperature: 0.95,
+          maxOutputTokens: maxTokens 
+        }
       }),
     }
   );
@@ -233,6 +237,7 @@ async function updateContext(supabaseClient: SupabaseClient, chatId: string, new
       current_threshold: newCurrentThreshold,
       last_updated: new Date().toISOString(),
       consecutive_negative_count: newConsecutiveNegativeCount,
+      ai_reengagement_attempts: 0, // Always reset on human interaction
     }, { onConflict: 'chat_id' });
 }
 

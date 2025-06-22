@@ -16,6 +16,7 @@ const REENGAGEMENT_RATE = 0.1; // 10% chance for a dummy profile to re-engage in
 const MIN_GAP_FOR_REENGAGEMENT_HOURS = 3; // Minimum gap in hours for AI to consider re-engaging
 const UNRESPONDED_MESSAGE_THRESHOLD_MINUTES = 5; // If human sent last message and AI hasn't responded in this many minutes, trigger response
 const NEGATIVE_SENTIMENT_THRESHOLD = -0.05; // Threshold to consider a message "negative"
+const REENGAGEMENT_ATTEMPT_LIMIT = 2; // Max times AI will re-engage a silent chat
 
 // Define a threshold for immediate vs. delayed sending
 const IMMEDIATE_SEND_THRESHOLD_MS = 50 * 1000; // 50 seconds
@@ -99,7 +100,7 @@ function buildConversationHistory(messages: Message[], aiUserId: string, aiName:
 async function getConversationContext(supabaseClient: SupabaseClient, chatId: string) {
     const { data: context } = await supabaseClient
       .from('conversation_contexts')
-      .select('context_summary, detailed_chat, current_threshold, consecutive_negative_count')
+      .select('context_summary, detailed_chat, current_threshold, consecutive_negative_count, ai_reengagement_attempts')
       .eq('chat_id', chatId)
       .single();
     return context;
@@ -162,10 +163,10 @@ ${detailedHistory || "No history yet."}
 ${latestExchange}
 
 **Your Task (CRITICAL):**
-Provide ONLY the new, updated, one-sentence summary of the entire conversation's state. Do not add any other text, explanation, or formatting. The summary MUST use the names "${humanFirstName}" and "${aiFirstName}" and MUST NOT use the words "AI", "bot", "user", or "automated".
+Provide ONLY a new, concise paragraph (2-3 sentences) that summarizes the key points, emotional tone, and current state of the entire conversation. Do not add any other text, explanation, or formatting. The summary MUST use the names "${humanFirstName}" and "${aiFirstName}" and MUST NOT use the words "AI", "bot", "user", or "automated".
 
 **Example Output:**
-${humanFirstName} is asking a thoughtful follow-up question to ${aiFirstName}, showing genuine interest.`;
+${humanFirstName} opened up about their passion for astrology, and ${aiFirstName} responded with curiosity, asking about their sun sign. The tone is friendly and inquisitive, with potential for a deeper connection.`;
 }
 
 function buildSentimentPrompt(latestExchange: string): string {
@@ -228,6 +229,7 @@ function buildAiPrompt(aiProfile: any, humanProfile: any, context: any, conversa
     promptInstructions += `\n\nABSOLUTELY CRITICAL: DO NOT use any markdown characters whatsoever, including asterisks (*), underscores (_), hash symbols (#), or backticks (\`). Your response MUST be plain text. This is paramount.`;
     promptInstructions += `\n\nABSOLUTELY NO EMOJIS. Your responses must not contain any emojis. This is a strict rule.`;
     promptInstructions += `\n\nYour response should be very concise and natural, like a human texting including rare varying human-like typos depending on the situation. It can be a single short message, or if it needed, break it into 1 to 6 (in varying degree choose number of messages) very short, related messages. Overall the combined length should never exceed the token limit "${MAX_TOKEN_LIMIT}". ABSOLUTELY CRITICAL: If you send multiple messages, separate each with the delimiter: "${MESSAGE_DELIMITER}", ensure you do this most accurately and not make any typos as it ruin the entire logic. This delimiter is ONLY for separating messages and MUST NOT appear within the content of any message. Ensure this is done with utmost accuracy.`;
+    promptInstructions += `\n\nCRITICAL: Avoid conversational tics and repetitive phrases (like winking or overusing certain words). Vary your responses to keep the chat fresh and unpredictable.`;
 
     promptInstructions += `\n\nNow, for the most crucial part: **Your Persona, Conversational Memory, and Engagement Strategy (Calculated & Realistic).**
 
@@ -263,7 +265,7 @@ async function callAiApi(prompt: string, maxTokens: number): Promise<string> {
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: {
-            temperature: 0.8,
+            temperature: 0.95,
             topK: 40,
             topP: 0.95,
             maxOutputTokens: maxTokens,
@@ -303,7 +305,7 @@ async function scheduleDelayedMessage(supabaseClient: SupabaseClient, chatId: st
 /**
  * Updates the conversation context summary and detailed chat log.
  */
-async function updateConversationContext(supabaseClient: SupabaseClient, chatId: string, aiFirstName: string, humanFirstName: string, lastHumanMessage: string | null, aiResponse: string, existingContext: any) {
+async function updateConversationContext(supabaseClient: SupabaseClient, chatId: string, aiFirstName: string, humanFirstName: string, lastHumanMessage: string | null, aiResponse: string, existingContext: any, wasAiLastSpeaker: boolean) {
     const latestExchange = lastHumanMessage 
       ? `${humanFirstName}: "${lastHumanMessage}"\n${aiFirstName}: "${aiResponse.replace(new RegExp(MESSAGE_DELIMITER, 'g'), '\n')}"`
       : `${aiFirstName}: "${aiResponse.replace(new RegExp(MESSAGE_DELIMITER, 'g'), '\n')}"`;
@@ -312,71 +314,42 @@ async function updateConversationContext(supabaseClient: SupabaseClient, chatId:
       ? `${existingContext.detailed_chat}\n${latestExchange}`
       : latestExchange;
 
-    // Only perform sentiment analysis and threshold updates if this is a response to a human message.
+    const summaryPrompt = buildSummaryPrompt(existingContext?.context_summary, existingContext?.detailed_chat, latestExchange, aiFirstName, humanFirstName);
+    const newSummary = await callAiApi(summaryPrompt, 200);
+
+    let updatePayload: any = {
+        chat_id: chatId,
+        context_summary: newSummary,
+        detailed_chat: updatedDetailedChat,
+        last_updated: new Date().toISOString(),
+    };
+
     if (lastHumanMessage) {
-        const summaryPrompt = buildSummaryPrompt(existingContext?.context_summary, existingContext?.detailed_chat, latestExchange, aiFirstName, humanFirstName);
         const sentimentPrompt = buildSentimentPrompt(latestExchange);
-
-        const [newSummary, sentimentResponse] = await Promise.all([
-            callAiApi(summaryPrompt, 200),
-            callAiApi(sentimentPrompt, 10)
-        ]);
-
-        console.info("Raw summary response:", newSummary);
-        console.info("Raw sentiment response:", sentimentResponse);
-
+        const sentimentResponse = await callAiApi(sentimentPrompt, 10);
+        
         let sentimentAdjustment = 0.0;
         try {
             const parsedSentiment = parseFloat(sentimentResponse);
-            if (!isNaN(parsedSentiment)) {
-                sentimentAdjustment = parsedSentiment;
-            } else {
-                console.warn("Could not parse sentiment response as a number.", { sentimentResponse });
-            }
+            if (!isNaN(parsedSentiment)) sentimentAdjustment = parsedSentiment;
         } catch (e) {
             console.warn("Error parsing sentiment response.", { sentimentResponse, error: e.message });
         }
 
         const consecutiveNegativeCount = existingContext?.consecutive_negative_count ?? 0;
-        let finalSentimentAdjustment = sentimentAdjustment;
-        let newConsecutiveNegativeCount = 0;
-
-        if (sentimentAdjustment < NEGATIVE_SENTIMENT_THRESHOLD) {
-          newConsecutiveNegativeCount = consecutiveNegativeCount + 1;
-          if (newConsecutiveNegativeCount > 1) {
-            const multiplier = 1 + (0.1 * (newConsecutiveNegativeCount - 1));
-            finalSentimentAdjustment *= Math.min(multiplier, 1.5);
-          }
-        } else {
-          newConsecutiveNegativeCount = 0;
-        }
-
-        const currentThreshold = existingContext?.current_threshold ?? 0.5;
-        const newCurrentThreshold = currentThreshold + finalSentimentAdjustment;
-
-        await supabaseClient
-          .from('conversation_contexts')
-          .upsert({
-            chat_id: chatId,
-            context_summary: newSummary,
-            detailed_chat: updatedDetailedChat,
-            last_updated: new Date().toISOString(),
-            current_threshold: newCurrentThreshold,
-            consecutive_negative_count: newConsecutiveNegativeCount,
-          }, { onConflict: 'chat_id' });
-    } else {
-        // If it's an AI-initiated message, just update the chat log and create a simple summary.
-        // DO NOT update the threshold or negative count.
-        const newSummary = `${aiFirstName} has initiated or re-engaged the conversation.`;
-        await supabaseClient
-          .from('conversation_contexts')
-          .upsert({
-            chat_id: chatId,
-            context_summary: newSummary,
-            detailed_chat: updatedDetailedChat,
-            last_updated: new Date().toISOString(),
-          }, { onConflict: 'chat_id' });
+        let newConsecutiveNegativeCount = (sentimentAdjustment < NEGATIVE_SENTIMENT_THRESHOLD) ? consecutiveNegativeCount + 1 : 0;
+        
+        updatePayload.current_threshold = (existingContext?.current_threshold ?? 0.5) + sentimentAdjustment;
+        updatePayload.consecutive_negative_count = newConsecutiveNegativeCount;
+        updatePayload.ai_reengagement_attempts = 0; // Reset on human response
+    } else if (wasAiLastSpeaker) {
+        // This is a re-engagement, increment the counter
+        updatePayload.ai_reengagement_attempts = (existingContext?.ai_reengagement_attempts || 0) + 1;
     }
+
+    await supabaseClient
+      .from('conversation_contexts')
+      .upsert(updatePayload, { onConflict: 'chat_id' });
 }
 
 /**
@@ -507,7 +480,9 @@ serve(async (req) => {
           if (!wasAiLastSpeaker && lastMessageOverall && timeSinceLastMessageOverall !== null && timeSinceLastMessageOverall >= UNRESPONDED_MESSAGE_THRESHOLD_MINUTES) {
             shouldProcess = true;
           } else if (wasAiLastSpeaker && timeSinceLastAiMessage !== null && timeSinceLastAiMessage >= MIN_GAP_FOR_REENGAGEMENT_HOURS) {
-            if (Math.random() < REENGAGEMENT_RATE) shouldProcess = true;
+            if (Math.random() < REENGAGEMENT_RATE && (context?.ai_reengagement_attempts || 0) < REENGAGEMENT_ATTEMPT_LIMIT) {
+              shouldProcess = true;
+            }
           }
         } else {
           if (Math.random() < INITIATION_RATE) {
@@ -560,7 +535,7 @@ serve(async (req) => {
               }
             }
             const cleanedAiResponseForContext = individualMessages.join('\n');
-            await updateConversationContext(supabaseClient, currentChatId, dummyProfile.first_name, humanProfile.first_name, lastHumanMessage, cleanedAiResponseForContext, context);
+            await updateConversationContext(supabaseClient, currentChatId, dummyProfile.first_name, humanProfile.first_name, lastHumanMessage, cleanedAiResponseForContext, context, wasAiLastSpeaker);
             chatsProcessedCount++;
           } catch (processError: any) {
             errors.push(`Failed to process chat for ${dummyProfile.first_name}: ${processError.message}`);

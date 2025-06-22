@@ -27,12 +27,18 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
 
-  // State and ref for message batching
+  // Refs for state that needs to be accessed in cleanup
   const [messageQueue, setMessageQueue] = useState<{ content: string; tempId: string; createdAt: string }[]>([]);
   const queueRef = useRef(messageQueue);
+  const chatRef = useRef(chat);
+  
   useEffect(() => {
     queueRef.current = messageQueue;
   }, [messageQueue]);
+
+  useEffect(() => {
+    chatRef.current = chat;
+  }, [chat]);
   
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -77,7 +83,6 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
         // Restore the queue on failure, putting failed messages at the front.
         setMessageQueue(currentQueue => [...queueToSend, ...currentQueue]);
     } else if (insertedMessages) {
-        // Sort the newly inserted messages by their creation timestamp to ensure correct order.
         const sortedInsertedMessages = insertedMessages.sort(
             (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
         );
@@ -199,8 +204,12 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
       }
+      // Send any remaining messages in the queue when the component unmounts
+      if (queueRef.current.length > 0 && chatRef.current) {
+        sendQueuedMessages(chatRef.current);
+      }
     };
-  }, [user, match?.user_id, fetchBlockLists, subscribeToChat]);
+  }, [user, match?.user_id, fetchBlockLists, subscribeToChat, sendQueuedMessages]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
