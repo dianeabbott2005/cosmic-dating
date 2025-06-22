@@ -20,6 +20,7 @@ export interface Chat {
   created_at: string;
   other_user?: {
     first_name: string;
+    last_name?: string;
     user_id: string;
     date_of_birth?: string;
     place_of_birth?: string;
@@ -66,7 +67,7 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
         .select(`*, messages (id, content, sender_id, created_at, chat_id)`);
 
       if (allBlockedIds.length > 0) {
-        const blockedIdsString = `(${allBlockedIds.join(',')})`;
+        const blockedIdsString = `(${allBlockedIds.map(id => `'${id}'`).join(',')})`;
         query = query.or(
           `and(user1_id.eq.${userId},user2_id.not.in.${blockedIdsString}),` +
           `and(user2_id.eq.${userId},user1_id.not.in.${blockedIdsString})`
@@ -82,7 +83,7 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
       const chatPromises = (userChats || []).map(async (chat) => {
         const otherUserId = chat.user1_id === userId ? chat.user2_id : chat.user1_id;
         
-        const { data: profile } = await supabase.from('profiles').select('first_name, user_id, date_of_birth, place_of_birth').eq('user_id', otherUserId).single();
+        const { data: profile } = await supabase.from('profiles').select('first_name, last_name, user_id, date_of_birth, place_of_birth').eq('user_id', otherUserId).single();
         const lastMessage = chat.messages?.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0] || null;
         
         if (!lastMessage) return null;

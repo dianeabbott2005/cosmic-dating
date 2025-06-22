@@ -52,6 +52,8 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
     return sign.charAt(0).toUpperCase() + sign.slice(1);
   };
 
+  const displayName = `${match.first_name}${match.last_name ? ` ${match.last_name.charAt(0)}.` : ''}`;
+
   const sendQueuedMessages = useCallback(async (chatForSend: Chat) => {
     const queueToSend = queueRef.current;
     if (queueToSend.length === 0 || !user) {
@@ -231,7 +233,7 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
             <button onClick={onBack} className="text-gray-400 hover:text-white transition-colors"><ArrowLeft className="w-6 h-6" /></button>
             <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full flex items-center justify-center"><span className="text-white font-semibold">{match.first_name?.[0] || '?'}</span></div>
             <div className="flex-1">
-              <h2 className="text-lg font-semibold text-white">{match.first_name}, {match.age}</h2>
+              <h2 className="text-lg font-semibold text-white">{displayName}, {match.age}</h2>
               {match.place_of_birth && <p className="text-sm text-gray-400 flex items-center gap-1"><MapPin className="w-3 h-3" />{match.place_of_birth}</p>}
               {sunSign && <p className="text-sm text-purple-300 font-medium mt-1">☀️ {formatSignName(sunSign)}</p>}
             </div>
@@ -244,7 +246,7 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onSelect={() => setIsBlockDialogOpen(true)} className="text-red-400 focus:text-red-400 focus:bg-red-500/10">
                   <ShieldOff className="mr-2 h-4 w-4" />
-                  <span>Block {match.first_name}</span>
+                  <span>Block {displayName}</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -291,7 +293,7 @@ const EnhancedChatView = ({ match, onBack }: EnhancedChatViewProps) => {
           open={isBlockDialogOpen}
           onOpenChange={setIsBlockDialogOpen}
           userIdToBlock={match.user_id}
-          userName={match.first_name}
+          userName={displayName}
           onSuccess={fetchBlockLists}
         />
       )}

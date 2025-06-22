@@ -251,6 +251,7 @@ serve(async (req) => {
     }
 
     let createdCount = 0;
+    let skippedCount = 0;
     const errors: string[] = [];
     const generatedEmails = new Set<string>();
 
@@ -280,6 +281,25 @@ serve(async (req) => {
         const firstName = getRandomElement(firstNamePool);
         const lastName = getRandomElement(LAST_NAMES[region as keyof typeof LAST_NAMES]);
         
+        // Check if profile already exists
+        const { count, error: countError } = await supabaseClient
+          .from('profiles')
+          .select('*', { count: 'exact', head: true })
+          .eq('first_name', firstName)
+          .eq('last_name', lastName);
+
+        if (countError) {
+          console.error(`Error checking for existing profile ${firstName} ${lastName}:`, countError.message);
+          errors.push(`DB check failed for ${firstName} ${lastName}: ${countError.message}`);
+          continue; // Skip on error
+        }
+
+        if (count !== null && count > 0) {
+          console.log(`Profile for ${firstName} ${lastName} already exists. Skipping.`);
+          skippedCount++;
+          continue; // Skip if profile exists
+        }
+
         let email = generateRandomEmail(firstName, lastName);
         while (generatedEmails.has(email)) {
           email = generateRandomEmail(firstName, lastName); // Ensure uniqueness within this run
@@ -353,12 +373,13 @@ serve(async (req) => {
       }
     }
 
-    console.log(`Finished creating dummy profiles. Successfully created: ${createdCount}. Failed: ${errors.length}`);
+    console.log(`Finished creating dummy profiles. Successfully created: ${createdCount}. Skipped: ${skippedCount}. Failed: ${errors.length}`);
 
     return new Response(
       JSON.stringify({
         success: true,
         profilesCreated: createdCount,
+        profilesSkipped: skippedCount,
         profilesFailed: errors.length,
         errors: errors.length > 0 ? errors : undefined,
       }),

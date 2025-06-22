@@ -9,6 +9,7 @@ export interface MatchProfile {
   id: string;
   user_id: string;
   first_name: string;
+  last_name: string;
   email: string;
   date_of_birth: string;
   time_of_birth: string;
@@ -62,12 +63,12 @@ export const useMatches = () => {
             user_id,
             matched_user_id,
             compatibility_score,
-            user1_profile:profiles!matches_user_id_fkey(user_id, first_name, date_of_birth, time_of_birth, place_of_birth, gender),
-            user2_profile:profiles!matches_matched_user_id_fkey(user_id, first_name, date_of_birth, time_of_birth, place_of_birth, gender)
+            user1_profile:profiles!matches_user_id_fkey(user_id, first_name, last_name, date_of_birth, time_of_birth, place_of_birth, gender),
+            user2_profile:profiles!matches_matched_user_id_fkey(user_id, first_name, last_name, date_of_birth, time_of_birth, place_of_birth, gender)
           `);
 
         if (allBlockedIds.length > 0) {
-          const blockedIdsString = `(${allBlockedIds.join(',')})`;
+          const blockedIdsString = `(${allBlockedIds.map(id => `'${id}'`).join(',')})`;
           query = query.or(
             `and(user_id.eq.${userId},matched_user_id.not.in.${blockedIdsString}),` +
             `and(matched_user_id.eq.${userId},user_id.not.in.${blockedIdsString})`

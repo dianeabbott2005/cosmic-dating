@@ -33,6 +33,8 @@ const EnhancedMatchCard = ({ match, onStartChat, onViewProfile }: EnhancedMatchC
     return sign.charAt(0).toUpperCase() + sign.slice(1);
   };
 
+  const displayName = `${match.first_name}${match.last_name ? ` ${match.last_name.charAt(0)}.` : ''}`;
+
   return (
     <>
       <div className="card-cosmic transform hover:scale-105 transition-all duration-300 hover:shadow-xl hover:shadow-purple-500/20">
@@ -47,7 +49,7 @@ const EnhancedMatchCard = ({ match, onStartChat, onViewProfile }: EnhancedMatchC
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-xl font-semibold text-white">
-              {match.first_name}, {match.age}
+              {displayName}, {match.age}
             </h3>
             <div className="flex items-center gap-2">
               <Heart className="w-6 h-6 text-pink-400 hover:fill-current transition-colors cursor-pointer" />
@@ -60,7 +62,7 @@ const EnhancedMatchCard = ({ match, onStartChat, onViewProfile }: EnhancedMatchC
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem onSelect={() => setIsBlockDialogOpen(true)} className="text-red-400 focus:text-red-400 focus:bg-red-500/10">
                     <ShieldOff className="mr-2 h-4 w-4" />
-                    <span>Block {match.first_name}</span>
+                    <span>Block {displayName}</span>
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -107,7 +109,7 @@ const EnhancedMatchCard = ({ match, onStartChat, onViewProfile }: EnhancedMatchC
           open={isBlockDialogOpen}
           onOpenChange={setIsBlockDialogOpen}
           userIdToBlock={match.user_id}
-          userName={match.first_name}
+          userName={displayName}
           onSuccess={refreshMatches}
         />
       )}

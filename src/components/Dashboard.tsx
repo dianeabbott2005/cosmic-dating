@@ -33,6 +33,7 @@ const Dashboard = ({ user }: DashboardProps) => {
     const matchFromChat = {
       user_id: chat.other_user?.user_id,
       first_name: chat.other_user?.first_name,
+      last_name: chat.other_user?.last_name,
       age: chat.other_user?.age,
       place_of_birth: chat.other_user?.place_of_birth,
       date_of_birth: chat.other_user?.date_of_birth,
@@ -189,7 +190,7 @@ const Dashboard = ({ user }: DashboardProps) => {
                       
                       <div className="flex-1 min-w-0">
                         <h3 className="text-lg font-semibold text-white">
-                          {chat.other_user?.first_name}
+                          {chat.other_user?.first_name}{chat.other_user?.last_name ? ` ${chat.other_user.last_name.charAt(0)}.` : ''}
                         </h3>
                         {chat.last_message && (
                           <p className="text-gray-400 text-sm truncate">
