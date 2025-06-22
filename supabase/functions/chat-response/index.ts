@@ -32,11 +32,55 @@ const calculateTypingDelay = (messageLength: number): number => {
   return Math.min(totalDelay, 5000);
 };
 
-const calculateResponseDelay = (): number => {
-  const random = Math.random();
-  if (random < 0.7) return Math.floor(Math.random() * 5 * 1000);
-  if (random < 0.9) return 5000 + Math.floor(Math.random() * 5 * 1000);
-  return 10000 + Math.floor(Math.random() * 5 * 1000);
+const getHourInTimezone = (timezone: string): number => {
+    try {
+        const date = new Date();
+        // Fetches the time in HH:mm:ss format for the given timezone
+        const timeString = date.toLocaleTimeString('en-US', { timeZone: timezone, hour12: false, hour: '2-digit' });
+        return parseInt(timeString.split(':')[0], 10);
+    } catch (e) {
+        console.error(`Invalid timezone: ${timezone}. Defaulting to UTC hour.`);
+        return new Date().getUTCHours();
+    }
+};
+
+const calculateDynamicResponseDelay = (aiTimezone: string, conversationThreshold: number): number => {
+    // 1. Base Delay (introduces large-scale randomness)
+    let baseDelayMs: number;
+    const baseRandom = Math.random();
+    if (baseRandom < 0.6) { // 60% chance: Quick-ish replies (5s to 5min)
+        baseDelayMs = 5000 + Math.random() * (5 * 60 * 1000 - 5000);
+    } else if (baseRandom < 0.9) { // 30% chance: Slower replies (5min to 2hr)
+        baseDelayMs = (5 * 60 * 1000) + Math.random() * (2 * 60 * 60 * 1000 - 5 * 60 * 1000);
+    } else { // 10% chance: Very slow replies (2hr to 12hr)
+        baseDelayMs = (2 * 60 * 60 * 1000) + Math.random() * (12 * 60 * 60 * 1000 - 2 * 60 * 60 * 1000);
+    }
+
+    // 2. Time of Day Multiplier
+    const currentHour = getHourInTimezone(aiTimezone);
+    let timeOfDayMultiplier = 1.0;
+    if (currentHour >= 1 && currentHour < 7) { // "Sleeping" hours (1 AM - 7 AM)
+        timeOfDayMultiplier = 3.0 + Math.random() * 3; // 3x to 6x longer
+    } else if (currentHour >= 23 || currentHour < 1) { // Late night (11 PM - 1 AM)
+        timeOfDayMultiplier = 1.5 + Math.random() * 1.5; // 1.5x to 3x longer
+    }
+
+    // 3. Conversation Sentiment Multiplier (inversely proportional to interest)
+    // Threshold is ~0.5 neutral. Higher is better.
+    // We want a multiplier > 1 for bad convos (threshold < 0.5) and < 1 for good convos (threshold > 0.5)
+    let sentimentMultiplier = 0.5 / Math.max(0.1, conversationThreshold); // Avoid division by zero
+    sentimentMultiplier = Math.max(0.4, Math.min(8, sentimentMultiplier)); // Clamp between 0.4x and 8x
+
+    // 4. Combine factors
+    const finalDelayMs = baseDelayMs * timeOfDayMultiplier * sentimentMultiplier;
+
+    console.log(`Delay Calculation:
+      - Base Delay: ${(baseDelayMs / 1000 / 60).toFixed(2)} mins
+      - Time of Day (Hour ${currentHour} in ${aiTimezone}): x${timeOfDayMultiplier.toFixed(2)}
+      - Sentiment (Threshold ${conversationThreshold.toFixed(2)}): x${sentimentMultiplier.toFixed(2)}
+      - Final Delay: ${(finalDelayMs / 1000 / 60).toFixed(2)} mins`);
+
+    return finalDelayMs;
 };
 
 const calculateInterMessageGap = (): number => {
@@ -426,7 +470,7 @@ serve(async (req) => {
         await updateContext(supabaseClient, chatId, updatedSummary, context?.detailed_chat, fullLatestExchange, newCurrentThreshold, newConsecutiveNegativeCount);
 
         if (messagesToSend.length > 0) {
-            let cumulativeDelay = calculateResponseDelay();
+            let cumulativeDelay = calculateDynamicResponseDelay(aiTimezone, newCurrentThreshold);
             for (const msgContent of messagesToSend) {
                 await scheduleMessage(supabaseClient, chatId, receiverId, msgContent, cumulativeDelay);
                 cumulativeDelay += calculateTypingDelay(msgContent.length) + calculateInterMessageGap();
