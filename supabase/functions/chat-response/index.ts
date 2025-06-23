@@ -172,7 +172,7 @@ ${latestExchange}
 **Your Output (ONLY the number):**`;
 }
 
-function buildChatPrompt(aiProfile: any, humanProfile: any, conversationHistory: string, userMessage: string, analysisSummary: string, sentimentScore: number, currentCity: string, currentTime: string) {
+function buildChatPrompt(aiProfile: any, humanProfile: any, conversationHistory: string, userMessage: string, analysisSummary: string, sentimentScore: number, currentCity: string, currentTime: string, responseDelayMinutes: number) {
     const aiAge = calculateAge(aiProfile.date_of_birth);
     const humanSunSign = getSunSign(humanProfile.date_of_birth);
     let promptInstructions = aiProfile.personality_prompt;
@@ -190,6 +190,10 @@ function buildChatPrompt(aiProfile: any, humanProfile: any, conversationHistory:
     promptInstructions += ` You are chatting with ${humanProfile.first_name}, whose sun sign is ${humanSunSign}.`;
     
     promptInstructions += `\n\nYou are currently located in ${currentCity}. The current time there is ${currentTime}. If asked about your location or the time, you MUST use this information. Do not mention your birth city unless it's relevant to the conversation.`;
+
+    if (responseDelayMinutes > 5) {
+        promptInstructions += `\n\nYou have waited approximately ${responseDelayMinutes} minutes to reply. You can subtly acknowledge this delay if it feels natural (e.g., "Hey, sorry for the wait," or by changing the subject if the gap was very long). Don't be overly apologetic. If the delay is short, don't mention it.`;
+    }
 
     promptInstructions += `\n\n**Conversation Analysis:** ${analysisSummary} (Sentiment Score: ${sentimentScore.toFixed(2)})`;
 
@@ -417,7 +421,12 @@ serve(async (req) => {
     const currentTimeInAITimezone = new Date().toLocaleString('en-US', { timeZone: aiTimezone, hour: '2-digit', minute: '2-digit', hour12: true });
     const aiCurrentCity = receiverProfile.current_city || receiverProfile.place_of_birth;
     const conversationHistory = context?.detailed_chat ? `${context.detailed_chat}\n${latestExchange}` : latestExchange;
-    const chatPrompt = buildChatPrompt(receiverProfile, senderProfile, conversationHistory, message, updatedSummary, newCurrentThreshold, aiCurrentCity, currentTimeInAITimezone);
+    
+    // Calculate delay *before* generating the response
+    const responseDelayMs = calculateDynamicResponseDelay(aiTimezone, newCurrentThreshold);
+    const responseDelayMinutes = Math.round(responseDelayMs / (1000 * 60));
+
+    const chatPrompt = buildChatPrompt(receiverProfile, senderProfile, conversationHistory, message, updatedSummary, newCurrentThreshold, aiCurrentCity, currentTimeInAITimezone, responseDelayMinutes);
     const rawChatResponse = await callAiApi(chatPrompt, MAX_TOKEN_LIMIT);
 
     let aiWantsToBlock = false;
@@ -486,7 +495,8 @@ serve(async (req) => {
                 console.log("AI response mentions time. Sending with minimal delay to avoid staleness.");
                 cumulativeDelay = 2000 + Math.random() * 3000; // 2-5 seconds
             } else {
-                cumulativeDelay = calculateDynamicResponseDelay(aiTimezone, newCurrentThreshold);
+                // Use the pre-calculated delay
+                cumulativeDelay = responseDelayMs;
             }
 
             for (const msgContent of messagesToSend) {
