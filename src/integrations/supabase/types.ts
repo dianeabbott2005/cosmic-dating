@@ -80,21 +80,27 @@ export type Database = {
       }
       conversation_contexts: {
         Row: {
+          ai_reengagement_attempts: number
           chat_id: string
+          consecutive_negative_count: number
           context_summary: string | null
           current_threshold: number
           detailed_chat: string | null
           last_updated: string
         }
         Insert: {
+          ai_reengagement_attempts?: number
           chat_id: string
+          consecutive_negative_count?: number
           context_summary?: string | null
           current_threshold?: number
           detailed_chat?: string | null
           last_updated?: string
         }
         Update: {
+          ai_reengagement_attempts?: number
           chat_id?: string
+          consecutive_negative_count?: number
           context_summary?: string | null
           current_threshold?: number
           detailed_chat?: string | null
@@ -241,8 +247,12 @@ export type Database = {
       }
       profiles: {
         Row: {
+          birth_chart: Json | null
           block_threshold: number
           created_at: string
+          current_city: string | null
+          current_country: string | null
+          current_timezone: string | null
           date_of_birth: string
           email: string
           first_name: string
@@ -264,8 +274,12 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          birth_chart?: Json | null
           block_threshold?: number
           created_at?: string
+          current_city?: string | null
+          current_country?: string | null
+          current_timezone?: string | null
           date_of_birth: string
           email: string
           first_name: string
@@ -287,8 +301,12 @@ export type Database = {
           user_id: string
         }
         Update: {
+          birth_chart?: Json | null
           block_threshold?: number
           created_at?: string
+          current_city?: string | null
+          current_country?: string | null
+          current_timezone?: string | null
           date_of_birth?: string
           email?: string
           first_name?: string
