@@ -138,6 +138,26 @@ async function getConversationContext(supabaseClient: SupabaseClient, chatId: st
   return context;
 }
 
+async function getRecentMessages(supabaseClient: SupabaseClient, chatId: string): Promise<{ content: string; sender_id: string; created_at: string; }[]> {
+    const { data: recentMessages } = await supabaseClient
+      .from('messages')
+      .select('content, sender_id, created_at')
+      .eq('chat_id', chatId)
+      .order('created_at', { ascending: false })
+      .limit(10);
+    return recentMessages || [];
+}
+
+function buildConversationHistory(messages: { content: string; sender_id: string; created_at: string; }[], aiUserId: string, aiName: string, humanName: string): string {
+    if (!messages || messages.length === 0) {
+        return "No conversation history yet.";
+    }
+    return messages.slice().reverse().map(msg => {
+        const speaker = msg.sender_id === aiUserId ? aiName : humanName;
+        return `${speaker}: ${msg.content}`;
+    }).join('\n');
+}
+
 function buildSummaryPrompt(existingSummary: string | null, detailedHistory: string | null, latestExchange: string, aiFirstName: string, humanFirstName: string): string {
   return `You are a conversation analyst. Your task is to update a conversation summary between ${humanFirstName} and ${aiFirstName}.
 
@@ -172,7 +192,7 @@ ${latestExchange}
 **Your Output (ONLY the number):**`;
 }
 
-function buildChatPrompt(aiProfile: any, humanProfile: any, conversationHistory: string, userMessage: string, analysisSummary: string, sentimentScore: number, currentCity: string, currentTime: string, responseDelayMinutes: number) {
+function buildChatPrompt(aiProfile: any, humanProfile: any, conversationHistory: string, userMessage: string, analysisSummary: string, sentimentScore: number, currentCity: string, currentTime: string, responseDelayMinutes: number, previousContextSummary: string | null) {
     const aiAge = calculateAge(aiProfile.date_of_birth);
     const humanSunSign = getSunSign(humanProfile.date_of_birth);
     let promptInstructions = aiProfile.personality_prompt;
@@ -195,9 +215,12 @@ function buildChatPrompt(aiProfile: any, humanProfile: any, conversationHistory:
         promptInstructions += `\n\nYou have waited approximately ${responseDelayMinutes} minutes to reply. You can subtly acknowledge this delay if it feels natural (e.g., "Hey, sorry for the wait," or by changing the subject if the gap was very long). Don't be overly apologetic. If the delay is short, don't mention it.`;
     }
 
-    promptInstructions += `\n\n**Conversation Analysis:** ${analysisSummary} (Sentiment Score: ${sentimentScore.toFixed(2)})`;
+    if (previousContextSummary) {
+        promptInstructions += `\n\n**Previous Conversation Summary:** ${previousContextSummary}`;
+    }
+    promptInstructions += `\n\n**Current Conversation Analysis:** ${analysisSummary} (Sentiment Score: ${sentimentScore.toFixed(2)})`;
 
-    if (conversationHistory) promptInstructions += `\n\nRecent conversation:\n${conversationHistory}`;
+    if (conversationHistory) promptInstructions += `\n\n**Recent Messages:**\n${conversationHistory}`;
     
     promptInstructions += `\n\nThis is a new dating platform focused on astrological compatibility. You discovered it through either Reddit or X (formerly Twitter). Your goal is to get to know the user better in a romantic context, as you would on a dating app. Keep the conversation engaging, flirty or even kinky if appropriate, but always respectful.`;
 
@@ -368,12 +391,14 @@ serve(async (req) => {
     const { data: msg } = await supabaseClient.from('messages').select('is_processed').eq('id', messageId).single();
     if (msg?.is_processed) return new Response(JSON.stringify({ status: 'skipped' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
-    const [receiverProfile, senderProfile, context] = await Promise.all([
+    const [receiverProfile, senderProfile, context, recentMessages] = await Promise.all([
       getProfile(supabaseClient, receiverId),
       getProfile(supabaseClient, senderId),
       getConversationContext(supabaseClient, chatId),
+      getRecentMessages(supabaseClient, chatId)
     ]);
 
+    const conversationHistory = buildConversationHistory(recentMessages, receiverProfile.user_id, receiverProfile.first_name, senderProfile.first_name);
     const latestExchange = `${senderProfile.first_name}: "${message}"`;
     
     const summaryPrompt = buildSummaryPrompt(context?.context_summary, context?.detailed_chat, latestExchange, receiverProfile.first_name, senderProfile.first_name);
@@ -420,13 +445,12 @@ serve(async (req) => {
     const aiTimezone = receiverProfile.current_timezone || receiverProfile.timezone;
     const currentTimeInAITimezone = new Date().toLocaleString('en-US', { timeZone: aiTimezone, hour: '2-digit', minute: '2-digit', hour12: true });
     const aiCurrentCity = receiverProfile.current_city || receiverProfile.place_of_birth;
-    const conversationHistory = context?.detailed_chat ? `${context.detailed_chat}\n${latestExchange}` : latestExchange;
     
     // Calculate delay *before* generating the response
     const responseDelayMs = calculateDynamicResponseDelay(aiTimezone, newCurrentThreshold);
     const responseDelayMinutes = Math.round(responseDelayMs / (1000 * 60));
 
-    const chatPrompt = buildChatPrompt(receiverProfile, senderProfile, conversationHistory, message, updatedSummary, newCurrentThreshold, aiCurrentCity, currentTimeInAITimezone, responseDelayMinutes);
+    const chatPrompt = buildChatPrompt(receiverProfile, senderProfile, conversationHistory, message, updatedSummary, newCurrentThreshold, aiCurrentCity, currentTimeInAITimezone, responseDelayMinutes, context?.context_summary);
     const rawChatResponse = await callAiApi(chatPrompt, MAX_TOKEN_LIMIT);
 
     let aiWantsToBlock = false;
