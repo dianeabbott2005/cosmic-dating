@@ -470,9 +470,22 @@ serve(async (req) => {
         await updateContext(supabaseClient, chatId, updatedSummary, context?.detailed_chat, fullLatestExchange, newCurrentThreshold, newConsecutiveNegativeCount);
 
         if (messagesToSend.length > 0) {
-            let cumulativeDelay = calculateDynamicResponseDelay(aiTimezone, newCurrentThreshold);
+            // Check if the AI's response contains a time-like pattern (e.g., "10:30 PM")
+            const mentionsTime = /\d{1,2}:\d{2}/.test(chatResponseForProcessing);
+            let cumulativeDelay;
+
+            if (mentionsTime) {
+                console.log("AI response mentions time. Sending with minimal delay to avoid staleness.");
+                // Use a short, immediate delay to simulate typing
+                cumulativeDelay = 2000 + Math.random() * 3000; // 2-5 seconds
+            } else {
+                // Use the normal dynamic delay
+                cumulativeDelay = calculateDynamicResponseDelay(aiTimezone, newCurrentThreshold);
+            }
+
             for (const msgContent of messagesToSend) {
                 await scheduleMessage(supabaseClient, chatId, receiverId, msgContent, cumulativeDelay);
+                // Subsequent messages in the same batch have a shorter, typing-based delay
                 cumulativeDelay += calculateTypingDelay(msgContent.length) + calculateInterMessageGap();
             }
         }
