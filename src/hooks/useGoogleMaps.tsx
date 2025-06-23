@@ -13,6 +13,13 @@ interface TimezoneResult {
   timeZoneName: string;
 }
 
+interface ReverseGeocodeResult {
+  city: string | null;
+  country: string | null;
+  timezoneId: string | null;
+  timeZoneName: string | null;
+}
+
 export const useGoogleMaps = () => {
   const [loading, setLoading] = useState(false);
 
@@ -23,22 +30,13 @@ export const useGoogleMaps = () => {
 
     setLoading(true);
     try {
-      console.log('Searching places with query:', query);
-      
       const { data, error } = await supabase.functions.invoke('geocode', {
         body: { address: query }
       });
 
-      if (error) {
-        console.error('Supabase function error:', error);
-        throw new Error('Failed to search places');
-      }
+      if (error) throw new Error('Failed to search places');
+      if (data.error) throw new Error(data.error);
 
-      if (data.error) {
-        throw new Error(data.error);
-      }
-
-      console.log('Places search results:', data.results);
       return data.results || [];
     } catch (error) {
       console.error('Error searching places:', error);
@@ -51,25 +49,16 @@ export const useGoogleMaps = () => {
   const getTimezone = async (latitude: number, longitude: number): Promise<TimezoneResult | null> => {
     setLoading(true);
     try {
-      console.log(`Fetching timezone for lat: ${latitude}, lng: ${longitude}`);
       const { data, error } = await supabase.functions.invoke('geocode', {
         body: { latitude, longitude }
       });
 
-      if (error) {
-        console.error('Supabase function error fetching timezone:', error);
-        throw new Error('Failed to fetch timezone');
-      }
-
-      if (data.error) {
-        throw new Error(data.error);
-      }
+      if (error) throw new Error('Failed to fetch timezone');
+      if (data.error) throw new Error(data.error);
 
       if (data.timezoneId && data.timeZoneName) {
-        console.log('Timezone fetched successfully:', data.timezoneId);
         return { timezoneId: data.timezoneId, timeZoneName: data.timeZoneName };
       } else {
-        console.warn('No timezone data returned for coordinates:', { latitude, longitude });
         return null;
       }
     } catch (error) {
@@ -80,10 +69,35 @@ export const useGoogleMaps = () => {
     }
   };
 
+  const reverseGeocode = async (latitude: number, longitude: number): Promise<ReverseGeocodeResult | null> => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('geocode', {
+        body: { latitude, longitude }
+      });
+
+      if (error) throw new Error('Failed to reverse geocode');
+      if (data.error) throw new Error(data.error);
+
+      return {
+        city: data.city || null,
+        country: data.country || null,
+        timezoneId: data.timezoneId || null,
+        timeZoneName: data.timeZoneName || null,
+      };
+    } catch (error) {
+      console.error('Error in reverseGeocode hook:', error);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return {
     loading,
     searchPlaces,
-    getTimezone, // Added new function
-    hasApiKey: true // Always true since API key is managed server-side
+    getTimezone,
+    reverseGeocode,
+    hasApiKey: true
   };
 };

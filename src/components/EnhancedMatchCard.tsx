@@ -13,6 +13,7 @@ interface EnhancedMatchCardProps {
     last_name?: string;
     age: number;
     place_of_birth?: string;
+    current_city?: string | null;
     date_of_birth?: string;
     time_of_birth?: string;
     compatibility_score?: number;
@@ -69,10 +70,10 @@ const EnhancedMatchCard = ({ match, onStartChat, onViewProfile }: EnhancedMatchC
             </div>
           </div>
 
-          {match.place_of_birth && (
+          {(match.current_city || match.place_of_birth) && (
             <div className="flex items-center gap-2 text-gray-400">
               <MapPin className="w-4 h-4" />
-              <span className="text-sm">{match.place_of_birth}</span>
+              <span className="text-sm">{match.current_city || match.place_of_birth}</span>
             </div>
           )}
 

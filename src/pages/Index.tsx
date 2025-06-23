@@ -7,6 +7,7 @@ import ConsentScreen from '@/components/ConsentScreen';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import type { Database } from '@/integrations/supabase/types';
+import { useUserLocation } from '@/hooks/useUserLocation';
 
 const Index = () => {
   const [currentView, setCurrentView] = useState<'welcome' | 'consent' | 'registration' | 'dashboard'>('welcome');
@@ -17,6 +18,8 @@ const Index = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const authUserId = authUser?.id;
+
+  useUserLocation();
 
   useEffect(() => {
     const initializeView = async () => {
@@ -64,12 +67,7 @@ const Index = () => {
       try {
         const { data, error: dbError } = await supabase
           .from('profiles')
-          .select(`
-            created_at, date_of_birth, email, first_name, gender, id, last_name,
-            latitude, longitude, looking_for, max_age, min_age, personality_prompt,
-            place_of_birth, time_of_birth, updated_at, user_id, timezone, is_active,
-            has_agreed_to_terms
-          `)
+          .select(`*`)
           .eq('user_id', authUserId)
           .maybeSingle();
 
