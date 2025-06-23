@@ -24,6 +24,8 @@ export interface Chat {
     user_id: string;
     date_of_birth?: string;
     place_of_birth?: string;
+    current_city?: string | null;
+    current_country?: string | null;
     age?: number;
   };
   last_message?: Message;
@@ -83,7 +85,7 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
       const chatPromises = (userChats || []).map(async (chat) => {
         const otherUserId = chat.user1_id === userId ? chat.user2_id : chat.user1_id;
         
-        const { data: profile } = await supabase.from('profiles').select('first_name, last_name, user_id, date_of_birth, place_of_birth').eq('user_id', otherUserId).single();
+        const { data: profile } = await supabase.from('profiles').select('first_name, last_name, user_id, date_of_birth, place_of_birth, current_city, current_country').eq('user_id', otherUserId).single();
         const lastMessage = chat.messages?.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0] || null;
         
         if (!lastMessage) return null;

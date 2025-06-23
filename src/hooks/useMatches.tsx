@@ -6,23 +6,15 @@ import { useWindowFocus } from '@/hooks/useWindowFocus';
 import { useBlock } from '@/hooks/useBlock';
 
 export interface MatchProfile {
-  id: string;
   user_id: string;
   first_name: string;
-  last_name: string;
-  email: string;
+  last_name: string | null;
   date_of_birth: string;
   time_of_birth: string;
   place_of_birth: string;
-  latitude: number;
-  longitude: number;
-  timezone: string;
   gender: string;
-  looking_for: string;
-  min_age: number;
-  max_age: number;
-  created_at: string;
-  updated_at: string;
+  current_city: string | null;
+  current_country: string | null;
   compatibility_score?: number;
   age?: number;
 }
@@ -63,8 +55,8 @@ export const useMatches = () => {
             user_id,
             matched_user_id,
             compatibility_score,
-            user1_profile:profiles!matches_user_id_fkey(user_id, first_name, last_name, date_of_birth, time_of_birth, place_of_birth, gender),
-            user2_profile:profiles!matches_matched_user_id_fkey(user_id, first_name, last_name, date_of_birth, time_of_birth, place_of_birth, gender)
+            user1_profile:profiles!matches_user_id_fkey(user_id, first_name, last_name, date_of_birth, time_of_birth, place_of_birth, gender, current_city, current_country),
+            user2_profile:profiles!matches_matched_user_id_fkey(user_id, first_name, last_name, date_of_birth, time_of_birth, place_of_birth, gender, current_city, current_country)
           `);
 
         if (allBlockedIds.length > 0) {

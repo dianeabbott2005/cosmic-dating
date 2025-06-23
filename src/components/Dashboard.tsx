@@ -37,6 +37,8 @@ const Dashboard = ({ user }: DashboardProps) => {
       age: chat.other_user?.age,
       place_of_birth: chat.other_user?.place_of_birth,
       date_of_birth: chat.other_user?.date_of_birth,
+      current_city: chat.other_user?.current_city,
+      current_country: chat.other_user?.current_country,
     };
     setSelectedMatch(matchFromChat);
   };
