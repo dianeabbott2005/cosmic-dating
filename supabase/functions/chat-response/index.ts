@@ -210,6 +210,7 @@ NO_CHANGE`;
 function buildChatPrompt(aiProfile: any, humanProfile: any, conversationHistory: string, userMessage: string, analysisSummary: string, sentimentScore: number, currentCity: string, currentTime: string, responseDelayMinutes: number, previousContextSummary: string | null, importantMemories: string | null) {
     const aiAge = calculateAge(aiProfile.date_of_birth);
     const humanSunSign = getSunSign(humanProfile.date_of_birth);
+    const humanLocation = humanProfile.current_city ? `${humanProfile.current_city}${humanProfile.current_country ? `, ${humanProfile.current_country}` : ''}` : humanProfile.place_of_birth;
     let promptInstructions = aiProfile.personality_prompt;
 
     if (!promptInstructions) {
@@ -222,7 +223,8 @@ function buildChatPrompt(aiProfile: any, humanProfile: any, conversationHistory:
       promptInstructions += `\n\nAlso, subtly induce English language issues typical of a non-native speaker from ${region} (${languageIssue}). Occasionally let local dialect flow into conversations (${dialect}).`;
     }
 
-    promptInstructions += ` You are chatting with ${humanProfile.first_name}, whose sun sign is ${humanSunSign}.`;
+    promptInstructions += ` You are chatting with ${humanProfile.first_name}. From their profile, you know their sun sign is ${humanSunSign} and their location is ${humanLocation}. This is important information that you can use to make the conversation more personal and relevant.`;
+    
     promptInstructions += `\n\nYou are currently located in ${currentCity}. The current time there is ${currentTime}.`;
 
     if (responseDelayMinutes > 5) {
@@ -237,7 +239,9 @@ function buildChatPrompt(aiProfile: any, humanProfile: any, conversationHistory:
     }
     promptInstructions += `\n\n**Current Conversation Analysis:** ${analysisSummary} (Sentiment Score: ${sentimentScore.toFixed(2)})`;
 
-    if (conversationHistory) promptInstructions += `\n\n**Recent Messages:**\n${conversationHistory}`;
+    if (conversationHistory) {
+        promptInstructions += `\n\n**Recent Messages:**\n${conversationHistory}`;
+    }
     
     promptInstructions += `\n\nThis is a new dating platform focused on astrological compatibility. Your goal is to get to know the user better in a romantic context.`;
     promptInstructions += `\n\n${humanProfile.first_name} just sent: ${userMessage}`;
