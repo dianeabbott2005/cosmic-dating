@@ -9,65 +9,41 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const MESSAGE_DELIMITER = "@@@MESSAGEBREAK@@@"; // Unique delimiter for splitting AI responses
-const MAX_TOKEN_LIMIT = 100; // Maximum tokens for the AI response
-const INITIATION_RATE = 0.03; // 3% chance for a dummy profile to initiate a chat with a human match
-const REENGAGEMENT_RATE = 0.1; // 10% chance for a dummy profile to re-engage in an existing chat if there's a gap
-const MIN_GAP_FOR_REENGAGEMENT_HOURS = 3; // Minimum gap in hours for AI to consider re-engaging
-const UNRESPONDED_MESSAGE_THRESHOLD_MINUTES = 5; // If human sent last message and AI hasn't responded in this many minutes, trigger response
-const NEGATIVE_SENTIMENT_THRESHOLD = -0.05; // Threshold to consider a message "negative"
-const REENGAGEMENT_ATTEMPT_LIMIT = 2; // Max times AI will re-engage a silent chat
+const MESSAGE_DELIMITER = "@@@MESSAGEBREAK@@@";
+const MAX_TOKEN_LIMIT = 100;
+const INITIATION_RATE = 0.03;
+const REENGAGEMENT_RATE = 0.1;
+const MIN_GAP_FOR_REENGAGEMENT_HOURS = 3;
+const UNRESPONDED_MESSAGE_THRESHOLD_MINUTES = 5;
+const REENGAGEMENT_ATTEMPT_LIMIT = 2;
+const IMMEDIATE_SEND_THRESHOLD_MS = 50 * 1000;
 
-// Define a threshold for immediate vs. delayed sending
-const IMMEDIATE_SEND_THRESHOLD_MS = 50 * 1000; // 50 seconds
-
-/**
- * Calculates a human-like typing delay for a single message part.
- * This is used to determine the time it takes to "type" a message.
- * @param messageLength The length of the message to be "typed".
- * @returns A delay in milliseconds.
- */
 const calculateTypingDelay = (messageLength: number): number => {
-  const baseDelay = 500; // 0.5 second minimum per message part
-  const typingSpeed = Math.floor(Math.random() * (180 - 60 + 1)) + 60; // characters per minute (random between 60-180)
-  
+  const baseDelay = 500;
+  const typingSpeed = Math.floor(Math.random() * (180 - 60 + 1)) + 60;
   const typingTime = (messageLength / typingSpeed) * 60 * 1000;
-  
-  let randomVariation = Math.random() * 500; // Up to 0.5 seconds random variation
-  
+  const randomVariation = Math.random() * 500;
   const totalDelay = baseDelay + typingTime + randomVariation;
-  return Math.min(totalDelay, 5000); // Cap at 5 seconds to prevent excessive internal delays
+  return Math.min(totalDelay, 5000);
 };
 
-/**
- * Calculates a human-like response delay (before typing starts).
- * This is the *initial* delay before the AI starts responding.
- * @returns A delay in milliseconds.
- */
 const calculateResponseDelay = (): number => {
   const random = Math.random();
   let delay = 0;
-  if (random < 0.7) { // 70% chance for quick response (0-5 seconds)
+  if (random < 0.7) {
     delay = Math.floor(Math.random() * 5 * 1000);
-  } else if (random < 0.9) { // 20% chance for moderate delay (5-10 seconds)
+  } else if (random < 0.9) {
     delay = 5 * 1000 + Math.floor(Math.random() * 5 * 1000);
-  } else { // 10% chance for slightly longer delay (10-15 seconds)
+  } else {
     delay = 10 * 1000 + Math.floor(Math.random() * 5 * 1000);
   }
   return delay;
 };
 
-/**
- * Calculates a random gap between individual messages when a response is split.
- * @returns A delay in milliseconds (between 2 and 20 seconds).
- */
 const calculateInterMessageGap = (): number => {
-  return Math.floor(Math.random() * (20 - 2 + 1) + 2) * 1000; // Random between 2 and 20 seconds
+  return Math.floor(Math.random() * (20 - 2 + 1) + 2) * 1000;
 };
 
-/**
- * Calculates age from a date of birth string.
- */
 function calculateAge(dateOfBirth: string): number {
     const birthDate = new Date(dateOfBirth);
     const today = new Date();
@@ -100,24 +76,16 @@ function getSunSign(dateOfBirth: string): string {
   return 'aries';
 }
 
-/**
- * Builds a readable conversation history string for the AI prompt.
- */
 function buildConversationHistory(messages: Message[], aiUserId: string, aiName: string, humanName: string): string {
     if (!messages || messages.length === 0) {
         return "No conversation history yet.";
     }
-
-    // Messages are fetched in descending order, so we reverse to show chronological order for the prompt
     return messages.slice().reverse().map(msg => {
         const speaker = msg.sender_id === aiUserId ? aiName : humanName;
         return `${speaker}: ${msg.content}`;
     }).join('\n');
 }
 
-/**
- * Fetches the conversation context summary and detailed chat.
- */
 async function getConversationContext(supabaseClient: SupabaseClient, chatId: string) {
     const { data: context } = await supabaseClient
       .from('conversation_contexts')
@@ -127,9 +95,6 @@ async function getConversationContext(supabaseClient: SupabaseClient, chatId: st
     return context;
 }
 
-/**
- * Fetches the last 10 messages for context.
- */
 async function getRecentMessages(supabaseClient: SupabaseClient, chatId: string): Promise<Message[]> {
     const { data: recentMessages } = await supabaseClient
       .from('messages')
@@ -140,9 +105,6 @@ async function getRecentMessages(supabaseClient: SupabaseClient, chatId: string)
     return recentMessages || [];
 }
 
-/**
- * Fetches the timestamp of the last message sent by a specific sender in a chat.
- */
 async function getLastMessageTimestamp(supabaseClient: SupabaseClient, chatId: string, senderId: string): Promise<string | null> {
   const { data, error } = await supabaseClient
     .from('messages')
@@ -153,7 +115,7 @@ async function getLastMessageTimestamp(supabaseClient: SupabaseClient, chatId: s
     .limit(1)
     .single();
 
-  if (error && error.code !== 'PGRST116') { // PGRST116 is "No rows found"
+  if (error && error.code !== 'PGRST116') {
     console.error('Error fetching last message timestamp:', error);
     return null;
   }
@@ -190,24 +152,6 @@ Provide ONLY a new, concise paragraph (2-3 sentences) that summarizes the key po
 ${humanFirstName} opened up about their passion for astrology, and ${aiFirstName} responded with curiosity, asking about their sun sign. The tone is friendly and inquisitive, with potential for a deeper connection.`;
 }
 
-function buildSentimentPrompt(latestExchange: string): string {
-  return `Analyze the sentiment of the following exchange and provide ONLY a numerical score between -0.2 and 0.2. Do not add any other text or explanation.
-
-**Sentiment Score Rules:**
-- **Highly Positive (+0.1 to +0.2):** User is admiring, reassuring, good flirting, respectful.
-- **Neutral/Positive (-0.05 to +0.05):** Normal, friendly chat.
-- **Negative (-0.1 to -0.05):** User is boring, dismissive, or slightly rude.
-- **Highly Negative (-0.2 to -0.1):** User is hostile, disrespectful, threatening, bullying.
-
-**Exchange to Analyze:**
-${latestExchange}
-
-**Your Output (ONLY the number):**`;
-}
-
-/**
- * Constructs the full prompt for the AI API, handling both initial and re-engagement scenarios.
- */
 function buildAiPrompt(aiProfile: any, humanProfile: any, context: any, conversationHistory: string, lastHumanMessage: string | null, timeSinceLastAiMessage: number | null, isInitialChat: boolean, wasAiLastSpeaker: boolean): string {
     const aiAge = calculateAge(aiProfile.date_of_birth);
     const humanSunSign = getSunSign(humanProfile.date_of_birth);
@@ -235,7 +179,7 @@ function buildAiPrompt(aiProfile: any, humanProfile: any, context: any, conversa
       if (timeSinceLastAiMessage !== null && timeSinceLastAiMessage >= MIN_GAP_FOR_REENGAGEMENT_HOURS) {
           promptInstructions += `\n\nIt has been approximately ${Math.round(timeSinceLastAiMessage)} hours since your last message in this chat.`;
           if (wasAiLastSpeaker) {
-            promptInstructions += ` Do NOT apologize for the gap. Instead, inquire if everything is alright, or gently pick up from the last topic you discussed, showing concern or continued interest. Vary the way you do this.`;
+            promptInstructions += ` The user has not responded. Do NOT apologize for the gap. Instead, inquire if everything is alright, or gently pick up from the last topic you discussed, showing concern or continued interest. Vary the way you do this.`;
           } else {
             promptInstructions += ` Acknowledge this gap naturally, perhaps with a friendly re-initiation or by expressing a slight curiosity about the delay, without being accusatory.`;
           }
@@ -275,9 +219,6 @@ Now, respond as ${aiProfile.first_name}:`;
     return promptInstructions;
 }
 
-/**
- * Calls the AI API to get a chat response.
- */
 async function callAiApi(prompt: string, maxTokens: number): Promise<string> {
     const aiResponse = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${Deno.env.get('GEMINI_API_KEY')}`,
@@ -303,9 +244,6 @@ async function callAiApi(prompt: string, maxTokens: number): Promise<string> {
     return aiData.candidates[0].content.parts[0].text.trim();
 }
 
-/**
- * Schedules a message to be sent later.
- */
 async function scheduleDelayedMessage(supabaseClient: SupabaseClient, chatId: string, senderId: string, content: string, delayMs: number) {
   const scheduledTime = new Date(Date.now() + delayMs).toISOString();
   const { error } = await supabaseClient
@@ -324,9 +262,6 @@ async function scheduleDelayedMessage(supabaseClient: SupabaseClient, chatId: st
   }
 }
 
-/**
- * Updates the conversation context summary and detailed chat log.
- */
 async function updateConversationContext(supabaseClient: SupabaseClient, chatId: string, aiFirstName: string, humanFirstName: string, lastHumanMessage: string | null, aiResponse: string, existingContext: any, wasAiLastSpeaker: boolean) {
     const latestExchange = lastHumanMessage 
       ? `${humanFirstName}: "${lastHumanMessage}"\n${aiFirstName}: "${aiResponse.replace(new RegExp(MESSAGE_DELIMITER, 'g'), '\n')}"`
@@ -346,26 +281,7 @@ async function updateConversationContext(supabaseClient: SupabaseClient, chatId:
         last_updated: new Date().toISOString(),
     };
 
-    if (lastHumanMessage) {
-        const sentimentPrompt = buildSentimentPrompt(latestExchange);
-        const sentimentResponse = await callAiApi(sentimentPrompt, 10);
-        
-        let sentimentAdjustment = 0.0;
-        try {
-            const parsedSentiment = parseFloat(sentimentResponse);
-            if (!isNaN(parsedSentiment)) sentimentAdjustment = parsedSentiment;
-        } catch (e) {
-            console.warn("Error parsing sentiment response.", { sentimentResponse, error: e.message });
-        }
-
-        const consecutiveNegativeCount = existingContext?.consecutive_negative_count ?? 0;
-        let newConsecutiveNegativeCount = (sentimentAdjustment < NEGATIVE_SENTIMENT_THRESHOLD) ? consecutiveNegativeCount + 1 : 0;
-        
-        updatePayload.current_threshold = (existingContext?.current_threshold ?? 0.5) + sentimentAdjustment;
-        updatePayload.consecutive_negative_count = newConsecutiveNegativeCount;
-        updatePayload.ai_reengagement_attempts = 0; // Reset on human response
-    } else if (wasAiLastSpeaker) {
-        // This is a re-engagement, increment the counter
+    if (wasAiLastSpeaker) {
         updatePayload.ai_reengagement_attempts = (existingContext?.ai_reengagement_attempts || 0) + 1;
     }
 
@@ -374,26 +290,16 @@ async function updateConversationContext(supabaseClient: SupabaseClient, chatId:
       .upsert(updatePayload, { onConflict: 'chat_id' });
 }
 
-/**
- * Cleans a single part of an AI-generated message.
- * - Trims whitespace
- * - Removes surrounding quotes
- * - Removes markdown characters
- * @param part The string to clean.
- * @returns The cleaned string.
- */
 const cleanMessagePart = (part: string): string => {
     let cleanedPart = part.trim();
-    // Remove surrounding quotes (single or double)
     if ((cleanedPart.startsWith('"') && cleanedPart.endsWith('"')) || (cleanedPart.startsWith("'") && cleanedPart.endsWith("'"))) {
         cleanedPart = cleanedPart.substring(1, cleanedPart.length - 1);
     }
-    // Remove markdown characters
     cleanedPart = cleanedPart.replace(/[*_`#]/g, '');
     return cleanedPart.trim();
 };
 
-let isInitialChat = false; // Define at a scope accessible by updateConversationContext
+let isInitialChat = false;
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
