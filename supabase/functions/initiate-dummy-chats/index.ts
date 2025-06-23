@@ -233,7 +233,7 @@ async function callAiApi(prompt: string, maxTokens: number): Promise<string> {
     return aiData.candidates[0].content.parts[0].text.trim();
 }
 
-async function scheduleDelayedMessage(supabaseClient: SupabaseClient, chatId: string, senderId: string, content: string, delayMs: number) {
+async function scheduleDelayedMessage(supabaseClient: SupabaseClient, chatId: string, senderId: string, content: string, delayMs: number, contextUpdatePayload: any) {
   const scheduledTime = new Date(Date.now() + delayMs).toISOString();
   const { error } = await supabaseClient
     .from('delayed_messages')
@@ -242,41 +242,14 @@ async function scheduleDelayedMessage(supabaseClient: SupabaseClient, chatId: st
       sender_id: senderId,
       content: content,
       scheduled_send_time: scheduledTime,
-      status: 'pending'
+      status: 'pending',
+      context_update_payload: contextUpdatePayload,
     });
 
   if (error) {
     console.error('Error scheduling message:', error);
     throw error;
   }
-}
-
-async function updateConversationContext(supabaseClient: SupabaseClient, chatId: string, aiFirstName: string, humanFirstName: string, lastHumanMessage: string | null, aiResponse: string, existingContext: any, wasAiLastSpeaker: boolean) {
-    const latestExchange = lastHumanMessage 
-      ? `${humanFirstName}: "${lastHumanMessage}"\n${aiFirstName}: "${aiResponse.replace(new RegExp(MESSAGE_DELIMITER, 'g'), '\n')}"`
-      : `${aiFirstName}: "${aiResponse.replace(new RegExp(MESSAGE_DELIMITER, 'g'), '\n')}"`;
-
-    const updatedDetailedChat = existingContext?.detailed_chat
-      ? `${existingContext.detailed_chat}\n${latestExchange}`
-      : latestExchange;
-
-    const summaryPrompt = buildSummaryPrompt(existingContext?.context_summary, existingContext?.detailed_chat, latestExchange, aiFirstName, humanFirstName);
-    const newSummary = await callAiApi(summaryPrompt, 200);
-
-    let updatePayload: any = {
-        chat_id: chatId,
-        context_summary: newSummary,
-        detailed_chat: updatedDetailedChat,
-        last_updated: new Date().toISOString(),
-    };
-
-    if (wasAiLastSpeaker) {
-        updatePayload.ai_reengagement_attempts = (existingContext?.ai_reengagement_attempts || 0) + 1;
-    }
-
-    await supabaseClient
-      .from('conversation_contexts')
-      .upsert(updatePayload, { onConflict: 'chat_id' });
 }
 
 const cleanMessagePart = (part: string): string => {
@@ -432,6 +405,29 @@ serve(async (req) => {
 
             if (individualMessages.length === 0) continue;
 
+            const cleanedAiResponseForContext = individualMessages.join('\n');
+            const latestExchange = lastHumanMessage 
+              ? `${humanProfile.first_name}: "${lastHumanMessage}"\n${dummyProfile.first_name}: "${cleanedAiResponseForContext}"`
+              : `${dummyProfile.first_name}: "${cleanedAiResponseForContext}"`;
+
+            const updatedDetailedChat = context?.detailed_chat
+              ? `${context.detailed_chat}\n${latestExchange}`
+              : latestExchange;
+
+            const summaryPrompt = buildSummaryPrompt(context?.context_summary, context?.detailed_chat, latestExchange, dummyProfile.first_name, humanProfile.first_name);
+            const newSummary = await callAiApi(summaryPrompt, 200);
+
+            let updatePayload: any = {
+                chat_id: currentChatId,
+                context_summary: newSummary,
+                detailed_chat: updatedDetailedChat,
+                last_updated: new Date().toISOString(),
+            };
+
+            if (wasAiLastSpeaker) {
+                updatePayload.ai_reengagement_attempts = (context?.ai_reengagement_attempts || 0) + 1;
+            }
+
             let cumulativeDelay;
             if (isTimeSensitive) {
                 console.log(`Time-sensitive initiation/re-engagement for chat ${currentChatId}. Using short delay.`);
@@ -443,13 +439,11 @@ serve(async (req) => {
 
             for (let i = 0; i < individualMessages.length; i++) {
                 const msgContent = individualMessages[i];
-                await scheduleDelayedMessage(supabaseClient, currentChatId, dummyProfile.user_id, msgContent, cumulativeDelay);
+                await scheduleDelayedMessage(supabaseClient, currentChatId, dummyProfile.user_id, msgContent, cumulativeDelay, updatePayload);
                 cumulativeDelay += calculateTypingDelay(msgContent.length);
                 if (i < individualMessages.length - 1) cumulativeDelay += calculateInterMessageGap();
             }
             
-            const cleanedAiResponseForContext = individualMessages.join('\n');
-            await updateConversationContext(supabaseClient, currentChatId, dummyProfile.first_name, humanProfile.first_name, lastHumanMessage, cleanedAiResponseForContext, context, wasAiLastSpeaker);
             chatsProcessedCount++;
           } catch (processError: any) {
             errors.push(`Failed to process chat for ${dummyProfile.first_name}: ${processError.message}`);

@@ -123,6 +123,7 @@ export type Database = {
         Row: {
           chat_id: string
           content: string
+          context_update_payload: Json | null
           created_at: string | null
           id: string
           scheduled_send_time: string
@@ -133,6 +134,7 @@ export type Database = {
         Insert: {
           chat_id: string
           content: string
+          context_update_payload?: Json | null
           created_at?: string | null
           id?: string
           scheduled_send_time: string
@@ -143,6 +145,7 @@ export type Database = {
         Update: {
           chat_id?: string
           content?: string
+          context_update_payload?: Json | null
           created_at?: string | null
           id?: string
           scheduled_send_time?: string

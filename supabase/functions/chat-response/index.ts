@@ -272,32 +272,6 @@ Now, respond as ${aiProfile.first_name}:`;
     return promptInstructions;
 }
 
-function buildBlockPrompt(aiProfile: any, humanProfile: any, conversationHistory: string, userMessage: string): string {
-    const aiAge = calculateAge(aiProfile.date_of_birth);
-    let prompt = `You are ${aiProfile.first_name}, a ${aiAge}-year-old ${aiProfile.gender}. You are in a conversation with ${humanProfile.first_name}.
-    
-    **Conversation History:**
-    ${conversationHistory}
-    
-    **User's Last Message:**
-    "${userMessage}"
-
-    **Your Decision:**
-    You have decided to block this user. Your personality is defined as: "${aiProfile.personality_prompt}".
-
-    **Your Task (CRITICAL):**
-    Decide on a final action:
-    1.  **Send a final message:** Generate a short, final message.
-    2.  **Ghost them:** Respond with the single, exact word: GHOST
-
-    **Output Format (Follow EXACTLY):**
-    - If sending a message, provide ONLY the message text.
-    - If ghosting, respond with ONLY the word "GHOST".
-
-    Now, provide your final action.`;
-    return prompt;
-}
-
 async function callAiApi(prompt: string, maxTokens: number) {
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${Deno.env.get('GEMINI_API_KEY')}`,
@@ -320,20 +294,15 @@ async function callAiApi(prompt: string, maxTokens: number) {
   return data.candidates[0].content.parts[0].text.trim();
 }
 
-async function scheduleMessage(supabaseClient: SupabaseClient, chatId: string, senderId: string, content: string, delayMs: number) {
+async function scheduleMessage(supabaseClient: SupabaseClient, chatId: string, senderId: string, content: string, delayMs: number, contextUpdatePayload: any) {
   const scheduledTime = new Date(Date.now() + delayMs).toISOString();
   await supabaseClient.from('delayed_messages').insert({
     chat_id: chatId,
     sender_id: senderId,
     content,
     scheduled_send_time: scheduledTime,
+    context_update_payload: contextUpdatePayload,
   });
-}
-
-async function updateContext(supabaseClient: SupabaseClient, chatId: string, payload: any) {
-  await supabaseClient
-    .from('conversation_contexts')
-    .upsert({ chat_id: chatId, ...payload }, { onConflict: 'chat_id' });
 }
 
 async function markMessageProcessed(supabaseClient: SupabaseClient, messageId: string) {
@@ -423,7 +392,8 @@ serve(async (req) => {
     const memoryPrompt = buildMemoryPrompt(context?.important_memories, fullLatestExchange, receiverProfile.first_name, senderProfile.first_name);
     const newMemoriesResponse = await callAiApi(memoryPrompt, 200);
 
-    const updatePayload: any = {
+    const contextUpdatePayload: any = {
+        chat_id: chatId,
         context_summary: updatedSummary,
         detailed_chat: context?.detailed_chat ? `${context.detailed_chat}\n${fullLatestExchange}` : fullLatestExchange,
         current_threshold: newCurrentThreshold,
@@ -433,22 +403,22 @@ serve(async (req) => {
     };
 
     if (newMemoriesResponse.trim() !== 'NO_CHANGE') {
-        updatePayload.important_memories = newMemoriesResponse;
+        contextUpdatePayload.important_memories = newMemoriesResponse;
     }
 
     if (newCurrentThreshold <= receiverProfile.block_threshold || aiWantsToBlock) {
         console.log(`Entering blocking logic.`);
-        // Simplified blocking logic for brevity
         await supabaseClient.from('blocked_users').insert({ blocker_id: receiverId, blocked_id: senderId });
+        // Even when blocking, we save the final context that led to the block
+        await supabaseClient.from('conversation_contexts').upsert(contextUpdatePayload, { onConflict: 'chat_id' });
     } else if (messagesToSend.length > 0) {
         let cumulativeDelay = isTimeSensitive ? 2000 + Math.random() * 3000 : responseDelayMs;
         for (const msgContent of messagesToSend) {
-            await scheduleMessage(supabaseClient, chatId, receiverId, msgContent, cumulativeDelay);
+            await scheduleMessage(supabaseClient, chatId, receiverId, msgContent, cumulativeDelay, contextUpdatePayload);
             cumulativeDelay += calculateTypingDelay(msgContent.length) + calculateInterMessageGap();
         }
     }
 
-    await updateContext(supabaseClient, chatId, updatePayload);
     await markMessageProcessed(supabaseClient, messageId);
 
     return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
