@@ -86,6 +86,7 @@ export type Database = {
           context_summary: string | null
           current_threshold: number
           detailed_chat: string | null
+          important_memories: string | null
           last_updated: string
         }
         Insert: {
@@ -95,6 +96,7 @@ export type Database = {
           context_summary?: string | null
           current_threshold?: number
           detailed_chat?: string | null
+          important_memories?: string | null
           last_updated?: string
         }
         Update: {
@@ -104,6 +106,7 @@ export type Database = {
           context_summary?: string | null
           current_threshold?: number
           detailed_chat?: string | null
+          important_memories?: string | null
           last_updated?: string
         }
         Relationships: [
