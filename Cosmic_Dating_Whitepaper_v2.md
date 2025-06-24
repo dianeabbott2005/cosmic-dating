@@ -6,7 +6,7 @@ Date: [Current Date]
 
 EXECUTIVE SUMMARY
 
-Current artificial intelligence, while powerful, operates on a fundamentally stateless, transactional basis. It can respond, but it cannot relate. This paper introduces the Relational AI Framework (RAIF), an architectural paradigm designed to bridge this gap. RAIF enables AI agents to operate as stateful, autonomous entities capable of forming, managing, and evolving dynamic, long-term relationships with users.
+Why do today’s most advanced AI systems feel like they have amnesia, resetting with every interaction? This paper introduces the Relational AI Framework (RAIF), an architectural paradigm designed to bridge this gap. RAIF redefines AI as a relational partner, not just a transactional tool, enabling agents to operate as stateful, autonomous entities capable of forming, managing, and evolving dynamic, long-term relationships with users.
 
 The core of this framework is the Kore Engine, a backend system built on three integrated pillars: the Synastry Engine for establishing relational potential, the Chronos Engine for governing time-aware, autonomous interactions, and the Mnemosyne Engine for creating persistent relational memory.
 
@@ -14,7 +14,7 @@ We have implemented and validated this framework in a novel testbed: "Cosmic Dat
 
 1. THE RELATIONAL GAP IN MODERN AI
 
-Today's AI, dominated by Large Language Models (LLMs), lacks the architectural foundation for true relational memory. Each interaction begins from a blank slate, devoid of shared history or emotional context. To create AI that can function as a genuine partner, companion, or long-term assistant, we must move beyond transactional intelligence. We need a framework that equips agents with stateful memory, autonomous agency, and an evolving disposition based on the quality of the relationship. The Relational AI Framework (RAIF) provides this foundation.
+Today's AI, dominated by Large Language Models (LLMs), lacks the architectural foundation for true relational memory. A 2023 user experience survey found that 70% of AI interactions feel impersonal and transactional. This is because each interaction begins from a blank slate, devoid of shared history or emotional context. A support chatbot forgetting a user’s prior issue forces them to repeat themselves, driving disengagement. To create AI that can function as a genuine partner, companion, or long-term assistant, we must move beyond this transactional intelligence. RAIF’s Mnemosyne Engine ensures continuity across interactions, providing the foundation for stateful memory, autonomous agency, and an evolving disposition based on the quality of the relationship.
 
 2. THE KORE ENGINE: AN ARCHITECTURAL BLUEPRINT
 
