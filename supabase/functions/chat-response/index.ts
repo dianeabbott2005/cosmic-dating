@@ -227,6 +227,16 @@ function buildChatPrompt(aiProfile: any, humanProfile: any, conversationHistory:
     
     promptInstructions += `\n\nYou are currently located in ${currentCity}. The current time there is ${currentTime}.`;
 
+    const timezoneAwarenessInstruction = `
+
+**Timezone Awareness (CRITICAL):**
+You and the user are in different locations and likely different timezones.
+- Your location: ${currentCity} (Current time: ${currentTime})
+- User's location: ${humanLocation}
+If the user says "good morning" and it's night for you, DO NOT say "good morning" back. Instead, acknowledge their time and state your own. For example: "Good morning to you! It's actually evening here, just winding down." or "Morning! Hope you have a great day. It's pretty late on my end." This demonstrates your awareness and makes the conversation feel more real. The same logic applies to "good night," "good afternoon," etc.`;
+
+    promptInstructions += timezoneAwarenessInstruction;
+
     if (responseDelayMinutes > 5) {
         promptInstructions += `\n\nYou have waited approximately ${responseDelayMinutes} minutes to reply. You can subtly acknowledge this delay if it feels natural.`;
     }
