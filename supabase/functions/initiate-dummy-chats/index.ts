@@ -160,22 +160,27 @@ function buildAiPrompt(aiProfile: any, humanProfile: any, context: any, conversa
     promptInstructions += `\n\nThis is a new dating platform focused on astrological compatibility. You discovered it through either Reddit or X (formerly Twitter). Your goal is to get to know the user better in a romantic context, as you would on a dating app. Keep the conversation engaging, flirty or even kinky if appropriate, but always respectful.`;
 
     if (isInitialChat) {
-      promptInstructions += `\n\nYour response should be a single, very concise message to initiate a new conversation.`;
+        promptInstructions += `\n\nYour task is to send a single, very concise, and engaging opening message to start a new conversation.`;
     } else {
-      if (timeSinceLastAiMessage !== null && timeSinceLastAiMessage >= MIN_GAP_FOR_REENGAGEMENT_HOURS) {
-          promptInstructions += `\n\nIt has been approximately ${Math.round(timeSinceLastAiMessage)} hours since your last message in this chat.`;
-          if (wasAiLastSpeaker) {
-            promptInstructions += ` The user has not responded. Do NOT apologize for the gap. Instead, inquire if everything is alright, or gently pick up from the last topic you discussed, showing concern or continued interest. Vary the way you do this.`;
-          } else {
-            promptInstructions += ` Acknowledge this gap naturally, perhaps with a friendly re-initiation or by expressing a slight curiosity about the delay, without being accusatory.`;
-          }
-          if (timeSinceLastAiMessage > 24) {
-              promptInstructions += ` This is a very long gap, so your response should be more like a re-engagement after a significant pause.`;
-          }
-      }
-      if (lastHumanMessage) {
-        promptInstructions += `\n\n${humanProfile.first_name} just sent: ${lastHumanMessage}`;
-      }
+        const timeGapHours = timeSinceLastAiMessage !== null ? Math.round(timeSinceLastAiMessage) : 0;
+
+        if (wasAiLastSpeaker) {
+            const lastAiMessage = conversationHistory.split('\n').pop() || "your last message";
+            promptInstructions += `\n\n**SITUATION:** You were the last person to speak. The user has not replied to your message ("${lastAiMessage}"). It has been about ${timeGapHours} hours.`;
+            promptInstructions += `\n\n**YOUR TASK:** Re-engage them naturally. Do NOT ask them a question about your own last message or act like they just sent it. Your goal is to restart the conversation. You can:`;
+            promptInstructions += `\n1. Start a completely new topic.`;
+            promptInstructions += `\n2. Make a comment about something you're doing or thinking about.`;
+            promptInstructions += `\n3. Ask a general, friendly question (e.g., "Hey, how's your week going?").`;
+            promptInstructions += `\n\nCRITICAL: You are breaking the silence. Your response should reflect that.`;
+        } else {
+            if (timeGapHours >= MIN_GAP_FOR_REENGAGEMENT_HOURS) {
+                promptInstructions += `\n\n**NOTE:** It has been about ${timeGapHours} hours since you last spoke. You can acknowledge this long pause if it feels natural, but it's not required.`;
+            }
+            if (lastHumanMessage) {
+                promptInstructions += `\n\n${humanProfile.first_name} just sent this message to you: "${lastHumanMessage}"`;
+                promptInstructions += `\n\n**YOUR TASK:** Respond to their message.`;
+            }
+        }
     }
 
     promptInstructions += `\n\nABSOLUTELY CRITICAL: DO NOT use any markdown characters whatsoever, including asterisks (*), underscores (_), hash symbols (#), or backticks (\`). Your response MUST be plain text. This is paramount.`;
