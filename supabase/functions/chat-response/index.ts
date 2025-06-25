@@ -207,7 +207,7 @@ Review the "Latest Conversation Exchange". If a new important memory was formed,
 NO_CHANGE`;
 }
 
-function buildChatPrompt(aiProfile: any, humanProfile: any, conversationHistory: string, userMessage: string, analysisSummary: string, sentimentScore: number, currentCity: string, currentTime: string, responseDelayMinutes: number, previousContextSummary: string | null, importantMemories: string | null) {
+function buildChatPrompt(aiProfile: any, humanProfile: any, conversationHistory: string, userMessage: string, analysisSummary: string, currentThreshold: number, distanceToBlock: number, currentCity: string, currentTime: string, responseDelayMinutes: number, previousContextSummary: string | null, importantMemories: string | null) {
     const aiAge = calculateAge(aiProfile.date_of_birth);
     const humanSunSign = getSunSign(humanProfile.date_of_birth);
     const humanLocation = humanProfile.current_city ? `${humanProfile.current_city}${humanProfile.current_country ? `, ${humanProfile.current_country}` : ''}` : humanProfile.place_of_birth;
@@ -237,7 +237,9 @@ function buildChatPrompt(aiProfile: any, humanProfile: any, conversationHistory:
     if (importantMemories) {
         promptInstructions += `\n\n**Important things to remember about your conversation:**\n${importantMemories}`;
     }
-    promptInstructions += `\n\n**Current Conversation Analysis:** ${analysisSummary} (Sentiment Score: ${sentimentScore.toFixed(2)})`;
+    promptInstructions += `\n\n**Current Conversation Analysis:** ${analysisSummary} (Sentiment Score: ${currentThreshold.toFixed(2)})`;
+    promptInstructions += `\n\n**Relational Health (Distance to Block): ${distanceToBlock.toFixed(2)}**`;
+    promptInstructions += `\nThis score shows how healthy the relationship is. A high score (e.g., > 0.8) is very good. A score near 0 means you are close to blocking them. Your tone MUST reflect this. If the score is low, be more reserved, curt, and less engaging. If it's high, be warmer and more open.`;
 
     if (conversationHistory) {
         promptInstructions += `\n\n**Recent Messages:**\n${conversationHistory}`;
@@ -259,7 +261,7 @@ function buildChatPrompt(aiProfile: any, humanProfile: any, conversationHistory:
 **2. Conversational Memory & State (Calculated Responses):**
 -   **Mirroring Effort:** Match the length and effort of the user's messages.
 -   **Varying Curtness:** Your responses should often be curt, but to varying degrees.
--   **"Holding a Grudge":** If the recent chat history was negative, your mood is guarded. Remain cautious and distant.
+-   **"Holding a Grudge":** If the recent chat history was negative (reflected in a low Distance to Block score), your mood is guarded. Remain cautious and distant.
 
 **3. Engagement Strategy (Putting it all together):**
 -   **Positive/Neutral Tone:** Continue engagingly but apply your gender persona and mirroring rules.
@@ -370,6 +372,7 @@ serve(async (req) => {
 
     const currentThreshold = context?.current_threshold ?? 0.5;
     const newCurrentThreshold = currentThreshold + finalSentimentAdjustment;
+    const distanceToBlock = newCurrentThreshold - receiverProfile.block_threshold;
 
     const aiTimezone = receiverProfile.current_timezone || receiverProfile.timezone;
     const currentTimeInAITimezone = new Date().toLocaleString('en-US', { timeZone: aiTimezone, hour: '2-digit', minute: '2-digit', hour12: true });
@@ -378,7 +381,7 @@ serve(async (req) => {
     const responseDelayMs = calculateDynamicResponseDelay(aiTimezone, newCurrentThreshold);
     const responseDelayMinutes = Math.round(responseDelayMs / (1000 * 60));
 
-    const chatPrompt = buildChatPrompt(receiverProfile, senderProfile, conversationHistory, message, updatedSummary, newCurrentThreshold, aiCurrentCity, currentTimeInAITimezone, responseDelayMinutes, context?.context_summary, context?.important_memories);
+    const chatPrompt = buildChatPrompt(receiverProfile, senderProfile, conversationHistory, message, updatedSummary, newCurrentThreshold, distanceToBlock, aiCurrentCity, currentTimeInAITimezone, responseDelayMinutes, context?.context_summary, context?.important_memories);
     const rawChatResponse = await callAiApi(chatPrompt, MAX_TOKEN_LIMIT);
 
     let aiWantsToBlock = rawChatResponse.includes('@@@BLOCKUSER@@@');
@@ -395,7 +398,7 @@ serve(async (req) => {
     const contextUpdatePayload: any = {
         chat_id: chatId,
         context_summary: updatedSummary,
-        detailed_chat: context?.detailed_chat ? `${context.detailed_chat}\n${fullLatestExchange}` : fullLatestExchange,
+        detailed_chat: context?.detailed_chat ? `${context.detailed_chat}\n${fullLatestExchange}` : latestExchange,
         current_threshold: newCurrentThreshold,
         consecutive_negative_count: newConsecutiveNegativeCount,
         last_updated: new Date().toISOString(),

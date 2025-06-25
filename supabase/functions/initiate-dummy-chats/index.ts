@@ -303,7 +303,7 @@ serve(async (req) => {
         .select(`
           matched_user_id,
           matched_profile:profiles!matches_matched_user_id_fkey(
-            user_id, first_name, gender, date_of_birth, time_of_birth, place_of_birth, personality_prompt, is_active
+            user_id, first_name, gender, date_of_birth, time_of_birth, place_of_birth, personality_prompt, is_active, block_threshold
           )
         `)
         .eq('user_id', humanProfile.user_id);
@@ -350,6 +350,12 @@ serve(async (req) => {
           ]);
 
           context = fetchedContext;
+          
+          if (context && dummyProfile.block_threshold && context.current_threshold <= dummyProfile.block_threshold) {
+            console.log(`initiate-dummy-chats: Chat ${currentChatId} is at or below block threshold (${context.current_threshold} <= ${dummyProfile.block_threshold}). Skipping re-engagement.`);
+            continue;
+          }
+
           conversationHistory = buildConversationHistory(recentMsgs, dummyProfile.user_id, dummyProfile.first_name, humanProfile.first_name);
           
           const lastMessageOverall = recentMsgs.length > 0 ? recentMsgs[0] : null;
