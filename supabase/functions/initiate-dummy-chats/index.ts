@@ -354,6 +354,13 @@ serve(async (req) => {
               getRecentMessages(supabaseClient, currentChatId),
           ]);
 
+          // New logic: Check for any unprocessed messages and skip if found
+          const hasUnprocessedMessages = recentMsgs.some(msg => msg.is_processed === false);
+          if (hasUnprocessedMessages) {
+              console.log(`initiate-dummy-chats: Chat ${currentChatId} has unprocessed messages. Skipping to avoid race condition.`);
+              continue;
+          }
+
           context = fetchedContext;
           
           if (context && dummyProfile.block_threshold && context.current_threshold <= dummyProfile.block_threshold) {
@@ -364,9 +371,7 @@ serve(async (req) => {
           conversationHistory = buildConversationHistory(recentMsgs, dummyProfile.user_id, dummyProfile.first_name, humanProfile.first_name);
           
           const lastMessageOverall = recentMsgs.length > 0 ? recentMsgs[0] : null;
-          let timeSinceLastMessageOverall: number | null = null;
           if (lastMessageOverall) {
-            timeSinceLastMessageOverall = (new Date().getTime() - new Date(lastMessageOverall.created_at).getTime()) / (1000 * 60);
             wasAiLastSpeaker = lastMessageOverall.sender_id === dummyProfile.user_id;
           }
 
@@ -378,15 +383,8 @@ serve(async (req) => {
             timeSinceLastAiMessage = (new Date().getTime() - new Date(lastAiMsgTimestamp).getTime()) / (1000 * 60 * 60);
           }
 
-          if (!wasAiLastSpeaker && lastMessageOverall && timeSinceLastMessageOverall !== null && timeSinceLastMessageOverall >= UNRESPONDED_MESSAGE_THRESHOLD_MINUTES) {
-            if (lastMessageOverall.is_processed === true) {
-                console.log(`initiate-dummy-chats: Skipping chat ${currentChatId} because last message is already processed.`);
-                shouldProcess = false;
-            } else {
-                console.log(`initiate-dummy-chats: Safety net triggered for chat ${currentChatId}. Last message is not processed.`);
-                shouldProcess = true;
-            }
-          } else if (wasAiLastSpeaker && timeSinceLastAiMessage !== null && timeSinceLastAiMessage >= MIN_GAP_FOR_REENGAGEMENT_HOURS) {
+          // Simplified logic: only re-engage if AI was last speaker and enough time has passed
+          if (wasAiLastSpeaker && timeSinceLastAiMessage !== null && timeSinceLastAiMessage >= MIN_GAP_FOR_REENGAGEMENT_HOURS) {
             const currentAttempts = context?.ai_reengagement_attempts || 0;
             
             if (currentAttempts >= REENGAGEMENT_ATTEMPT_LIMIT) {
