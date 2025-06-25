@@ -2,7 +2,7 @@ import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.50.0';
 
-type Message = { content: string; sender_id: string; created_at: string; };
+type Message = { content: string; sender_id: string; created_at: string; is_processed: boolean | null; };
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -84,7 +84,7 @@ async function getConversationContext(supabaseClient: SupabaseClient, chatId: st
 async function getRecentMessages(supabaseClient: SupabaseClient, chatId: string): Promise<Message[]> {
     const { data: recentMessages } = await supabaseClient
       .from('messages')
-      .select('content, sender_id, created_at')
+      .select('content, sender_id, created_at, is_processed')
       .eq('chat_id', chatId)
       .order('created_at', { ascending: false })
       .limit(10);
@@ -379,7 +379,13 @@ serve(async (req) => {
           }
 
           if (!wasAiLastSpeaker && lastMessageOverall && timeSinceLastMessageOverall !== null && timeSinceLastMessageOverall >= UNRESPONDED_MESSAGE_THRESHOLD_MINUTES) {
-            shouldProcess = true;
+            if (lastMessageOverall.is_processed === true) {
+                console.log(`initiate-dummy-chats: Skipping chat ${currentChatId} because last message is already processed.`);
+                shouldProcess = false;
+            } else {
+                console.log(`initiate-dummy-chats: Safety net triggered for chat ${currentChatId}. Last message is not processed.`);
+                shouldProcess = true;
+            }
           } else if (wasAiLastSpeaker && timeSinceLastAiMessage !== null && timeSinceLastAiMessage >= MIN_GAP_FOR_REENGAGEMENT_HOURS) {
             const currentAttempts = context?.ai_reengagement_attempts || 0;
             
