@@ -136,6 +136,27 @@ async function getRecentMessages(supabaseClient: SupabaseClient, chatId: string)
     return recentMessages || [];
 }
 
+function analyzeUserBehavior(userMessages: { content: string }[]): 'REPETITIVE' | 'NORMAL' {
+    if (userMessages.length < 3) return 'NORMAL';
+
+    const lastThreeMessages = userMessages.slice(0, 3).map(m => m.content.trim().toLowerCase());
+    if (lastThreeMessages[0] === lastThreeMessages[1] && lastThreeMessages[1] === lastThreeMessages[2]) {
+        return 'REPETITIVE';
+    }
+
+    const repetitionCount = new Map<string, number>();
+    for (const msg of userMessages) {
+        const content = msg.content.trim().toLowerCase();
+        repetitionCount.set(content, (repetitionCount.get(content) || 0) + 1);
+    }
+
+    for (const count of repetitionCount.values()) {
+        if (count >= 3) return 'REPETITIVE';
+    }
+
+    return 'NORMAL';
+}
+
 function buildConversationHistory(messages: { content: string; sender_id: string; created_at: string; }[], aiUserId: string, aiName: string, humanName: string): string {
     if (!messages || messages.length === 0) {
         return "No conversation history yet.";
@@ -207,7 +228,7 @@ Review the "Latest Conversation Exchange". If a new important memory was formed,
 NO_CHANGE`;
 }
 
-function buildChatPrompt(aiProfile: any, humanProfile: any, conversationHistory: string, userMessage: string, analysisSummary: string, currentThreshold: number, distanceToBlock: number, currentCity: string, currentTime: string, responseDelayMinutes: number, previousContextSummary: string | null, importantMemories: string | null) {
+function buildChatPrompt(aiProfile: any, humanProfile: any, conversationHistory: string, userMessage: string, analysisSummary: string, currentThreshold: number, distanceToBlock: number, currentCity: string, currentTime: string, responseDelayMinutes: number, previousContextSummary: string | null, importantMemories: string | null, userBehavior: 'REPETITIVE' | 'NORMAL') {
     const aiAge = calculateAge(aiProfile.date_of_birth);
     const humanSunSign = getSunSign(humanProfile.date_of_birth);
     const humanLocation = humanProfile.current_city ? `${humanProfile.current_city}${humanProfile.current_country ? `, ${humanProfile.current_country}` : ''}` : humanProfile.place_of_birth;
@@ -236,6 +257,10 @@ You and the user are in different locations and likely different timezones.
 If the user says "good morning" and it's night for you, DO NOT say "good morning" back. Instead, acknowledge their time and state your own. For example: "Good morning to you! It's actually evening here, just winding down." or "Morning! Hope you have a great day. It's pretty late on my end." This demonstrates your awareness and makes the conversation feel more real. The same logic applies to "good night," "good afternoon," etc.`;
 
     promptInstructions += timezoneAwarenessInstruction;
+
+    if (userBehavior === 'REPETITIVE') {
+        promptInstructions += `\n\n**User Behavior Analysis (CRITICAL OVERRIDE):**\nWe have detected that the user's recent messages are repetitive or nonsensical. This indicates they may be testing you or not taking the conversation seriously. Your response MUST address this behavior, but do so *according to your persona*. Do not use a generic response. Examples of how different personas might react:\n- **Confident/Assertive:** "Are we playing an echo game now?" or "You said that already. Everything okay?"\n- **Patient/Reserved:** "I'm a bit confused by your last few messages." or simply "..."\n- **Analytical/Curious:** "I'm detecting a pattern here. Are you testing me?"\nThis is a chance to show your personality. React like a real person would.`;
+    }
 
     if (responseDelayMinutes > 5) {
         promptInstructions += `\n\nYou have waited approximately ${responseDelayMinutes} minutes to reply. You can subtly acknowledge this delay if it feels natural.`;
@@ -354,6 +379,9 @@ serve(async (req) => {
       getRecentMessages(supabaseClient, chatId)
     ]);
 
+    const userMessages = recentMessages.filter(m => m.sender_id === senderId);
+    const userBehavior = analyzeUserBehavior(userMessages);
+
     const conversationHistory = buildConversationHistory(recentMessages, receiverProfile.user_id, receiverProfile.first_name, senderProfile.first_name);
     const latestExchange = `${senderProfile.first_name}: "${message}"`;
     
@@ -391,7 +419,7 @@ serve(async (req) => {
     const responseDelayMs = calculateDynamicResponseDelay(aiTimezone, newCurrentThreshold);
     const responseDelayMinutes = Math.round(responseDelayMs / (1000 * 60));
 
-    const chatPrompt = buildChatPrompt(receiverProfile, senderProfile, conversationHistory, message, updatedSummary, newCurrentThreshold, distanceToBlock, aiCurrentCity, currentTimeInAITimezone, responseDelayMinutes, context?.context_summary, context?.important_memories);
+    const chatPrompt = buildChatPrompt(receiverProfile, senderProfile, conversationHistory, message, updatedSummary, newCurrentThreshold, distanceToBlock, aiCurrentCity, currentTimeInAITimezone, responseDelayMinutes, context?.context_summary, context?.important_memories, userBehavior);
     const rawChatResponse = await callAiApi(chatPrompt, MAX_TOKEN_LIMIT);
 
     let aiWantsToBlock = rawChatResponse.includes('@@@BLOCKUSER@@@');
