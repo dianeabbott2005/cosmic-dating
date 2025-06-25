@@ -250,11 +250,11 @@ function buildChatPrompt(aiProfile: any, humanProfile: any, conversationHistory:
 
     const timezoneAwarenessInstruction = `
 
-**Timezone Awareness (CRITICAL):**
-You and the user are in different locations and likely different timezones.
-- Your location: ${currentCity} (Current time: ${currentTime})
-- User's location: ${humanLocation}
-If the user says "good morning" and it's night for you, DO NOT say "good morning" back. Instead, acknowledge their time and state your own. For example: "Good morning to you! It's actually evening here, just winding down." or "Morning! Hope you have a great day. It's pretty late on my end." This demonstrates your awareness and makes the conversation feel more real. The same logic applies to "good night," "good afternoon," etc.`;
+**Timezone Awareness (Subtle & Natural):**
+You and the user are in different timezones. You don't always have to correct them or state your own time. Only do so if it feels natural or adds something to the conversation.
+- **Good Example (Natural):** User: "Good morning!" You (it's night for you): "Morning to you! Hope you have a great day. It's actually pretty late on my end, just winding down."
+- **Also Good (Simple):** User: "Good morning!" You: "Morning! How's your day starting out?"
+- **Use this sparingly.** Mentioning the time difference too often feels robotic. Let your persona guide you.`;
 
     promptInstructions += timezoneAwarenessInstruction;
 
@@ -300,7 +300,6 @@ This approach prioritizes accuracy. It is better to admit you don't remember a d
     promptInstructions += `\n\nABSOLUTELY CRITICAL: DO NOT use any markdown characters. Your response MUST be plain text.`;
     promptInstructions += `\n\nABSOLUTELY NO EMOJIS.`;
     promptInstructions += `\n\nYour response should be very concise and natural, like a human texting. It can be a single short message, or if needed, break it into 1 to 6 very short, related messages. Overall the combined length should never exceed the token limit "${MAX_TOKEN_LIMIT}". If you send multiple messages, separate each with the delimiter: "${MESSAGE_DELIMITER}".`;
-    promptInstructions += `\n\nIf your response contains a specific, explicit reference to the current time, you MUST append the special token @@@TIMESENSITIVE@@@ to your response.`;
     promptInstructions += `\n\nCRITICAL: Avoid conversational tics and repetitive phrases.`;
     promptInstructions += `\n\nNow, for the most crucial part: **Your Persona, Conversational Memory, and Engagement Strategy (Calculated & Realistic).**
 
@@ -438,8 +437,7 @@ serve(async (req) => {
     const rawChatResponse = await callAiApi(chatPrompt, MAX_TOKEN_LIMIT);
 
     let aiWantsToBlock = rawChatResponse.includes('@@@BLOCKUSER@@@');
-    let isTimeSensitive = rawChatResponse.includes('@@@TIMESENSITIVE@@@');
-    let chatResponseForProcessing = rawChatResponse.replace('@@@BLOCKUSER@@@', '').replace('@@@TIMESENSITIVE@@@', '').trim();
+    let chatResponseForProcessing = rawChatResponse.replace('@@@BLOCKUSER@@@', '').trim();
 
     const messagesToSend = chatResponseForProcessing.split(MESSAGE_DELIMITER).map(cleanMessagePart).filter(m => m.length > 0);
     const cleanedAiResponseForContext = messagesToSend.join('\n');
@@ -468,7 +466,7 @@ serve(async (req) => {
         // Even when blocking, we save the final context that led to the block
         await supabaseClient.from('conversation_contexts').upsert(contextUpdatePayload, { onConflict: 'chat_id' });
     } else if (messagesToSend.length > 0) {
-        let cumulativeDelay = isTimeSensitive ? 2000 + Math.random() * 3000 : responseDelayMs;
+        let cumulativeDelay = calculateDynamicResponseDelay(aiTimezone, newCurrentThreshold);
         for (const msgContent of messagesToSend) {
             await scheduleMessage(supabaseClient, chatId, receiverId, msgContent, cumulativeDelay, contextUpdatePayload);
             cumulativeDelay += calculateTypingDelay(msgContent.length) + calculateInterMessageGap();

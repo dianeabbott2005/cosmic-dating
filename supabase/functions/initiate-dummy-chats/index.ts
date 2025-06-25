@@ -189,8 +189,6 @@ function buildAiPrompt(aiProfile: any, humanProfile: any, context: any, conversa
     promptInstructions += `\n\nABSOLUTELY NO EMOJIS. Your responses must not contain any emojis. This is a strict rule.`;
     promptInstructions += `\n\nYour response should be very concise and natural, like a human texting including rare varying human-like typos depending on the situation. It can be a single short message, or if it needed, break it into 1 to 6 (in varying degree choose number of messages) very short, related messages. Overall the combined length should never exceed the token limit "${MAX_TOKEN_LIMIT}". ABSOLUTELY CRITICAL: If you send multiple messages, separate each with the delimiter: "${MESSAGE_DELIMITER}", ensure you do this most accurately and not make any typos as it ruin the entire logic. This delimiter is ONLY for separating messages and MUST NOT appear within the content of any message. Ensure this is done with utmost accuracy.`;
     
-    promptInstructions += `\n\nIf your response contains a specific, explicit reference to the current time (e.g., "It's 2 PM", "It's almost noon", "It's late night here"), you MUST append the special token @@@TIMESENSITIVE@@@ to your response. Do not use this token for general greetings like "Good morning" or for past/future events. This token is ONLY for statements about the CURRENT time.`;
-
     promptInstructions += `\n\nCRITICAL: Avoid conversational tics and repetitive phrases (like winking or overusing certain words). Vary your responses to keep the chat fresh and unpredictable.`;
 
     promptInstructions += `\n\nNow, for the most crucial part: **Your Persona, Conversational Memory, and Engagement Strategy (Calculated & Realistic).**
@@ -440,10 +438,7 @@ serve(async (req) => {
             const aiPrompt = buildAiPrompt(dummyProfile, humanProfile, context, conversationHistory, lastHumanMessage, timeSinceLastAiMessage, isInitialChat, wasAiLastSpeaker);
             const rawAiResponse = await callAiApi(aiPrompt, MAX_TOKEN_LIMIT);
             
-            const isTimeSensitive = rawAiResponse.includes('@@@TIMESENSITIVE@@@');
-            const fullAiResponse = rawAiResponse.replace('@@@TIMESENSITIVE@@@', '').trim();
-            
-            const individualMessages = fullAiResponse.split(MESSAGE_DELIMITER)
+            const individualMessages = rawAiResponse.split(MESSAGE_DELIMITER)
                 .map(cleanMessagePart)
                 .filter(part => part.length > 0);
 
@@ -472,14 +467,7 @@ serve(async (req) => {
                 updatePayload.ai_reengagement_attempts = (context?.ai_reengagement_attempts || 0) + 1;
             }
 
-            let cumulativeDelay;
-            if (isTimeSensitive) {
-                console.log(`Time-sensitive initiation/re-engagement for chat ${currentChatId}. Using short delay.`);
-                cumulativeDelay = 2000 + Math.random() * 8000; // 2-10 seconds
-            } else {
-                console.log(`Standard initiation/re-engagement for chat ${currentChatId}. Using longer, human-like delay.`);
-                cumulativeDelay = 60000 + Math.random() * (20 * 60 * 1000 - 60000); // 1 to 20 minutes
-            }
+            let cumulativeDelay = 60000 + Math.random() * (20 * 60 * 1000 - 60000); // 1 to 20 minutes
 
             for (let i = 0; i < individualMessages.length; i++) {
                 const msgContent = individualMessages[i];
