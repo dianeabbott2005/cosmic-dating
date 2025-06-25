@@ -376,8 +376,39 @@ serve(async (req) => {
           if (!wasAiLastSpeaker && lastMessageOverall && timeSinceLastMessageOverall !== null && timeSinceLastMessageOverall >= UNRESPONDED_MESSAGE_THRESHOLD_MINUTES) {
             shouldProcess = true;
           } else if (wasAiLastSpeaker && timeSinceLastAiMessage !== null && timeSinceLastAiMessage >= MIN_GAP_FOR_REENGAGEMENT_HOURS) {
-            if (Math.random() < REENGAGEMENT_RATE && (context?.ai_reengagement_attempts || 0) < REENGAGEMENT_ATTEMPT_LIMIT) {
-              shouldProcess = true;
+            const currentAttempts = context?.ai_reengagement_attempts || 0;
+            
+            if (currentAttempts >= REENGAGEMENT_ATTEMPT_LIMIT) {
+                const currentThreshold = context?.current_threshold || 0.5;
+                const penalty = -0.1;
+                const newThreshold = currentThreshold + penalty;
+
+                console.log(`initiate-dummy-chats: User unresponsive in chat ${currentChatId} after ${currentAttempts} attempts. Penalizing threshold to ${newThreshold}.`);
+
+                await supabaseClient
+                    .from('conversation_contexts')
+                    .update({ 
+                        current_threshold: newThreshold,
+                        ai_reengagement_attempts: currentAttempts + 1 
+                    })
+                    .eq('chat_id', currentChatId);
+
+                if (newThreshold <= dummyProfile.block_threshold) {
+                    console.log(`initiate-dummy-chats: Chat ${currentChatId} has fallen to or below block threshold (${newThreshold} <= ${dummyProfile.block_threshold}).`);
+                    if (Math.random() < 0.5) {
+                        console.log(`initiate-dummy-chats: AI is blocking user ${humanProfile.user_id}.`);
+                        await supabaseClient
+                            .from('blocked_users')
+                            .insert({ blocker_id: dummyProfile.user_id, blocked_id: humanProfile.user_id });
+                    } else {
+                        console.log(`initiate-dummy-chats: AI is ghosting user ${humanProfile.user_id} (no further action).`);
+                    }
+                }
+                continue; 
+            }
+
+            if (Math.random() < REENGAGEMENT_RATE) {
+                shouldProcess = true;
             }
           }
         } else {
