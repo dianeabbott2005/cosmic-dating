@@ -165,13 +165,15 @@ function buildAiPrompt(aiProfile: any, humanProfile: any, context: any, conversa
         const timeGapHours = timeSinceLastAiMessage !== null ? Math.round(timeSinceLastAiMessage) : 0;
 
         if (wasAiLastSpeaker) {
-            const lastAiMessage = conversationHistory.split('\n').pop() || "your last message";
+            const lastAiMessage = conversationHistory.split('\n').filter(line => line.startsWith(aiProfile.first_name + ':')).pop() || "your last message";
+            const lastUserMessageInHistory = conversationHistory.split('\n').filter(line => line.startsWith(humanProfile.first_name + ':')).pop() || "the user's last message";
+
             promptInstructions += `\n\n**SITUATION:** You were the last person to speak. The user has not replied to your message ("${lastAiMessage}"). It has been about ${timeGapHours} hours.`;
-            promptInstructions += `\n\n**YOUR TASK:** Re-engage them naturally. Do NOT ask them a question about your own last message or act like they just sent it. Your goal is to restart the conversation. You can:`;
+            promptInstructions += `\n\n**YOUR TASK:** Re-engage them naturally. Your goal is to restart the conversation. You can:`;
             promptInstructions += `\n1. Start a completely new topic.`;
             promptInstructions += `\n2. Make a comment about something you're doing or thinking about.`;
             promptInstructions += `\n3. Ask a general, friendly question (e.g., "Hey, how's your week going?").`;
-            promptInstructions += `\n\nCRITICAL: You are breaking the silence. Your response should reflect that.`;
+            promptInstructions += `\n\n**CRITICAL NEGATIVE CONSTRAINT:** DO NOT, under any circumstances, respond to, comment on, or reference the user's previous message ("${lastUserMessageInHistory}"). You have already responded to that. Responding again would be unnatural and repetitive. You are starting a new conversational thread.`;
         } else {
             if (timeGapHours >= MIN_GAP_FOR_REENGAGEMENT_HOURS) {
                 promptInstructions += `\n\n**NOTE:** It has been about ${timeGapHours} hours since you last spoke. You can acknowledge this long pause if it feels natural, but it's not required.`;
