@@ -67,7 +67,8 @@ serve(async (req) => {
           .insert({
             chat_id: msg.chat_id,
             sender_id: msg.sender_id,
-            content: msg.content
+            content: msg.content,
+            is_processed: true // Mark the AI's message as processed upon sending
           });
 
         if (insertError) {
