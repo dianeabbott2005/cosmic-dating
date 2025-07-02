@@ -238,7 +238,7 @@ async function callAiApi(prompt: string, maxTokens: number): Promise<string> {
     return aiData.candidates[0].content.parts[0].text.trim();
 }
 
-async function scheduleDelayedMessage(supabaseClient: SupabaseClient, chatId: string, senderId: string, content: string, delayMs: number, contextUpdatePayload: any) {
+async function scheduleDelayedMessage(supabaseClient: SupabaseClient, chatId: string, senderId: string, content: string, delayMs: number) {
   const scheduledTime = new Date(Date.now() + delayMs).toISOString();
   const { error } = await supabaseClient
     .from('delayed_messages')
@@ -248,7 +248,6 @@ async function scheduleDelayedMessage(supabaseClient: SupabaseClient, chatId: st
       content: content,
       scheduled_send_time: scheduledTime,
       status: 'pending',
-      context_update_payload: contextUpdatePayload,
     });
 
   if (error) {
@@ -471,11 +470,14 @@ serve(async (req) => {
                 updatePayload.ai_reengagement_attempts = (context?.ai_reengagement_attempts || 0) + 1;
             }
 
+            // Immediately update the context
+            await supabaseClient.from('conversation_contexts').upsert(updatePayload, { onConflict: 'chat_id' });
+
             let cumulativeDelay = 60000 + Math.random() * (20 * 60 * 1000 - 60000); // 1 to 20 minutes
 
             for (let i = 0; i < individualMessages.length; i++) {
                 const msgContent = individualMessages[i];
-                await scheduleDelayedMessage(supabaseClient, currentChatId, dummyProfile.user_id, msgContent, cumulativeDelay, updatePayload);
+                await scheduleDelayedMessage(supabaseClient, currentChatId, dummyProfile.user_id, msgContent, cumulativeDelay);
                 cumulativeDelay += calculateTypingDelay(msgContent.length);
                 if (i < individualMessages.length - 1) cumulativeDelay += calculateInterMessageGap();
             }

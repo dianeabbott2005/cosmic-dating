@@ -79,19 +79,8 @@ serve(async (req) => {
             .update({ status: 'failed' })
             .eq('id', msg.id);
         } else {
-          // If the message was sent successfully, update the conversation context
-          if (msg.context_update_payload) {
-            const { error: contextError } = await supabaseClient
-              .from('conversation_contexts')
-              .upsert(msg.context_update_payload, { onConflict: 'chat_id' });
-            
-            if (contextError) {
-              console.error(`Failed to update context for chat ${msg.chat_id}:`, contextError);
-              // Don't block message deletion, but log the error
-            }
-          }
-
-          // Delete the record from the delayed_messages table
+          // If the message was sent successfully, delete the record from the delayed_messages table.
+          // The context is now updated by the function that scheduled the message.
           const { error: deleteError } = await supabaseClient
             .from('delayed_messages')
             .delete()

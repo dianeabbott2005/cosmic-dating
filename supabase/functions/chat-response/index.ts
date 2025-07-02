@@ -345,14 +345,13 @@ async function callAiApi(prompt: string, maxTokens: number) {
   return data.candidates[0].content.parts[0].text.trim();
 }
 
-async function scheduleMessage(supabaseClient: SupabaseClient, chatId: string, senderId: string, content: string, delayMs: number, contextUpdatePayload: any) {
+async function scheduleMessage(supabaseClient: SupabaseClient, chatId: string, senderId: string, content: string, delayMs: number) {
   const scheduledTime = new Date(Date.now() + delayMs).toISOString();
   await supabaseClient.from('delayed_messages').insert({
     chat_id: chatId,
     sender_id: senderId,
     content,
     scheduled_send_time: scheduledTime,
-    context_update_payload: contextUpdatePayload,
   });
 }
 
@@ -460,15 +459,16 @@ serve(async (req) => {
         contextUpdatePayload.important_memories = newMemoriesResponse;
     }
 
+    // Immediately update the context
+    await supabaseClient.from('conversation_contexts').upsert(contextUpdatePayload, { onConflict: 'chat_id' });
+
     if (newCurrentThreshold <= receiverProfile.block_threshold || aiWantsToBlock) {
         console.log(`Entering blocking logic.`);
         await supabaseClient.from('blocked_users').insert({ blocker_id: receiverId, blocked_id: senderId });
-        // Even when blocking, we save the final context that led to the block
-        await supabaseClient.from('conversation_contexts').upsert(contextUpdatePayload, { onConflict: 'chat_id' });
     } else if (messagesToSend.length > 0) {
         let cumulativeDelay = calculateDynamicResponseDelay(aiTimezone, newCurrentThreshold);
         for (const msgContent of messagesToSend) {
-            await scheduleMessage(supabaseClient, chatId, receiverId, msgContent, cumulativeDelay, contextUpdatePayload);
+            await scheduleMessage(supabaseClient, chatId, receiverId, msgContent, cumulativeDelay);
             cumulativeDelay += calculateTypingDelay(msgContent.length) + calculateInterMessageGap();
         }
     }
