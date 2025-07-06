@@ -9,7 +9,6 @@ import { supabase } from '@/integrations/supabase/client';
 import type { Database } from '@/integrations/supabase/types';
 import { useUserLocation } from '@/hooks/useUserLocation';
 import { requestNotificationPermission } from '@/utils/notifier';
-import { subscribeToPushNotifications } from '@/utils/push-subscription';
 
 const Index = () => {
   const [currentView, setCurrentView] = useState<'welcome' | 'consent' | 'registration' | 'dashboard'>('welcome');
@@ -31,7 +30,6 @@ const Index = () => {
       if (authUserId) {
         console.log('Index.tsx: Auth user found:', authUserId);
         await requestNotificationPermission();
-        await subscribeToPushNotifications();
         await checkUserProfile();
       } else {
         console.log('Index.tsx: No auth user');
