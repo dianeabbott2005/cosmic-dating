@@ -9,6 +9,7 @@ import { supabase } from '@/integrations/supabase/client';
 import type { Database } from '@/integrations/supabase/types';
 import { useUserLocation } from '@/hooks/useUserLocation';
 import { requestNotificationPermission } from '@/utils/notifier';
+import { subscribeToPushNotifications } from '@/utils/push-subscription';
 
 const Index = () => {
   const [currentView, setCurrentView] = useState<'welcome' | 'consent' | 'registration' | 'dashboard'>('welcome');
@@ -29,14 +30,15 @@ const Index = () => {
       
       if (authUserId) {
         console.log('Index.tsx: Auth user found:', authUserId);
-        requestNotificationPermission(); // Request notification permission on login
+        await requestNotificationPermission();
+        await subscribeToPushNotifications();
         await checkUserProfile();
       } else {
         console.log('Index.tsx: No auth user');
         const isRegistering = searchParams.get('register');
         if (isRegistering) {
           console.log('Index.tsx: Registration redirect detected, but no auth user. Redirecting to auth.');
-          navigate('/auth'); // Ensure user is authenticated before registration flow
+          navigate('/auth');
         } else {
           console.log('Index.tsx: Setting view to welcome (no auth user, no registration param).');
           setCurrentView('welcome');
@@ -52,14 +54,13 @@ const Index = () => {
   const checkUserProfile = async () => {
     if (!authUserId) return;
 
-    // Add a small initial delay to allow Supabase triggers to complete
     console.log('Index.tsx: Introducing initial delay before profile fetch...');
-    await new Promise(resolve => setTimeout(resolve, 500)); // Wait 0.5 seconds
+    await new Promise(resolve => setTimeout(resolve, 500));
 
     let userProfile: Database['public']['Tables']['profiles']['Row'] | null = null;
     let attempts = 0;
     const MAX_ATTEMPTS = 5;
-    const RETRY_DELAY_MS = 1000; // 1 second
+    const RETRY_DELAY_MS = 1000;
 
     while (!userProfile && attempts < MAX_ATTEMPTS) {
       if (attempts > 0) {
@@ -73,10 +74,10 @@ const Index = () => {
           .eq('user_id', authUserId)
           .maybeSingle();
 
-        if (dbError && dbError.code !== 'PGRST116') { // PGRST116 is "No rows found"
+        if (dbError && dbError.code !== 'PGRST116') {
           console.error('Index.tsx: Error checking profile:', dbError);
           setError(dbError.message);
-          break; // Break on actual database errors
+          break;
         }
         userProfile = data;
       } catch (err) {
@@ -87,40 +88,35 @@ const Index = () => {
       attempts++;
     }
 
-    if (error) { // If an error occurred during fetching
+    if (error) {
       console.log('Index.tsx: Error state detected, falling back to registration view.');
       setProfile(null);
-      setCurrentView('registration'); // Fallback to registration if profile fetch fails
+      setCurrentView('registration');
       return;
     }
       
     setProfile(userProfile);
     console.log('Index.tsx: Fetched user profile:', userProfile);
 
-    // Define all required fields for a complete profile
     const requiredFields = [
       'first_name', 'last_name', 'email', 'date_of_birth', 'time_of_birth',
       'place_of_birth', 'latitude', 'longitude', 'gender',
       'looking_for', 'min_age', 'max_age'
     ];
 
-    // Check if all required fields are present and not null/empty, AND if is_active is explicitly false (for human profiles)
     const isProfileComplete = userProfile && 
-                              userProfile.is_active === false && // Human profiles should have is_active: false
+                              userProfile.is_active === false &&
                               requiredFields.every(field => {
       const value = userProfile[field as keyof typeof userProfile];
-      // For string fields, check if it's not an empty string
       if (typeof value === 'string') {
         return value.trim() !== '';
       }
-      // For number/boolean fields, check if it's not null or undefined
       return value !== null && value !== undefined;
     });
 
     console.log('Index.tsx: isProfileComplete check result:', isProfileComplete);
     console.log('Index.tsx: has_agreed_to_terms status:', userProfile?.has_agreed_to_terms);
 
-    // New logic: Check consent first
     if (!userProfile || userProfile.has_agreed_to_terms === false) {
       console.log('Index.tsx: User has not agreed to terms or profile is missing, showing consent screen.');
       setCurrentView('consent');
@@ -136,7 +132,7 @@ const Index = () => {
   const handleGetStarted = () => {
     if (authUserId) {
       console.log('Index.tsx: Get Started clicked with auth user, directing to consent screen.');
-      setCurrentView('consent'); // Always go to consent if authenticated
+      setCurrentView('consent');
     } else {
       console.log('Index.tsx: Get Started clicked without auth user, navigating to auth.');
       navigate('/auth');
@@ -145,20 +141,18 @@ const Index = () => {
 
   const handleConsentAgree = () => {
     console.log('Index.tsx: Consent agreed, re-checking user profile.');
-    // After agreeing to terms, proceed to check profile completeness
     checkUserProfile();
   };
 
   const handleRegistrationComplete = (userData: any) => {
     console.log('Index.tsx: Registration completed, setting view to dashboard.');
-    setProfile(userData); // Set the profile state directly from the completed data
-    setCurrentView('dashboard'); // Transition to dashboard
+    setProfile(userData);
+    setCurrentView('dashboard');
   };
 
   const handleBackToWelcome = () => {
     console.log('Index.tsx: Back button clicked from registration flow.');
     if (authUserId) {
-      // If user is logged in, going back from registration means they might need to re-agree or complete profile
       checkUserProfile(); 
     } else {
       setCurrentView('welcome');
