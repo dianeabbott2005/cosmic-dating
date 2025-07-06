@@ -4,6 +4,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { calculateAge } from '@/utils/dateCalculations';
 import { useWindowFocus } from '@/hooks/useWindowFocus';
 import { useBlock } from '@/hooks/useBlock';
+import { useToast } from "@/hooks/use-toast";
 
 export interface Message {
   id: string;
@@ -54,6 +55,12 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
   const { blockedUserIds, usersWhoBlockedMeIds } = useBlock();
   const isWindowFocused = useWindowFocus();
   const userId = user?.id;
+  const { toast } = useToast();
+  const chatsRef = useRef(chats);
+
+  useEffect(() => {
+    chatsRef.current = chats;
+  }, [chats]);
 
   const loadUserChats = useCallback(async () => {
     if (!userId) {
@@ -135,6 +142,17 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
 
     const channel = supabase.channel(`public:messages:user-${userId}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
+        const newMessage = payload.new as Message;
+        
+        if (newMessage.sender_id !== userId && !isWindowFocused) {
+          const relevantChat = chatsRef.current.find(c => c.id === newMessage.chat_id);
+          const senderName = relevantChat?.other_user?.first_name || 'Someone';
+          toast({
+            title: `New Message from ${senderName}`,
+            description: newMessage.content,
+          });
+        }
+        
         console.log('useChat (Provider): New message detected, reloading chat list.', payload);
         loadUserChatsRef.current();
       })
@@ -143,7 +161,7 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [userId]);
+  }, [userId, isWindowFocused, toast]);
 
   const value = useMemo(() => ({
     chats,

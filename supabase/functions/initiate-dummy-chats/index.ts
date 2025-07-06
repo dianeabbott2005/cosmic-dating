@@ -326,6 +326,22 @@ serve(async (req) => {
       for (const dummyProfile of potentialDummyPartners) {
         if (!dummyProfile) continue;
 
+        // Bug Fix: Check for existing blocks before proceeding
+        const { data: blockCheck, error: blockError } = await supabaseClient
+          .from('blocked_users')
+          .select('blocker_id')
+          .or(`and(blocker_id.eq.${dummyProfile.user_id},blocked_id.eq.${humanProfile.user_id}),and(blocker_id.eq.${humanProfile.user_id},blocked_id.eq.${dummyProfile.user_id})`);
+
+        if (blockError) {
+          errors.push(`Failed to check block status for ${dummyProfile.first_name}: ${blockError.message}`);
+          continue;
+        }
+
+        if (blockCheck && blockCheck.length > 0) {
+          console.log(`initiate-dummy-chats: Skipping chat between ${dummyProfile.first_name} and ${humanProfile.first_name} due to existing block.`);
+          continue;
+        }
+
         const { data: existingChat, error: chatLookupError } = await supabaseClient
           .from('chats')
           .select('*')
@@ -353,7 +369,6 @@ serve(async (req) => {
               getRecentMessages(supabaseClient, currentChatId),
           ]);
 
-          // New logic: Check for any unprocessed messages and skip if found
           const hasUnprocessedMessages = recentMsgs.some(msg => msg.is_processed === false);
           if (hasUnprocessedMessages) {
               console.log(`initiate-dummy-chats: Chat ${currentChatId} has unprocessed messages. Skipping to avoid race condition.`);
@@ -382,7 +397,6 @@ serve(async (req) => {
             timeSinceLastAiMessage = (new Date().getTime() - new Date(lastAiMsgTimestamp).getTime()) / (1000 * 60 * 60);
           }
 
-          // Simplified logic: only re-engage if AI was last speaker and enough time has passed
           if (wasAiLastSpeaker && timeSinceLastAiMessage !== null && timeSinceLastAiMessage >= MIN_GAP_FOR_REENGAGEMENT_HOURS) {
             const currentAttempts = context?.ai_reengagement_attempts || 0;
             
@@ -470,10 +484,9 @@ serve(async (req) => {
                 updatePayload.ai_reengagement_attempts = (context?.ai_reengagement_attempts || 0) + 1;
             }
 
-            // Immediately update the context
             await supabaseClient.from('conversation_contexts').upsert(updatePayload, { onConflict: 'chat_id' });
 
-            let cumulativeDelay = 60000 + Math.random() * (20 * 60 * 1000 - 60000); // 1 to 20 minutes
+            let cumulativeDelay = 60000 + Math.random() * (20 * 60 * 1000 - 60000);
 
             for (let i = 0; i < individualMessages.length; i++) {
                 const msgContent = individualMessages[i];

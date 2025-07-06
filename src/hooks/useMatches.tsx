@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { calculateAge } from '@/utils/dateCalculations';
 import { useWindowFocus } from '@/hooks/useWindowFocus';
 import { useBlock } from '@/hooks/useBlock';
+import { useToast } from "@/hooks/use-toast";
 
 export interface MatchProfile {
   user_id: string;
@@ -27,6 +28,8 @@ export const useMatches = () => {
   const isWindowFocused = useWindowFocus();
   const userId = user?.id;
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const { toast } = useToast();
+  const prevMatchIds = useRef<Set<string>>(new Set());
 
   const refreshMatches = useCallback(() => {
     setRefreshTrigger(count => count + 1);
@@ -89,7 +92,20 @@ export const useMatches = () => {
           }
         });
 
-        setMatches(Array.from(uniqueMatchesMap.values()));
+        const newMatchesArray = Array.from(uniqueMatchesMap.values());
+        setMatches(newMatchesArray);
+
+        const currentMatchIds = new Set(newMatchesArray.map(m => m.user_id));
+        const newMatchIds = [...currentMatchIds].filter(id => !prevMatchIds.current.has(id));
+
+        if (prevMatchIds.current.size > 0 && newMatchIds.length > 0) {
+          toast({
+            title: "New Cosmic Connection!",
+            description: `You have ${newMatchIds.length} new match${newMatchIds.length > 1 ? 'es' : ''}. Check them out!`,
+          });
+        }
+        
+        prevMatchIds.current = currentMatchIds;
 
       } catch (error: any) {
         console.error('useMatches: Error fetching matches:', error.message);
@@ -100,7 +116,7 @@ export const useMatches = () => {
     };
 
     fetchAndGenerateMatches();
-  }, [userId, blockedUserIds, usersWhoBlockedMeIds, refreshTrigger]);
+  }, [userId, blockedUserIds, usersWhoBlockedMeIds, refreshTrigger, toast]);
 
   useEffect(() => {
     if (isWindowFocused) {

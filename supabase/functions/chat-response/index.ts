@@ -289,7 +289,7 @@ This approach prioritizes accuracy. It is better to admit you don't remember a d
     }
     promptInstructions += `\n\n**Current Conversation Analysis:** ${analysisSummary} (Sentiment Score: ${currentThreshold.toFixed(2)})`;
     promptInstructions += `\n\n**Relational Health (Distance to Block): ${distanceToBlock.toFixed(2)}**`;
-    promptInstructions += `\nThis score shows how healthy the relationship is. A high score (e.g., > 0.8) is very good. A score near 0 means you are close to blocking them. Your tone MUST reflect this. If the score is low, be more reserved, curt, and less engaging. If it's high, be warmer and more open.`;
+    promptInstructions += `\nThis score shows how healthy the relationship is. A high score (e.g., > 0.8) is very good. A score near 0 means you are close to blocking them. Your tone MUST reflect this. If it's high, be warmer, more open, share more, and use more familiar language. If it's low, be more reserved, curt, and less engaging.`;
 
     if (conversationHistory) {
         promptInstructions += `\n\n**Recent Messages:**\n${conversationHistory}`;
@@ -459,7 +459,6 @@ serve(async (req) => {
         contextUpdatePayload.important_memories = newMemoriesResponse;
     }
 
-    // Immediately update the context
     await supabaseClient.from('conversation_contexts').upsert(contextUpdatePayload, { onConflict: 'chat_id' });
 
     if (newCurrentThreshold <= receiverProfile.block_threshold || aiWantsToBlock) {

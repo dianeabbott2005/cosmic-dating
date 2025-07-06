@@ -2,6 +2,7 @@ import { useState, useEffect, createContext, useContext, useCallback, useMemo, u
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { RealtimeChannel } from '@supabase/supabase-js';
+import { useToast } from "@/hooks/use-toast";
 
 interface BlockContextType {
   blockedUserIds: string[];
@@ -27,6 +28,8 @@ export const BlockProvider = ({ children }: { children: React.ReactNode }) => {
   const [usersWhoBlockedMeIds, setUsersWhoBlockedMeIds] = useState<string[]>([]);
   const userId = user?.id;
   const blockChannelRef = useRef<RealtimeChannel | null>(null);
+  const { toast } = useToast();
+  const prevUsersWhoBlockedMeIds = useRef<string[]>([]);
 
   const fetchBlockLists = useCallback(async () => {
     if (!userId) {
@@ -104,6 +107,36 @@ export const BlockProvider = ({ children }: { children: React.ReactNode }) => {
       }
     };
   }, [userId, fetchBlockLists]);
+
+  useEffect(() => {
+    const newBlockers = usersWhoBlockedMeIds.filter(id => !prevUsersWhoBlockedMeIds.current.includes(id));
+
+    if (newBlockers.length > 0) {
+      const fetchBlockerNamesAndNotify = async () => {
+        const { data: profiles, error } = await supabase
+          .from('profiles')
+          .select('first_name')
+          .in('user_id', newBlockers);
+
+        if (error) {
+          console.error("Error fetching blocker's name:", error);
+          return;
+        }
+
+        profiles?.forEach(profile => {
+          toast({
+            title: "You've Been Blocked",
+            description: `${profile.first_name} has blocked you. You can no longer contact them.`,
+            variant: "destructive",
+          });
+        });
+      };
+
+      fetchBlockerNamesAndNotify();
+    }
+
+    prevUsersWhoBlockedMeIds.current = usersWhoBlockedMeIds;
+  }, [usersWhoBlockedMeIds, toast]);
 
   const blockUser = useCallback(async (userIdToBlock: string) => {
     if (!userId) throw new Error('User must be logged in to block.');
