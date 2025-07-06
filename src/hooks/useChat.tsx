@@ -4,7 +4,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { calculateAge } from '@/utils/dateCalculations';
 import { useWindowFocus } from '@/hooks/useWindowFocus';
 import { useBlock } from '@/hooks/useBlock';
-import { showNotification } from '@/utils/notifier';
+import { displayNotification } from '@/utils/push-notifications';
 
 export interface Message {
   id: string;
@@ -146,9 +146,8 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
         if (newMessage.sender_id !== userId && !isWindowFocused) {
           const relevantChat = chatsRef.current.find(c => c.id === newMessage.chat_id);
           const senderName = relevantChat?.other_user?.first_name || 'Someone';
-          showNotification(`New Message from ${senderName}`, {
+          displayNotification(`New Message from ${senderName}`, {
             body: newMessage.content,
-            icon: '/icon.png',
           });
         }
         

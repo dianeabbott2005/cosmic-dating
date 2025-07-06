@@ -4,7 +4,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { calculateAge } from '@/utils/dateCalculations';
 import { useWindowFocus } from '@/hooks/useWindowFocus';
 import { useBlock } from '@/hooks/useBlock';
-import { showNotification } from '@/utils/notifier';
+import { displayNotification } from '@/utils/push-notifications';
 
 export interface MatchProfile {
   user_id: string;
@@ -103,9 +103,8 @@ export const useMatches = () => {
         if (prevMatchIds !== null) {
             const newMatchIds = [...currentMatchIds].filter(id => !prevMatchIds.has(id));
             if (newMatchIds.length > 0) {
-                showNotification("New Cosmic Connection!", {
+                displayNotification("New Cosmic Connection!", {
                     body: `You have ${newMatchIds.length} new match${newMatchIds.length > 1 ? 'es' : ''}. Check them out!`,
-                    icon: '/icon.png'
                 });
             }
         }
