@@ -2,7 +2,7 @@ import { useState, useEffect, createContext, useContext, useCallback, useMemo, u
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { RealtimeChannel } from '@supabase/supabase-js';
-import { useToast } from "@/hooks/use-toast";
+import { showNotification } from '@/utils/notifier';
 
 interface BlockContextType {
   blockedUserIds: string[];
@@ -28,7 +28,6 @@ export const BlockProvider = ({ children }: { children: React.ReactNode }) => {
   const [usersWhoBlockedMeIds, setUsersWhoBlockedMeIds] = useState<string[]>([]);
   const userId = user?.id;
   const blockChannelRef = useRef<RealtimeChannel | null>(null);
-  const { toast } = useToast();
   const prevUsersWhoBlockedMeIds = useRef<string[]>([]);
 
   const fetchBlockLists = useCallback(async () => {
@@ -124,10 +123,9 @@ export const BlockProvider = ({ children }: { children: React.ReactNode }) => {
         }
 
         profiles?.forEach(profile => {
-          toast({
-            title: "You've Been Blocked",
-            description: `${profile.first_name} has blocked you. You can no longer contact them.`,
-            variant: "destructive",
+          showNotification("You've Been Blocked", {
+            body: `${profile.first_name} has blocked you. You can no longer contact them.`,
+            icon: '/icon.png',
           });
         });
       };
@@ -136,7 +134,7 @@ export const BlockProvider = ({ children }: { children: React.ReactNode }) => {
     }
 
     prevUsersWhoBlockedMeIds.current = usersWhoBlockedMeIds;
-  }, [usersWhoBlockedMeIds, toast]);
+  }, [usersWhoBlockedMeIds]);
 
   const blockUser = useCallback(async (userIdToBlock: string) => {
     if (!userId) throw new Error('User must be logged in to block.');

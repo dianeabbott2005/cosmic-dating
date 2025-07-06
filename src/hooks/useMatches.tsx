@@ -1,10 +1,10 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { calculateAge } from '@/utils/dateCalculations';
 import { useWindowFocus } from '@/hooks/useWindowFocus';
 import { useBlock } from '@/hooks/useBlock';
-import { useToast } from "@/hooks/use-toast";
+import { showNotification } from '@/utils/notifier';
 
 export interface MatchProfile {
   user_id: string;
@@ -28,8 +28,6 @@ export const useMatches = () => {
   const isWindowFocused = useWindowFocus();
   const userId = user?.id;
   const [refreshTrigger, setRefreshTrigger] = useState(0);
-  const { toast } = useToast();
-  const prevMatchIds = useRef<Set<string>>(new Set());
 
   const refreshMatches = useCallback(() => {
     setRefreshTrigger(count => count + 1);
@@ -95,17 +93,24 @@ export const useMatches = () => {
         const newMatchesArray = Array.from(uniqueMatchesMap.values());
         setMatches(newMatchesArray);
 
-        const currentMatchIds = new Set(newMatchesArray.map(m => m.user_id));
-        const newMatchIds = [...currentMatchIds].filter(id => !prevMatchIds.current.has(id));
+        // --- Notification Logic ---
+        const storageKey = `prevMatchIds_${userId}`;
+        const prevMatchIdsString = sessionStorage.getItem(storageKey);
+        const prevMatchIds = prevMatchIdsString ? new Set(JSON.parse(prevMatchIdsString)) : null;
 
-        if (prevMatchIds.current.size > 0 && newMatchIds.length > 0) {
-          toast({
-            title: "New Cosmic Connection!",
-            description: `You have ${newMatchIds.length} new match${newMatchIds.length > 1 ? 'es' : ''}. Check them out!`,
-          });
+        const currentMatchIds = new Set(newMatchesArray.map(m => m.user_id));
+
+        if (prevMatchIds !== null) {
+            const newMatchIds = [...currentMatchIds].filter(id => !prevMatchIds.has(id));
+            if (newMatchIds.length > 0) {
+                showNotification("New Cosmic Connection!", {
+                    body: `You have ${newMatchIds.length} new match${newMatchIds.length > 1 ? 'es' : ''}. Check them out!`,
+                    icon: '/icon.png'
+                });
+            }
         }
         
-        prevMatchIds.current = currentMatchIds;
+        sessionStorage.setItem(storageKey, JSON.stringify(Array.from(currentMatchIds)));
 
       } catch (error: any) {
         console.error('useMatches: Error fetching matches:', error.message);
@@ -116,7 +121,7 @@ export const useMatches = () => {
     };
 
     fetchAndGenerateMatches();
-  }, [userId, blockedUserIds, usersWhoBlockedMeIds, refreshTrigger, toast]);
+  }, [userId, blockedUserIds, usersWhoBlockedMeIds, refreshTrigger]);
 
   useEffect(() => {
     if (isWindowFocused) {

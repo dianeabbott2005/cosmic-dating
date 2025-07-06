@@ -4,7 +4,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { calculateAge } from '@/utils/dateCalculations';
 import { useWindowFocus } from '@/hooks/useWindowFocus';
 import { useBlock } from '@/hooks/useBlock';
-import { useToast } from "@/hooks/use-toast";
+import { showNotification } from '@/utils/notifier';
 
 export interface Message {
   id: string;
@@ -55,7 +55,6 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
   const { blockedUserIds, usersWhoBlockedMeIds } = useBlock();
   const isWindowFocused = useWindowFocus();
   const userId = user?.id;
-  const { toast } = useToast();
   const chatsRef = useRef(chats);
 
   useEffect(() => {
@@ -147,9 +146,9 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
         if (newMessage.sender_id !== userId && !isWindowFocused) {
           const relevantChat = chatsRef.current.find(c => c.id === newMessage.chat_id);
           const senderName = relevantChat?.other_user?.first_name || 'Someone';
-          toast({
-            title: `New Message from ${senderName}`,
-            description: newMessage.content,
+          showNotification(`New Message from ${senderName}`, {
+            body: newMessage.content,
+            icon: '/icon.png',
           });
         }
         
@@ -161,7 +160,7 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [userId, isWindowFocused, toast]);
+  }, [userId, isWindowFocused]);
 
   const value = useMemo(() => ({
     chats,

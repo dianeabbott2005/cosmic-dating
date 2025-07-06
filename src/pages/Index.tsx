@@ -8,6 +8,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import type { Database } from '@/integrations/supabase/types';
 import { useUserLocation } from '@/hooks/useUserLocation';
+import { requestNotificationPermission } from '@/utils/notifier';
 
 const Index = () => {
   const [currentView, setCurrentView] = useState<'welcome' | 'consent' | 'registration' | 'dashboard'>('welcome');
@@ -28,6 +29,7 @@ const Index = () => {
       
       if (authUserId) {
         console.log('Index.tsx: Auth user found:', authUserId);
+        requestNotificationPermission(); // Request notification permission on login
         await checkUserProfile();
       } else {
         console.log('Index.tsx: No auth user');
