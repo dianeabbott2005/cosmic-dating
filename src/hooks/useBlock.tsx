@@ -2,7 +2,7 @@ import { useState, useEffect, createContext, useContext, useCallback, useMemo, u
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { RealtimeChannel } from '@supabase/supabase-js';
-import { displayNotification } from '@/utils/push-notifications';
+import { showNotification } from '@/utils/notifier';
 
 interface BlockContextType {
   blockedUserIds: string[];
@@ -123,8 +123,9 @@ export const BlockProvider = ({ children }: { children: React.ReactNode }) => {
         }
 
         profiles?.forEach(profile => {
-          displayNotification("You've Been Blocked", {
+          showNotification("You've Been Blocked", {
             body: `${profile.first_name} has blocked you. You can no longer contact them.`,
+            icon: '/icon.png',
           });
         });
       };
