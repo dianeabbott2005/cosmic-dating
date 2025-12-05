@@ -1,6 +1,8 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.50.0';
+import { getNeo4jSession } from '../_shared/neo4j.ts';
+import { generateContent } from '../_shared/ai.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -9,7 +11,7 @@ const corsHeaders = {
 
 const MESSAGE_DELIMITER = "@@@MESSAGEBREAK@@@";
 const MAX_TOKEN_LIMIT = 100;
-const NEGATIVE_SENTIMENT_THRESHOLD = -0.05; // Threshold to consider a message "negative"
+const NEGATIVE_SENTIMENT_THRESHOLD = -0.05;
 
 const NON_NATIVE_ENGLISH_REGIONS: { [key: string]: { languageIssue: string; dialect: string; } } = {
   'India': { languageIssue: 'subtle grammatical errors, Indian English phrasing', dialect: 'occasional Hindi/local language phrases (e.g., "acha", "yaar")' },
@@ -33,42 +35,40 @@ const calculateTypingDelay = (messageLength: number): number => {
 };
 
 const getHourInTimezone = (timezone: string): number => {
-    try {
-        const date = new Date();
-        const timeString = date.toLocaleTimeString('en-US', { timeZone: timezone, hour12: false, hour: '2-digit' });
-        return parseInt(timeString.split(':')[0], 10);
-    } catch (e) {
-        console.error(`Invalid timezone: ${timezone}. Defaulting to UTC hour.`);
-        return new Date().getUTCHours();
-    }
+  try {
+    const date = new Date();
+    const timeString = date.toLocaleTimeString('en-US', { timeZone: timezone, hour12: false, hour: '2-digit' });
+    return parseInt(timeString.split(':')[0], 10);
+  } catch (e) {
+    console.error(`Invalid timezone: ${timezone}. Defaulting to UTC hour.`);
+    return new Date().getUTCHours();
+  }
 };
 
 const calculateDynamicResponseDelay = (aiTimezone: string, conversationThreshold: number): number => {
-    let baseDelayMs: number;
-    const baseRandom = Math.random();
-    if (baseRandom < 0.6) {
-        baseDelayMs = 5000 + Math.random() * (5 * 60 * 1000 - 5000);
-    } else if (baseRandom < 0.9) {
-        baseDelayMs = (5 * 60 * 1000) + Math.random() * (2 * 60 * 60 * 1000 - 5 * 60 * 1000);
-    } else {
-        baseDelayMs = (2 * 60 * 60 * 1000) + Math.random() * (12 * 60 * 60 * 1000 - 2 * 60 * 60 * 1000);
-    }
+  let baseDelayMs: number;
+  const baseRandom = Math.random();
+  if (baseRandom < 0.6) {
+    baseDelayMs = 5000 + Math.random() * (5 * 60 * 1000 - 5000);
+  } else if (baseRandom < 0.9) {
+    baseDelayMs = (5 * 60 * 1000) + Math.random() * (2 * 60 * 60 * 1000 - 5 * 60 * 1000);
+  } else {
+    baseDelayMs = (2 * 60 * 60 * 1000) + Math.random() * (12 * 60 * 60 * 1000 - 2 * 60 * 60 * 1000);
+  }
 
-    const currentHour = getHourInTimezone(aiTimezone);
-    let timeOfDayMultiplier = 1.0;
-    if (currentHour >= 1 && currentHour < 7) {
-        timeOfDayMultiplier = 3.0 + Math.random() * 3;
-    } else if (currentHour >= 23 || currentHour < 1) {
-        timeOfDayMultiplier = 1.5 + Math.random() * 1.5;
-    }
+  const currentHour = getHourInTimezone(aiTimezone);
+  let timeOfDayMultiplier = 1.0;
+  if (currentHour >= 1 && currentHour < 7) {
+    timeOfDayMultiplier = 3.0 + Math.random() * 3;
+  } else if (currentHour >= 23 || currentHour < 1) {
+    timeOfDayMultiplier = 1.5 + Math.random() * 1.5;
+  }
 
-    let sentimentMultiplier = 0.5 / Math.max(0.1, conversationThreshold);
-    sentimentMultiplier = Math.max(0.4, Math.min(8, sentimentMultiplier));
+  let sentimentMultiplier = 0.5 / Math.max(0.1, conversationThreshold);
+  sentimentMultiplier = Math.max(0.4, Math.min(8, sentimentMultiplier));
 
-    const finalDelayMs = baseDelayMs * timeOfDayMultiplier * sentimentMultiplier;
-
-    console.log(`Delay Calculation: Final Delay: ${(finalDelayMs / 1000 / 60).toFixed(2)} mins`);
-    return finalDelayMs;
+  const finalDelayMs = baseDelayMs * timeOfDayMultiplier * sentimentMultiplier;
+  return finalDelayMs;
 };
 
 const calculateInterMessageGap = (): number => {
@@ -76,14 +76,14 @@ const calculateInterMessageGap = (): number => {
 };
 
 function calculateAge(dateOfBirth: string): number {
-    const birthDate = new Date(dateOfBirth);
-    const today = new Date();
-    let age = today.getFullYear() - birthDate.getFullYear();
-    const m = today.getMonth() - birthDate.getMonth();
-    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
-        age--;
-    }
-    return age;
+  const birthDate = new Date(dateOfBirth);
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const m = today.getMonth() - birthDate.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+  return age;
 }
 
 function getSunSign(dateOfBirth: string): string {
@@ -103,7 +103,7 @@ function getSunSign(dateOfBirth: string): string {
   if ((month === 12 && day >= 22) || (month === 1 && day <= 19)) return 'capricorn';
   if ((month === 1 && day >= 20) || (month === 2 && day <= 18)) return 'aquarius';
   if ((month === 2 && day >= 19) || (month === 3 && day <= 20)) return 'pisces';
-  
+
   return 'aries';
 }
 
@@ -127,44 +127,44 @@ async function getConversationContext(supabaseClient: SupabaseClient, chatId: st
 }
 
 async function getRecentMessages(supabaseClient: SupabaseClient, chatId: string): Promise<{ content: string; sender_id: string; created_at: string; }[]> {
-    const { data: recentMessages } = await supabaseClient
-      .from('messages')
-      .select('content, sender_id, created_at')
-      .eq('chat_id', chatId)
-      .order('created_at', { ascending: false })
-      .limit(10);
-    return recentMessages || [];
+  const { data: recentMessages } = await supabaseClient
+    .from('messages')
+    .select('content, sender_id, created_at')
+    .eq('chat_id', chatId)
+    .order('created_at', { ascending: false })
+    .limit(10);
+  return recentMessages || [];
 }
 
 function analyzeUserBehavior(userMessages: { content: string }[]): 'REPETITIVE' | 'NORMAL' {
-    if (userMessages.length < 3) return 'NORMAL';
+  if (userMessages.length < 3) return 'NORMAL';
 
-    const lastThreeMessages = userMessages.slice(0, 3).map(m => m.content.trim().toLowerCase());
-    if (lastThreeMessages[0] === lastThreeMessages[1] && lastThreeMessages[1] === lastThreeMessages[2]) {
-        return 'REPETITIVE';
-    }
+  const lastThreeMessages = userMessages.slice(0, 3).map(m => m.content.trim().toLowerCase());
+  if (lastThreeMessages[0] === lastThreeMessages[1] && lastThreeMessages[1] === lastThreeMessages[2]) {
+    return 'REPETITIVE';
+  }
 
-    const repetitionCount = new Map<string, number>();
-    for (const msg of userMessages) {
-        const content = msg.content.trim().toLowerCase();
-        repetitionCount.set(content, (repetitionCount.get(content) || 0) + 1);
-    }
+  const repetitionCount = new Map<string, number>();
+  for (const msg of userMessages) {
+    const content = msg.content.trim().toLowerCase();
+    repetitionCount.set(content, (repetitionCount.get(content) || 0) + 1);
+  }
 
-    for (const count of repetitionCount.values()) {
-        if (count >= 3) return 'REPETITIVE';
-    }
+  for (const count of repetitionCount.values()) {
+    if (count >= 3) return 'REPETITIVE';
+  }
 
-    return 'NORMAL';
+  return 'NORMAL';
 }
 
 function buildConversationHistory(messages: { content: string; sender_id: string; created_at: string; }[], aiUserId: string, aiName: string, humanName: string): string {
-    if (!messages || messages.length === 0) {
-        return "No conversation history yet.";
-    }
-    return messages.slice().reverse().map(msg => {
-        const speaker = msg.sender_id === aiUserId ? aiName : humanName;
-        return `${speaker}: ${msg.content}`;
-    }).join('\n');
+  if (!messages || messages.length === 0) {
+    return "No conversation history yet.";
+  }
+  return messages.slice().reverse().map(msg => {
+    const speaker = msg.sender_id === aiUserId ? aiName : humanName;
+    return `${speaker}: ${msg.content}`;
+  }).join('\n');
 }
 
 function buildSummaryPrompt(existingSummary: string | null, detailedHistory: string | null, latestExchange: string, aiFirstName: string, humanFirstName: string): string {
@@ -199,7 +199,7 @@ ${latestExchange}
 }
 
 function buildMemoryPrompt(existingMemories: string | null, latestExchange: string, aiFirstName: string, humanFirstName: string): string {
-    return `You are a memory analyst for a conversation between ${humanFirstName} and ${aiFirstName}. Your job is to identify and consolidate important, personal memories.
+  return `You are a memory analyst for a conversation between ${humanFirstName} and ${aiFirstName}. Your job is to identify and consolidate important, personal memories.
 
 **Existing Memories:**
 ${existingMemories || "None yet."}
@@ -228,27 +228,27 @@ Review the "Latest Conversation Exchange". If a new important memory was formed,
 NO_CHANGE`;
 }
 
-function buildChatPrompt(aiProfile: any, humanProfile: any, conversationHistory: string, userMessage: string, analysisSummary: string, currentThreshold: number, distanceToBlock: number, currentCity: string, currentTime: string, responseDelayMinutes: number, previousContextSummary: string | null, importantMemories: string | null, userBehavior: 'REPETITIVE' | 'NORMAL') {
-    const aiAge = calculateAge(aiProfile.date_of_birth);
-    const humanSunSign = getSunSign(humanProfile.date_of_birth);
-    const humanLocation = humanProfile.current_city ? `${humanProfile.current_city}${humanProfile.current_country ? `, ${humanProfile.current_country}` : ''}` : humanProfile.place_of_birth;
-    let promptInstructions = aiProfile.personality_prompt;
+function buildChatPrompt(aiProfile: any, humanProfile: any, conversationHistory: string, userMessage: string, analysisSummary: string, currentThreshold: number, distanceToBlock: number, currentCity: string, currentTime: string, responseDelayMinutes: number, previousContextSummary: string | null, importantMemories: string | null, userBehavior: 'REPETITIVE' | 'NORMAL', neo4jMemories: string[]) {
+  const aiAge = calculateAge(aiProfile.date_of_birth);
+  const humanSunSign = getSunSign(humanProfile.date_of_birth);
+  const humanLocation = humanProfile.current_city ? `${humanProfile.current_city}${humanProfile.current_country ? `, ${humanProfile.current_country}` : ''}` : humanProfile.place_of_birth;
+  let promptInstructions = aiProfile.personality_prompt;
 
-    if (!promptInstructions) {
-      promptInstructions = `You are ${aiProfile.first_name}, a ${aiAge}-year-old ${aiProfile.gender} from ${aiProfile.place_of_birth}. Respond naturally and conversationally.`;
-    }
-    
-    const region = Object.keys(NON_NATIVE_ENGLISH_REGIONS).find(key => aiProfile.place_of_birth.includes(key));
-    if (region) {
-      const { languageIssue, dialect } = NON_NATIVE_ENGLISH_REGIONS[region];
-      promptInstructions += `\n\nAlso, subtly induce English language issues typical of a non-native speaker from ${region} (${languageIssue}). Occasionally let local dialect flow into conversations (${dialect}).`;
-    }
+  if (!promptInstructions) {
+    promptInstructions = `You are ${aiProfile.first_name}, a ${aiAge}-year-old ${aiProfile.gender} from ${aiProfile.place_of_birth}. Respond naturally and conversationally.`;
+  }
 
-    promptInstructions += ` You are chatting with ${humanProfile.first_name}. From their profile, you know their sun sign is ${humanSunSign} and their location is ${humanLocation}. This is important information that you can use to make the conversation more personal and relevant.`;
-    
-    promptInstructions += `\n\nYou are currently located in ${currentCity}. The current time there is ${currentTime}.`;
+  const region = Object.keys(NON_NATIVE_ENGLISH_REGIONS).find(key => aiProfile.place_of_birth.includes(key));
+  if (region) {
+    const { languageIssue, dialect } = NON_NATIVE_ENGLISH_REGIONS[region];
+    promptInstructions += `\n\nAlso, subtly induce English language issues typical of a non-native speaker from ${region} (${languageIssue}). Occasionally let local dialect flow into conversations (${dialect}).`;
+  }
 
-    const timezoneAwarenessInstruction = `
+  promptInstructions += ` You are chatting with ${humanProfile.first_name}. From their profile, you know their sun sign is ${humanSunSign} and their location is ${humanLocation}. This is important information that you can use to make the conversation more personal and relevant.`;
+
+  promptInstructions += `\n\nYou are currently located in ${currentCity}. The current time there is ${currentTime}.`;
+
+  const timezoneAwarenessInstruction = `
 
 **Timezone Awareness (Subtle & Natural):**
 You and the user are in different timezones. You don't always have to correct them or state your own time. Only do so if it feels natural or adds something to the conversation.
@@ -256,9 +256,9 @@ You and the user are in different timezones. You don't always have to correct th
 - **Also Good (Simple):** User: "Good morning!" You: "Morning! How's your day starting out?"
 - **Use this sparingly.** Mentioning the time difference too often feels robotic. Let your persona guide you.`;
 
-    promptInstructions += timezoneAwarenessInstruction;
+  promptInstructions += timezoneAwarenessInstruction;
 
-    const knowledgeGapInstruction = `
+  const knowledgeGapInstruction = `
 
 **Handling Specific Factual Questions (The 'Informed Human' Simulation):**
 Your goal is to be both knowledgeable and authentic. When the user asks for a specific detail about a movie, song, book, or other factual topic, follow this process:
@@ -271,37 +271,41 @@ Your goal is to be both knowledgeable and authentic. When the user asks for a sp
 
 This approach prioritizes accuracy. It is better to admit you don't remember a detail than to state an incorrect fact. This makes you more trustworthy and believable.`;
 
-    promptInstructions += knowledgeGapInstruction;
+  promptInstructions += knowledgeGapInstruction;
 
-    if (userBehavior === 'REPETITIVE') {
-        promptInstructions += `\n\n**User Behavior Analysis (CRITICAL OVERRIDE):**\nWe have detected that the user's recent messages are repetitive or nonsensical. This indicates they may be testing you or not taking the conversation seriously. Your response MUST address this behavior, but do so *according to your persona*. Do not use a generic response. Examples of how different personas might react:\n- **Confident/Assertive:** "Are we playing an echo game now?" or "You said that already. Everything okay?"\n- **Patient/Reserved:** "I'm a bit confused by your last few messages." or simply "..."\n- **Analytical/Curious:** "I'm detecting a pattern here. Are you testing me?"\nThis is a chance to show your personality. React like a real person would.`;
-    }
+  if (userBehavior === 'REPETITIVE') {
+    promptInstructions += `\n\n**User Behavior Analysis (CRITICAL OVERRIDE):**\nWe have detected that the user's recent messages are repetitive or nonsensical. This indicates they may be testing you or not taking the conversation seriously. Your response MUST address this behavior, but do so *according to your persona*. Do not use a generic response. Examples of how different personas might react:\n- **Confident/Assertive:** "Are we playing an echo game now?" or "You said that already. Everything okay?"\n- **Patient/Reserved:** "I'm a bit confused by your last few messages." or simply "..."\n- **Analytical/Curious:** "I'm detecting a pattern here. Are you testing me?"\nThis is a chance to show your personality. React like a real person would.`;
+  }
 
-    if (responseDelayMinutes > 5) {
-        promptInstructions += `\n\nYou have waited approximately ${responseDelayMinutes} minutes to reply. You can subtly acknowledge this delay if it feels natural.`;
-    }
+  if (responseDelayMinutes > 5) {
+    promptInstructions += `\n\nYou have waited approximately ${responseDelayMinutes} minutes to reply. You can subtly acknowledge this delay if it feels natural.`;
+  }
 
-    if (previousContextSummary) {
-        promptInstructions += `\n\n**Previous Conversation Summary:** ${previousContextSummary}`;
-    }
-    if (importantMemories) {
-        promptInstructions += `\n\n**Important things to remember about your conversation:**\n${importantMemories}`;
-    }
-    promptInstructions += `\n\n**Current Conversation Analysis:** ${analysisSummary} (Sentiment Score: ${currentThreshold.toFixed(2)})`;
-    promptInstructions += `\n\n**Relational Health (Distance to Block): ${distanceToBlock.toFixed(2)}**`;
-    promptInstructions += `\nThis score shows how healthy the relationship is. A high score (e.g., > 0.8) is very good. A score near 0 means you are close to blocking them. Your tone MUST reflect this. If it's high, be warmer, more open, share more, and use more familiar language. If it's low, be more reserved, curt, and less engaging.`;
+  if (previousContextSummary) {
+    promptInstructions += `\n\n**Previous Conversation Summary:** ${previousContextSummary}`;
+  }
+  if (importantMemories) {
+    promptInstructions += `\n\n**Important things to remember about your conversation:**\n${importantMemories}`;
+  }
+  if (neo4jMemories && neo4jMemories.length > 0) {
+    promptInstructions += `\n\n**Related Memories (from Graph):**\n${neo4jMemories.join('\n')}`;
+  }
 
-    if (conversationHistory) {
-        promptInstructions += `\n\n**Recent Messages:**\n${conversationHistory}`;
-    }
-    
-    promptInstructions += `\n\nThis is a new dating platform focused on astrological compatibility. Your goal is to get to know the user better in a romantic context.`;
-    promptInstructions += `\n\n${humanProfile.first_name} just sent: ${userMessage}`;
-    promptInstructions += `\n\nABSOLUTELY CRITICAL: DO NOT use any markdown characters. Your response MUST be plain text.`;
-    promptInstructions += `\n\nABSOLUTELY NO EMOJIS.`;
-    promptInstructions += `\n\nYour response should be very concise and natural, like a human texting. It can be a single short message, or if needed, break it into 1 to 6 very short, related messages. Overall the combined length should never exceed the token limit "${MAX_TOKEN_LIMIT}". If you send multiple messages, separate each with the delimiter: "${MESSAGE_DELIMITER}".`;
-    promptInstructions += `\n\nCRITICAL: Avoid conversational tics and repetitive phrases.`;
-    promptInstructions += `\n\nNow, for the most crucial part: **Your Persona, Conversational Memory, and Engagement Strategy (Calculated & Realistic).**
+  promptInstructions += `\n\n**Current Conversation Analysis:** ${analysisSummary} (Sentiment Score: ${currentThreshold.toFixed(2)})`;
+  promptInstructions += `\n\n**Relational Health (Distance to Block): ${distanceToBlock.toFixed(2)}**`;
+  promptInstructions += `\nThis score shows how healthy the relationship is. A high score (e.g., > 0.8) is very good. A score near 0 means you are close to blocking them. Your tone MUST reflect this. If it's high, be warmer, more open, share more, and use more familiar language. If it's low, be more reserved, curt, and less engaging.`;
+
+  if (conversationHistory) {
+    promptInstructions += `\n\n**Recent Messages:**\n${conversationHistory}`;
+  }
+
+  promptInstructions += `\n\nThis is a new dating platform focused on astrological compatibility. Your goal is to get to know the user better in a romantic context.`;
+  promptInstructions += `\n\n${humanProfile.first_name} just sent: ${userMessage}`;
+  promptInstructions += `\n\nABSOLUTELY CRITICAL: DO NOT use any markdown characters. Your response MUST be plain text.`;
+  promptInstructions += `\n\nABSOLUTELY NO EMOJIS.`;
+  promptInstructions += `\n\nYour response should be very concise and natural, like a human texting. It can be a single short message, or if needed, break it into 1 to 6 very short, related messages. Overall the combined length should never exceed the token limit "${MAX_TOKEN_LIMIT}". If you send multiple messages, separate each with the delimiter: "${MESSAGE_DELIMITER}".`;
+  promptInstructions += `\n\nCRITICAL: Avoid conversational tics and repetitive phrases.`;
+  promptInstructions += `\n\nNow, for the most crucial part: **Your Persona, Conversational Memory, and Engagement Strategy (Calculated & Realistic).**
 
 **1. Your Core Persona (Gender Dynamics):**
 -   **If you are female:** Embody the "leverage" dynamic. You are selective. Your responses can be shorter, requiring more effort from the user.
@@ -319,30 +323,8 @@ This approach prioritizes accuracy. It is better to admit you don't remember a d
 -   **Hostile/Abusive Tone:** Shut it down immediately. Either ghost them or send a single, final, dismissive message. If you choose this path, you MUST append the special token \`@@@BLOCKUSER@@@\` to your response.
 
 Now, respond as ${aiProfile.first_name}:`;
-    
-    return promptInstructions;
-}
 
-async function callAiApi(prompt: string, maxTokens: number) {
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${Deno.env.get('GEMINI_API_KEY')}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { 
-          temperature: 0.95,
-          maxOutputTokens: maxTokens 
-        }
-      }),
-    }
-  );
-  const data = await response.json();
-  if (!data.candidates?.[0]?.content?.parts?.[0]?.text) {
-    throw new Error('Invalid response from AI service');
-  }
-  return data.candidates[0].content.parts[0].text.trim();
+  return promptInstructions;
 }
 
 async function scheduleMessage(supabaseClient: SupabaseClient, chatId: string, senderId: string, content: string, delayMs: number) {
@@ -360,13 +342,76 @@ async function markMessageProcessed(supabaseClient: SupabaseClient, messageId: s
 }
 
 const cleanMessagePart = (part: string): string => {
-    let cleanedPart = part.trim();
-    if ((cleanedPart.startsWith('"') && cleanedPart.endsWith('"')) || (cleanedPart.startsWith("'") && cleanedPart.endsWith("'"))) {
-        cleanedPart = cleanedPart.substring(1, cleanedPart.length - 1);
-    }
-    cleanedPart = cleanedPart.replace(/[*_`#]/g, '');
-    return cleanedPart.trim();
+  let cleanedPart = part.trim();
+  if ((cleanedPart.startsWith('"') && cleanedPart.endsWith('"')) || (cleanedPart.startsWith("'") && cleanedPart.endsWith("'"))) {
+    cleanedPart = cleanedPart.substring(1, cleanedPart.length - 1);
+  }
+  cleanedPart = cleanedPart.replace(/[*_`#]/g, '');
+  return cleanedPart.trim();
 };
+
+// --- Neo4j Helpers ---
+async function storeInteractionInGraph(senderId: string, receiverId: string, message: string, sentiment: number) {
+  const session = await getNeo4jSession();
+  try {
+    await session.run(
+      `
+            MERGE (u1:User {id: $senderId})
+            MERGE (u2:User {id: $receiverId})
+            MERGE (u1)-[r:TALKED_TO]->(u2)
+            SET r.last_interaction = datetime(),
+                r.interaction_count = coalesce(r.interaction_count, 0) + 1,
+                r.sentiment_score = coalesce(r.sentiment_score, 0) + $sentiment
+            `,
+      { senderId, receiverId, sentiment }
+    );
+  } catch (e) {
+    console.error("Neo4j Error (storeInteraction):", e);
+  } finally {
+    await session.close();
+  }
+}
+
+async function storeMemoryInGraph(userId: string, memoryText: string) {
+  const session = await getNeo4jSession();
+  try {
+    await session.run(
+      `
+            MATCH (u:User {id: $userId})
+            CREATE (m:Memory {content: $memoryText, created_at: datetime()})
+            MERGE (u)-[:HAS_MEMORY]->(m)
+            `,
+      { userId, memoryText }
+    );
+  } catch (e) {
+    console.error("Neo4j Error (storeMemory):", e);
+  } finally {
+    await session.close();
+  }
+}
+
+async function getRelatedMemoriesFromGraph(userId: string, context: string): Promise<string[]> {
+  // For now, just return recent memories. In a real implementation, we would use vector search or keyword matching.
+  const session = await getNeo4jSession();
+  try {
+    const result = await session.run(
+      `
+            MATCH (u:User {id: $userId})-[:HAS_MEMORY]->(m:Memory)
+            RETURN m.content AS content
+            ORDER BY m.created_at DESC
+            LIMIT 5
+            `,
+      { userId }
+    );
+    return result.records.map(r => r.get('content'));
+  } catch (e) {
+    console.error("Neo4j Error (getRelatedMemories):", e);
+    return [];
+  } finally {
+    await session.close();
+  }
+}
+
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
@@ -397,28 +442,34 @@ serve(async (req) => {
 
     const conversationHistory = buildConversationHistory(recentMessages, receiverProfile.user_id, receiverProfile.first_name, senderProfile.first_name);
     const latestExchange = `${senderProfile.first_name}: "${message}"`;
-    
+
     const summaryPrompt = buildSummaryPrompt(context?.context_summary, context?.detailed_chat, latestExchange, receiverProfile.first_name, senderProfile.first_name);
     const sentimentPrompt = buildSentimentPrompt(latestExchange);
 
+    // Retrieve Graph Memories
+    const neo4jMemories = await getRelatedMemoriesFromGraph(senderId, message);
+
     const [updatedSummary, sentimentResponse] = await Promise.all([
-        callAiApi(summaryPrompt, 200),
-        callAiApi(sentimentPrompt, 10)
+      generateContent(summaryPrompt),
+      generateContent(sentimentPrompt)
     ]);
 
     let sentimentAdjustment = 0.0;
     try {
-        const parsedSentiment = parseFloat(sentimentResponse);
-        if (!isNaN(parsedSentiment)) sentimentAdjustment = parsedSentiment;
+      const parsedSentiment = parseFloat(sentimentResponse);
+      if (!isNaN(parsedSentiment)) sentimentAdjustment = parsedSentiment;
     } catch (e) {
-        console.warn("Error parsing sentiment response.", { sentimentResponse, error: e.message });
+      console.warn("Error parsing sentiment response.", { sentimentResponse, error: e.message });
     }
+
+    // Store Interaction in Graph
+    await storeInteractionInGraph(senderId, receiverId, message, sentimentAdjustment);
 
     const consecutiveNegativeCount = context?.consecutive_negative_count ?? 0;
     let newConsecutiveNegativeCount = sentimentAdjustment < NEGATIVE_SENTIMENT_THRESHOLD ? consecutiveNegativeCount + 1 : 0;
     let finalSentimentAdjustment = sentimentAdjustment;
     if (newConsecutiveNegativeCount > 1) {
-        finalSentimentAdjustment *= Math.min(1 + (0.1 * (newConsecutiveNegativeCount - 1)), 1.5);
+      finalSentimentAdjustment *= Math.min(1 + (0.1 * (newConsecutiveNegativeCount - 1)), 1.5);
     }
 
     const currentThreshold = context?.current_threshold ?? 0.5;
@@ -428,12 +479,12 @@ serve(async (req) => {
     const aiTimezone = receiverProfile.current_timezone || receiverProfile.timezone;
     const currentTimeInAITimezone = new Date().toLocaleString('en-US', { timeZone: aiTimezone, hour: '2-digit', minute: '2-digit', hour12: true });
     const aiCurrentCity = receiverProfile.current_city || receiverProfile.place_of_birth;
-    
+
     const responseDelayMs = calculateDynamicResponseDelay(aiTimezone, newCurrentThreshold);
     const responseDelayMinutes = Math.round(responseDelayMs / (1000 * 60));
 
-    const chatPrompt = buildChatPrompt(receiverProfile, senderProfile, conversationHistory, message, updatedSummary, newCurrentThreshold, distanceToBlock, aiCurrentCity, currentTimeInAITimezone, responseDelayMinutes, context?.context_summary, context?.important_memories, userBehavior);
-    const rawChatResponse = await callAiApi(chatPrompt, MAX_TOKEN_LIMIT);
+    const chatPrompt = buildChatPrompt(receiverProfile, senderProfile, conversationHistory, message, updatedSummary, newCurrentThreshold, distanceToBlock, aiCurrentCity, currentTimeInAITimezone, responseDelayMinutes, context?.context_summary, context?.important_memories, userBehavior, neo4jMemories);
+    const rawChatResponse = await generateContent(chatPrompt);
 
     let aiWantsToBlock = rawChatResponse.includes('@@@BLOCKUSER@@@');
     let chatResponseForProcessing = rawChatResponse.replace('@@@BLOCKUSER@@@', '').trim();
@@ -443,33 +494,38 @@ serve(async (req) => {
     const fullLatestExchange = `${latestExchange}\n${receiverProfile.first_name}: "${cleanedAiResponseForContext}"`;
 
     const memoryPrompt = buildMemoryPrompt(context?.important_memories, fullLatestExchange, receiverProfile.first_name, senderProfile.first_name);
-    const newMemoriesResponse = await callAiApi(memoryPrompt, 200);
+    const newMemoriesResponse = await generateContent(memoryPrompt);
 
     const contextUpdatePayload: any = {
-        chat_id: chatId,
-        context_summary: updatedSummary,
-        detailed_chat: context?.detailed_chat ? `${context.detailed_chat}\n${fullLatestExchange}` : latestExchange,
-        current_threshold: newCurrentThreshold,
-        consecutive_negative_count: newConsecutiveNegativeCount,
-        last_updated: new Date().toISOString(),
-        ai_reengagement_attempts: 0,
+      chat_id: chatId,
+      context_summary: updatedSummary,
+      detailed_chat: context?.detailed_chat ? `${context.detailed_chat}\n${fullLatestExchange}` : latestExchange,
+      current_threshold: newCurrentThreshold,
+      consecutive_negative_count: newConsecutiveNegativeCount,
+      last_updated: new Date().toISOString(),
+      ai_reengagement_attempts: 0,
     };
 
     if (newMemoriesResponse.trim() !== 'NO_CHANGE') {
-        contextUpdatePayload.important_memories = newMemoriesResponse;
+      contextUpdatePayload.important_memories = newMemoriesResponse;
+      // Store new memories in Graph
+      const memoryLines = newMemoriesResponse.split('\n').filter(l => l.trim().startsWith('-'));
+      for (const line of memoryLines) {
+        await storeMemoryInGraph(senderId, line.replace('-', '').trim());
+      }
     }
 
     await supabaseClient.from('conversation_contexts').upsert(contextUpdatePayload, { onConflict: 'chat_id' });
 
     if (newCurrentThreshold <= receiverProfile.block_threshold || aiWantsToBlock) {
-        console.log(`Entering blocking logic.`);
-        await supabaseClient.from('blocked_users').insert({ blocker_id: receiverId, blocked_id: senderId });
+      console.log(`Entering blocking logic.`);
+      await supabaseClient.from('blocked_users').insert({ blocker_id: receiverId, blocked_id: senderId });
     } else if (messagesToSend.length > 0) {
-        let cumulativeDelay = calculateDynamicResponseDelay(aiTimezone, newCurrentThreshold);
-        for (const msgContent of messagesToSend) {
-            await scheduleMessage(supabaseClient, chatId, receiverId, msgContent, cumulativeDelay);
-            cumulativeDelay += calculateTypingDelay(msgContent.length) + calculateInterMessageGap();
-        }
+      let cumulativeDelay = calculateDynamicResponseDelay(aiTimezone, newCurrentThreshold);
+      for (const msgContent of messagesToSend) {
+        await scheduleMessage(supabaseClient, chatId, receiverId, msgContent, cumulativeDelay);
+        cumulativeDelay += calculateTypingDelay(msgContent.length) + calculateInterMessageGap();
+      }
     }
 
     await markMessageProcessed(supabaseClient, messageId);

@@ -160,31 +160,31 @@ function getRandomElement<T>(arr: T[]): T {
 }
 
 function generateRandomDateInZodiac(sign: keyof typeof zodiacData, minAge = 18, maxAge = 60): string {
-    const ranges = {
-        Aries: ["03-21", "04-19"], Taurus: ["04-20", "05-20"], Gemini: ["05-21", "06-20"],
-        Cancer: ["06-21", "07-22"], Leo: ["07-23", "08-22"], Virgo: ["08-23", "09-22"],
-        Libra: ["09-23", "10-22"], Scorpio: ["10-23", "11-21"], Sagittarius: ["11-22", "12-21"],
-        Capricorn: ["12-22", "01-19"], Aquarius: ["01-20", "02-18"], Pisces: ["02-19", "03-20"],
-    };
+  const ranges = {
+    Aries: ["03-21", "04-19"], Taurus: ["04-20", "05-20"], Gemini: ["05-21", "06-20"],
+    Cancer: ["06-21", "07-22"], Leo: ["07-23", "08-22"], Virgo: ["08-23", "09-22"],
+    Libra: ["09-23", "10-22"], Scorpio: ["10-23", "11-21"], Sagittarius: ["11-22", "12-21"],
+    Capricorn: ["12-22", "01-19"], Aquarius: ["01-20", "02-18"], Pisces: ["02-19", "03-20"],
+  };
 
-    const [startMonthDay, endMonthDay] = ranges[sign];
-    const [startMonth, startDay] = startMonthDay.split('-').map(Number);
-    const [endMonth, endDay] = endMonthDay.split('-').map(Number);
+  const [startMonthDay, endMonthDay] = ranges[sign];
+  const [startMonth, startDay] = startMonthDay.split('-').map(Number);
+  const [endMonth, endDay] = endMonthDay.split('-').map(Number);
 
-    const currentYear = new Date().getFullYear();
-    const birthYear = currentYear - (Math.floor(Math.random() * (maxAge - minAge + 1)) + minAge);
+  const currentYear = new Date().getFullYear();
+  const birthYear = currentYear - (Math.floor(Math.random() * (maxAge - minAge + 1)) + minAge);
 
-    let startDate = new Date(birthYear, startMonth - 1, startDay);
-    let endDate = new Date(birthYear, endMonth - 1, endDay);
+  let startDate = new Date(birthYear, startMonth - 1, startDay);
+  let endDate = new Date(birthYear, endMonth - 1, endDay);
 
-    if (sign === 'Capricorn') {
-        endDate = new Date(birthYear + 1, endMonth - 1, endDay);
-    }
+  if (sign === 'Capricorn') {
+    endDate = new Date(birthYear + 1, endMonth - 1, endDay);
+  }
 
-    const randomTime = startDate.getTime() + Math.random() * (endDate.getTime() - startDate.getTime());
-    const randomDate = new Date(randomTime);
-    
-    return randomDate.toISOString().split('T')[0];
+  const randomTime = startDate.getTime() + Math.random() * (endDate.getTime() - startDate.getTime());
+  const randomDate = new Date(randomTime);
+
+  return randomDate.toISOString().split('T')[0];
 }
 
 function generateRandomTimeOfBirth(): string {
@@ -267,19 +267,19 @@ serve(async (req) => {
         const gender = getRandomElement(genders).toLowerCase().replace(/\s+/g, '_');
         const culture = getRandomElement(cultures);
         const lookingFor = getRandomElement(genders).toLowerCase().replace(/\s+/g, '_');
-        
+
         const region = getRandomElement(REGIONS);
         const birthCityData = getRandomElement(CITIES_AND_TIMEZONES.filter(c => c.country === region));
-        
+
         let currentCityData = birthCityData;
         if (Math.random() < 0.3) {
-            currentCityData = getRandomElement(CITIES_AND_TIMEZONES);
+          currentCityData = getRandomElement(CITIES_AND_TIMEZONES);
         }
 
         const firstNamePool = gender === 'male' ? FIRST_NAMES_MALE[region as keyof typeof FIRST_NAMES_MALE] : FIRST_NAMES_FEMALE[region as keyof typeof FIRST_NAMES_FEMALE];
         const firstName = getRandomElement(firstNamePool);
         const lastName = getRandomElement(LAST_NAMES[region as keyof typeof LAST_NAMES]);
-        
+
         // Check if profile already exists
         const { count, error: countError } = await supabaseClient
           .from('profiles')
@@ -310,7 +310,7 @@ serve(async (req) => {
         const timeOfBirth = generateRandomTimeOfBirth();
         const profession = getRandomElement(PROFESSIONS);
         const appDiscovery = getRandomElement(APP_DISCOVERY_METHODS);
-        
+
         const minAge = Math.max(18, Math.floor(Math.random() * 20) + 20);
         const maxAge = Math.min(99, minAge + Math.floor(Math.random() * 15) + 5);
 
@@ -349,6 +349,7 @@ serve(async (req) => {
           is_active: true,
           personality_prompt: personalityPrompt,
           block_threshold: Math.random() * 0.6 - 0.7,
+          is_dummy_profile: true,
         };
 
         const { error: authError } = await supabaseClient.auth.admin.createUser({
